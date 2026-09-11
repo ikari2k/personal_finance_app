@@ -1,0 +1,70 @@
+body {
+  font-family: system-ui, sans-serif;
+  max-width: 900px;
+  margin: 2rem auto;
+  padding: 0 1rem;
+  color: #1a1a1a;
+}
+
+nav {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid #ddd;
+}
+
+nav a {
+  text-decoration: none;
+  color: #205081;
+  font-weight: 600;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+}
+
+th, td {
+  text-align: left;
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid #eee;
+}
+
+.amount-negative {
+  color: #b3261e;
+}
+
+.amount-positive {
+  color: #146c2e;
+}
+
+form.inline-form {
+  display: grid;
+  gap: 0.5rem;
+  max-width: 420px;
+  padding: 1rem;
+  margin: 1rem 0;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+}
+
+form.inline-form label {
+  display: grid;
+  gap: 0.2rem;
+  font-size: 0.9rem;
+}
+
+.error {
+  color: #b3261e;
+  font-weight: 600;
+}
+
+.row-actions button, .row-actions a {
+  margin-right: 0.4rem;
+}
+
+button {
+  cursor: pointer;
+}

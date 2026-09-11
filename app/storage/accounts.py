@@ -12,7 +12,7 @@ from pathlib import Path
 
 import tomli_w
 
-from app.config import ACCOUNTS_PATH
+from app import config
 from app.models.account import Account
 from app.storage.lock import file_lock
 
@@ -28,11 +28,14 @@ def _to_dict(account: Account) -> dict[str, str]:
     }
 
 
-def read_accounts(path: Path = ACCOUNTS_PATH) -> list[Account]:
+def read_accounts(path: Path | None = None) -> list[Account]:
     """Read every account from the TOML file at ``path``.
 
-    Returns an empty list if the file does not exist yet.
+    Defaults to ``app.config.ACCOUNTS_PATH``, resolved at call time (not
+    at import time) so tests can redirect it via ``monkeypatch``. Returns
+    an empty list if the file does not exist yet.
     """
+    path = path if path is not None else config.ACCOUNTS_PATH
     if not path.exists():
         return []
     with path.open("rb") as accounts_file:
@@ -40,12 +43,14 @@ def read_accounts(path: Path = ACCOUNTS_PATH) -> list[Account]:
     return [Account(**entry) for entry in data.get("accounts", [])]
 
 
-def write_accounts(accounts: Iterable[Account], path: Path = ACCOUNTS_PATH) -> None:
+def write_accounts(accounts: Iterable[Account], path: Path | None = None) -> None:
     """Overwrite the accounts TOML file at ``path`` with ``accounts``.
 
+    Defaults to ``app.config.ACCOUNTS_PATH``, resolved at call time.
     Acquires a PID-based lock on ``path`` for the duration of the write and
     writes via a temp file + atomic rename.
     """
+    path = path if path is not None else config.ACCOUNTS_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
     with file_lock(path):
         data = {"accounts": [_to_dict(account) for account in accounts]}

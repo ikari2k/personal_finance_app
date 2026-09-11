@@ -1,0 +1,42 @@
+<form class="inline-form" hx-post="/transactions"
+      hx-target="#transactions-table-wrapper" hx-swap="outerHTML">
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <label>Account
+    <select name="account_id" required>
+      {% for account in accounts %}
+        <option value="{{ account.id }}">{{ account.name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Date
+    <input type="date" name="date" value="{{ today }}" required>
+  </label>
+  <label>Type
+    <select name="type" required>
+      <option value="expense">Expense</option>
+      <option value="income">Income</option>
+    </select>
+  </label>
+  <label>Category (type to create a new one)
+    <input type="text" name="category" list="category-options" required>
+    <datalist id="category-options">
+      {% for category in categories %}<option value="{{ category }}">{% endfor %}
+    </datalist>
+  </label>
+  <label>Subcategory (type to create a new one)
+    <input type="text" name="subcategory" list="subcategory-options">
+    <datalist id="subcategory-options">
+      {% for subcategory in subcategories %}<option value="{{ subcategory }}">{% endfor %}
+    </datalist>
+  </label>
+  <label>Description
+    <input type="text" name="description">
+  </label>
+  <label>Amount
+    <input type="text" name="amount" required>
+  </label>
+  <label>Notes
+    <input type="text" name="notes">
+  </label>
+  <button type="submit">Add transaction</button>
+</form>

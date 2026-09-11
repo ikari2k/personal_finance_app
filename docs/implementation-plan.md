@@ -4,7 +4,7 @@ This elaborates `finance-app-prd.md` into concrete technical decisions and a pha
 Phases are implemented one at a time, each its own reviewable unit of work with its own commit(s).
 `CLAUDE.md` is updated after each phase lands to reflect what became concrete during that phase.
 
-**Status**: Phases 0–1 complete. Phase 2 not yet started.
+**Status**: Phases 0–2 complete. Phase 3 not yet started.
 
 **Environment note**: `uv` is installed under pyenv's Python 3.13.7, not globally on PATH — the
 `uv` shim only resolves once a directory is pinned to that pyenv version. This repo has a
@@ -125,7 +125,7 @@ unit-testable without touching disk. `routers/` stays thin — HTTP/HTMX glue on
     `tmp_path`-isolated; full suite is 19 tests, all passing. `ruff check` / `ruff format --check`
     clean.
 
-- [ ] **Phase 2 — Accounts, transactions, transfers (manual entry)**: account CRUD
+- [x] **Phase 2 — Accounts, transactions, transfers (manual entry)**: account CRUD
   router/templates, manual transaction entry with on-the-fly category/subcategory creation,
   transfer entry (`services/transactions.py` builds the linked two-row pair),
   `services/balances.py`. *Verify*: integration test confirms both transfer rows share
@@ -141,6 +141,35 @@ unit-testable without touching disk. `routers/` stays thin — HTTP/HTMX glue on
     financial data conventions.
   - Rerunning the script should be safe (overwrite, not append/duplicate) so it stays useful as a
     "reset to a known state" tool through the rest of development.
+  - **Storage layer became testable via routers**: `app/storage/{ledger,accounts,categories}.py`
+    read/write functions used to default their `path` argument to a value frozen at import time
+    (`path: Path = LEDGER_PATH`), which meant nothing could redirect a router's storage calls
+    away from the real `data/`/`config/` dirs during a test. Changed all three to
+    `path: Path | None = None` and resolve `config.LEDGER_PATH` (etc.) *at call time* instead —
+    now `tests/integration/conftest.py`'s `client` fixture just monkeypatches the three
+    `app.config` path attributes once, and every router transitively picks up the redirect.
+  - `app/templating.py` holds the single shared `Jinja2Templates` instance (moved out of
+    `app.main`) so routers can import it without a circular import back to `main`.
+  - **htmx is vendored**, not loaded from a CDN: `app/static/htmx.min.js` (htmx 2.0.10, fetched
+    once during development) — consistent with the "app must run offline" rule already in
+    CLAUDE.md, which previously only covered the Phase 5 charting library.
+  - New service modules follow the Phase 1 `services/consistency.py` pattern — pure functions
+    over in-memory data, no file I/O: `app/services/accounts.py` (`add_account`,
+    `update_account`, `remove_account` — enforces unique IDs, immutable `id`, and refuses to
+    delete an account still referenced by a transaction), `app/services/balances.py`
+    (`account_balance`, `all_balances`), and `app/services/transactions.py` (`new_transaction`
+    normalizes user-entered unsigned amounts to signed by `type`; `new_transfer_pair` builds the
+    linked two-row pair; `ensure_category` implements on-the-fly category/subcategory creation).
+  - Routers (`app/routers/{accounts,transactions,transfers}.py`) stay thin: read via storage,
+    call a service function to validate/build, write via storage, re-render an HTMX table/form
+    fragment. Validation errors (duplicate account id, unknown `account_id`, non-positive
+    amount, same-account transfer, delete-with-transactions) are caught and re-rendered inline
+    rather than raising HTTP 500s.
+  - 36 new tests (17 service unit tests, 19 router integration tests via a `tmp_path`-redirected
+    `TestClient`); full suite is 55 tests, all passing. `ruff check` / `ruff format --check`
+    clean. Also manually verified live via `scripts/seed_sample_data.py` + `curl` against a real
+    `uvicorn` process: balances, transaction entry, transfer creation, and the duplicate-account
+    error path all behaved correctly before the server was stopped and sample data reset.
 
 - [ ] **Phase 3 — Bank CSV import**: upload + parse endpoint, mapping-setup UI persisted to
   `config/import_mappings/<bank>.toml`, auto-reuse on next import from the same bank,

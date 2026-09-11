@@ -10,16 +10,19 @@ from pathlib import Path
 
 import tomli_w
 
-from app.config import CATEGORIES_PATH
+from app import config
 from app.models.category import CategoryTree
 from app.storage.lock import file_lock
 
 
-def read_categories(path: Path = CATEGORIES_PATH) -> CategoryTree:
+def read_categories(path: Path | None = None) -> CategoryTree:
     """Read the category tree from the TOML file at ``path``.
 
-    Returns an empty tree if the file does not exist yet.
+    Defaults to ``app.config.CATEGORIES_PATH``, resolved at call time (not
+    at import time) so tests can redirect it via ``monkeypatch``. Returns
+    an empty tree if the file does not exist yet.
     """
+    path = path if path is not None else config.CATEGORIES_PATH
     if not path.exists():
         return {}
     with path.open("rb") as categories_file:
@@ -27,12 +30,14 @@ def read_categories(path: Path = CATEGORIES_PATH) -> CategoryTree:
     return data.get("categories", {})
 
 
-def write_categories(categories: CategoryTree, path: Path = CATEGORIES_PATH) -> None:
+def write_categories(categories: CategoryTree, path: Path | None = None) -> None:
     """Overwrite the categories TOML file at ``path`` with ``categories``.
 
+    Defaults to ``app.config.CATEGORIES_PATH``, resolved at call time.
     Acquires a PID-based lock on ``path`` for the duration of the write and
     writes via a temp file + atomic rename.
     """
+    path = path if path is not None else config.CATEGORIES_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
     with file_lock(path):
         data = {"categories": categories}

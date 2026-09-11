@@ -4,10 +4,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-Phases 0–1 are complete: the `uv` project/directory tree, a Jinja2-rendered `/health` endpoint,
-PID-based file locking, ledger/account/category read-write storage, and the ledger consistency
-check (wired into a non-blocking startup hook) all exist and are covered by passing tests. Phase 2
-(accounts, manual transaction entry, transfers, balances) has not started. See
+Phases 0–2 are complete: storage/locking (Phase 1), plus a working HTMX UI for accounts (CRUD),
+manual transaction entry (with on-the-fly category/subcategory creation), transfers, and balance
+display (Phase 2) — all covered by passing tests, and manually smoke-tested live via
+`scripts/seed_sample_data.py`. Phase 3 (bank CSV import) has not started. See
 `docs/implementation-plan.md` for the full phased plan, finalized schemas, and per-phase status
 checkboxes/implementation notes.
 
@@ -50,20 +50,24 @@ uv run python scripts/launch.py            # one-click launcher (starts server +
 
 ```
 app/
-  main.py         # FastAPI app factory, startup consistency check
-  config.py        # resolves data/config paths, binds 127.0.0.1 only
-  models/           # pydantic domain models (Account, Category, Transaction, Rule, ImportMapping)
-  storage/           # file I/O + locking — the ONLY layer allowed to touch data/ or config/ files
-  services/            # business logic (transfer pairing, consistency checks, aggregation) — no direct file I/O
-  routers/              # FastAPI routers, one per feature area — thin HTTP/HTMX glue only
-  templates/             # Jinja2 pages + HTMX partials
-  static/                # css, vendored chart JS (no CDN — app must run offline)
-data/ledger.csv           # created on first run if absent
-config/                     # accounts.toml, categories.toml, rules.toml, import_mappings/<bank>.toml
-tests/unit/                  # storage/ + services/, tmp_path-isolated, never touches real data/config
-tests/integration/            # router-level, FastAPI TestClient
-scripts/seed_sample_data.py    # dev-only: resets data/config to fake sample data (Phase 2+)
-scripts/launch.py              # starts uvicorn, waits for readiness, opens browser
+  main.py         # FastAPI app factory, startup consistency check, router mounting
+  templating.py    # shared Jinja2Templates instance (avoids a circular import into main)
+  config.py         # resolves data/config paths, binds 127.0.0.1 only
+  models/             # pydantic domain models: Account, Transaction/TransactionType, CategoryTree
+  storage/              # file I/O + locking — the ONLY layer allowed to touch data/ or config/ files
+    lock.py, ledger.py, accounts.py, categories.py  # (rules.py, import_mappings.py land in Phase 3-4)
+  services/                # business logic — pure functions, no direct file I/O
+    consistency.py, accounts.py, balances.py, transactions.py
+  routers/                  # FastAPI routers, one per feature area — thin HTTP/HTMX glue only
+    accounts.py, transactions.py, transfers.py  # (import_, rules.py, reports.py land in Phase 3-5)
+  templates/                 # Jinja2 pages + HTMX partials, one subdir per feature area
+  static/                     # style.css, htmx.min.js (vendored), vendored chart JS in Phase 5
+data/ledger.csv                # created on first run if absent
+config/                          # accounts.toml, categories.toml, rules.toml, import_mappings/<bank>.toml
+tests/unit/                       # storage/ + services/, tmp_path-isolated, never touches real data/config
+tests/integration/                 # router-level, FastAPI TestClient; conftest.py redirects storage to tmp_path
+scripts/seed_sample_data.py          # dev-only: resets data/config to fake sample data
+scripts/launch.py                      # starts uvicorn, waits for readiness, opens browser (Phase 6)
 ```
 
 `storage/` owns all disk access and file locking. `services/` holds business rules and must stay
@@ -74,17 +78,41 @@ unit-testable without touching disk (inject paths/tmp_path in tests). `routers/`
 Every `storage/*.py` read/write module follows the same shape — reuse it rather than inventing a
 new one for `rules.py` / `import_mappings.py` in later phases:
 
-- `read_x(path: Path = DEFAULT_PATH) -> ...`: returns an empty list/dict if `path` doesn't exist
-  yet (files are created lazily on first write, never at startup).
-- `write_x(items, path: Path = DEFAULT_PATH) -> None`: wraps the write in
-  `app.storage.lock.file_lock(path)`, writes to a `<path>.tmp` sibling, then `Path.replace()`s it
-  into place — atomic, so a crash mid-write can never leave a truncated/partial file.
-- Default `path` args come from `app/config.py`, so callers rarely need to pass one explicitly;
-  tests always pass an explicit `tmp_path`-based path instead.
+- `read_x(path: Path | None = None) -> ...`: returns an empty list/dict if `path` doesn't exist
+  yet (files are created lazily on first write, never at startup). If `path` is omitted, resolves
+  `app.config.X_PATH` **at call time** — e.g. `path = path if path is not None else
+  config.LEDGER_PATH`, importing `config` as a module (`from app import config`), not the
+  constant by name. This is what lets tests redirect every caller (including routers) at once by
+  monkeypatching the three `app.config` path attributes, rather than needing each storage
+  function's default re-bound individually — see `tests/integration/conftest.py`.
+- `write_x(items, path: Path | None = None) -> None`: same default-resolution pattern, then
+  wraps the write in `app.storage.lock.file_lock(path)`, writes to a `<path>.tmp` sibling, then
+  `Path.replace()`s it into place — atomic, so a crash mid-write can never leave a
+  truncated/partial file.
+- Tests always pass an explicit `tmp_path`-based path instead of relying on the default.
 - Money fields (e.g. `Account.starting_balance`) are pydantic `Decimal`, but serialize to TOML as
   a **quoted string**, not a bare float — `tomli_w` writes `Decimal` as a bare TOML float literal
   and `tomllib` reads it back as Python `float`, risking silent precision loss. The same care is
   needed for `Transaction.amount` in the ledger CSV, which is already string-typed there.
+
+### Service module pattern (established in `app/services/{consistency,accounts,balances,transactions}.py`)
+
+Every `services/*.py` function is **pure**: it takes in-memory data (lists of `Transaction`,
+`Account`, a `CategoryTree`) and returns new in-memory data, raising `ValueError` on invalid
+input — no reads or writes of `data/`/`config/` files, ever. Routers do the I/O: read via
+`storage`, call a service function to validate/build/transform, write the result back via
+`storage`. This keeps business rules (unique account IDs, transfer pairing, on-the-fly category
+creation, sign normalization, referential-integrity guards on delete) unit-testable without
+`tmp_path`/disk at all — reuse this split for `services/importer.py` / `services/categorizer.py`
+/ `services/aggregation.py` in later phases rather than letting a router grow business logic of
+its own.
+
+### HTTP form testing pattern
+
+Router integration tests use the `client` fixture in `tests/integration/conftest.py`, which
+monkeypatches `app.config.{LEDGER,ACCOUNTS,CATEGORIES}_PATH` to `tmp_path`-based files before
+constructing the `TestClient`. Add a matching `_PATH` attribute + monkeypatch line there once
+`rules.toml` / `import_mappings/` need the same treatment in Phase 3-4.
 
 ## Core architecture
 
@@ -131,8 +159,9 @@ new one for `rules.py` / `import_mappings.py` in later phases:
 - Reports pull from **one shared aggregation layer** (`services/aggregation.py`, group-by
   year/month/category/subcategory), not per-view one-off aggregation logic — wire new report
   views through it rather than duplicating grouping logic.
-- Charting is done with a **vendored JS lib in `app/static/`**, not a CDN script tag — the app
-  must run with no network access.
+- **No CDN scripts, ever** — the app must run with no network access. `app/static/htmx.min.js`
+  (htmx 2.0.10) is already vendored this way; Phase 5's charting library follows the same
+  pattern (fetch once during development, commit the file, reference it locally).
 
 ### Scale assumptions
 

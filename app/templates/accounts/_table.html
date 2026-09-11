@@ -1,0 +1,38 @@
+<div id="accounts-table-wrapper">
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Number</th>
+        <th>Description</th>
+        <th>Balance</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for account in accounts %}
+        {% set balance = balances[account.id] %}
+        <tr>
+          <td>{{ account.name }}</td>
+          <td>{{ account.number }}</td>
+          <td>{{ account.description }}</td>
+          <td class="{{ 'amount-negative' if balance < 0 else 'amount-positive' }}">
+            {{ "%.2f"|format(balance) }}
+          </td>
+          <td class="row-actions">
+            <a href="#" hx-get="/accounts/{{ account.id }}/edit"
+               hx-target="#account-form-container" hx-swap="innerHTML">Edit</a>
+            <button hx-post="/accounts/{{ account.id }}/delete"
+                    hx-target="#accounts-table-wrapper" hx-swap="outerHTML"
+                    hx-confirm="Delete account &quot;{{ account.name }}&quot;? This cannot be undone.">
+              Delete
+            </button>
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="5">No accounts yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

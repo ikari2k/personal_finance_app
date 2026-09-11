@@ -10,7 +10,7 @@ import csv
 from collections.abc import Iterable
 from pathlib import Path
 
-from app.config import LEDGER_PATH
+from app import config
 from app.models.transaction import Transaction
 from app.storage.lock import file_lock
 
@@ -60,12 +60,15 @@ def _from_row(row: dict[str, str]) -> Transaction:
     )
 
 
-def read_ledger(path: Path = LEDGER_PATH) -> list[Transaction]:
+def read_ledger(path: Path | None = None) -> list[Transaction]:
     """Read every transaction from the ledger CSV at ``path``.
 
-    Returns an empty list if the file does not exist yet — the ledger is
-    created lazily on first write, not at app startup.
+    Defaults to ``app.config.LEDGER_PATH``, resolved at call time (not at
+    import time) so tests can redirect it via ``monkeypatch``. Returns an
+    empty list if the file does not exist yet — the ledger is created
+    lazily on first write, not at app startup.
     """
+    path = path if path is not None else config.LEDGER_PATH
     if not path.exists():
         return []
     with path.open("r", newline="", encoding="utf-8") as ledger_file:
@@ -73,12 +76,14 @@ def read_ledger(path: Path = LEDGER_PATH) -> list[Transaction]:
         return [_from_row(row) for row in reader]
 
 
-def write_ledger(transactions: Iterable[Transaction], path: Path = LEDGER_PATH) -> None:
+def write_ledger(transactions: Iterable[Transaction], path: Path | None = None) -> None:
     """Overwrite the ledger CSV at ``path`` with ``transactions``.
 
-    Acquires a PID-based lock on ``path`` for the duration of the write and
-    writes via a temp file + atomic rename.
+    Defaults to ``app.config.LEDGER_PATH``, resolved at call time. Acquires
+    a PID-based lock on ``path`` for the duration of the write and writes
+    via a temp file + atomic rename.
     """
+    path = path if path is not None else config.LEDGER_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
     with file_lock(path):
         tmp_path = path.with_name(path.name + ".tmp")

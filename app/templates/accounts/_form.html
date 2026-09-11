@@ -1,0 +1,24 @@
+<form class="inline-form"
+      hx-post="{{ '/accounts/' + account.id if account else '/accounts' }}"
+      hx-target="#accounts-table-wrapper" hx-swap="outerHTML">
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  {% if not account %}
+    <label>Account ID (short code, permanent)
+      <input type="text" name="account_id" required>
+    </label>
+  {% endif %}
+  <label>Name
+    <input type="text" name="name" value="{{ account.name if account else '' }}" required>
+  </label>
+  <label>Number
+    <input type="text" name="number" value="{{ account.number if account else '' }}">
+  </label>
+  <label>Description
+    <input type="text" name="description" value="{{ account.description if account else '' }}">
+  </label>
+  <label>Starting balance
+    <input type="text" name="starting_balance"
+           value="{{ account.starting_balance if account else '0.00' }}" required>
+  </label>
+  <button type="submit">{{ 'Save' if account else 'Add account' }}</button>
+</form>

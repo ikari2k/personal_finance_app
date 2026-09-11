@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Accounts — Finance Tracker{% endblock %}
+{% block content %}
+  <h1>Accounts</h1>
+  {% include "accounts/_table.html" %}
+  <button hx-get="/accounts/new" hx-target="#account-form-container" hx-swap="innerHTML">
+    Add account
+  </button>
+  <div id="account-form-container"></div>
+{% endblock %}
