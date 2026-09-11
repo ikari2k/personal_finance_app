@@ -4,7 +4,13 @@ This elaborates `finance-app-prd.md` into concrete technical decisions and a pha
 Phases are implemented one at a time, each its own reviewable unit of work with its own commit(s).
 `CLAUDE.md` is updated after each phase lands to reflect what became concrete during that phase.
 
-**Status**: Phase 0 not yet started.
+**Status**: Phase 0 complete. Phase 1 not yet started.
+
+**Environment note**: `uv` is installed under pyenv's Python 3.13.7, not globally on PATH — the
+`uv` shim only resolves once a directory is pinned to that pyenv version. This repo has a
+`.python-version` file (`3.13.7`) at its root for exactly this reason; from inside the repo,
+`uv`/`uv run ...` work as documented. If commands report `uv: command not found`, confirm you're
+in the repo root and that `.python-version` is present.
 
 ## Locked-in technical decisions
 
@@ -76,10 +82,21 @@ unit-testable without touching disk. `routers/` stays thin — HTTP/HTMX glue on
 
 ## Phases
 
-- [ ] **Phase 0 — Scaffolding**: `uv init`; `pyproject.toml` deps (fastapi, uvicorn, jinja2,
+- [x] **Phase 0 — Scaffolding**: `uv init`; `pyproject.toml` deps (fastapi, uvicorn, jinja2,
   python-multipart, tomli-w, pydantic) and dev deps (pytest, httpx, ruff); directory tree above;
   FastAPI app serving a health-check page. *Verify*: `uv run uvicorn app.main:app --reload`
   serves a page.
+  - `app/main.py` wires a Jinja2-rendered `/health` page and mounts `app/static/` — proves out
+    the templating/static pipeline later phases build on.
+  - `app/config.py` centralizes all `data/`/`config/` paths and the loopback-only host/port.
+  - Ruff configured with the `D` (pydocstyle) rule set enabled, so missing/malformed docstrings
+    fail lint rather than relying on manual review.
+  - Added `.gitignore`: `data/*` and `config/*` (real financial data and generated per-bank/rule
+    config) are excluded from version control, with `.gitkeep` files preserving the directory
+    structure.
+  - `pyproject.toml` sets `pythonpath = ["."]` under `[tool.pytest.ini_options]` so `tests/` can
+    `from app... import ...` without installing the project as a package.
+  - `tests/integration/test_health.py` exercises the endpoint via FastAPI `TestClient`.
 
 - [ ] **Phase 1 — Core ledger read/write + locking**: `storage/lock.py` (PID-based stale-lock
   recovery), `storage/ledger.py` + `storage/accounts.py` + `storage/categories.py`,

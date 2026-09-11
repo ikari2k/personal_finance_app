@@ -1,0 +1,16 @@
+# Virtual environment / caches
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# User's real financial data and generated config — never commit these.
+# Directory structure is preserved via .gitkeep files.
+/data/*
+!/data/.gitkeep
+/config/*
+!/config/.gitkeep
+!/config/import_mappings/
+/config/import_mappings/*
+!/config/import_mappings/.gitkeep

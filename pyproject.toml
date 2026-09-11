@@ -1,0 +1,35 @@
+[project]
+name = "finance-app"
+version = "0.1.0"
+description = "Local, single-user personal finance tracker (FastAPI + HTMX, CSV/TOML storage)"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi>=0.141.1",
+    "jinja2>=3.1.6",
+    "pydantic>=2.13.5",
+    "python-multipart>=0.0.32",
+    "tomli-w>=1.2.0",
+    "uvicorn[standard]>=0.52.4",
+]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=9.1.1",
+    "ruff>=0.16.7",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "D"]
+ignore = ["D203", "D213"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["D"]

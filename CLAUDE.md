@@ -4,16 +4,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-No application code exists yet. Current contents: `docs/finance-app-prd.md` (the product spec)
-and `docs/implementation-plan.md` (the phased build plan with finalized technical decisions —
-project layout, schemas, tooling). Read `docs/implementation-plan.md` before starting or resuming
-any phase; it tracks which phases are done via checkboxes. Update the commands below as soon as
-`pyproject.toml` exists (Phase 0).
+Phase 0 (scaffolding) is complete: the `uv` project, directory tree, and a Jinja2-rendered
+`/health` endpoint exist and are covered by a passing integration test. Phase 1 (core ledger
+read/write + locking) has not started. See `docs/implementation-plan.md` for the full phased plan,
+finalized schemas, and per-phase status checkboxes.
 
 **Work proceeds one phase at a time.** Each phase in `docs/implementation-plan.md` is a discrete,
 separately-reviewable unit — implement it, verify it, stop, and update docs (this file plus the
 plan's checkbox/status) before starting the next phase. Don't jump ahead to a later phase's work
 while an earlier one is in progress.
+
+**Environment note**: `uv` is only on PATH inside this repo, via the `.python-version` file
+pinning it to pyenv's Python 3.13.7 (the pyenv-global Python doesn't have `uv` installed). Run
+`uv`/`uv run` commands from the repo root.
 
 ## What this app is
 
@@ -28,8 +31,6 @@ for storage (no database), `uv` for dependency management, a launcher script tha
 and opens the browser.
 
 ## Commands
-
-Once Phase 0 scaffolding lands, the standard commands are:
 
 ```
 uv sync                                    # install/update dependencies
