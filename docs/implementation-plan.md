@@ -4,7 +4,7 @@ This elaborates `finance-app-prd.md` into concrete technical decisions and a pha
 Phases are implemented one at a time, each its own reviewable unit of work with its own commit(s).
 `CLAUDE.md` is updated after each phase lands to reflect what became concrete during that phase.
 
-**Status**: Phase 0 complete. Phase 1 not yet started.
+**Status**: Phases 0–1 complete. Phase 2 not yet started.
 
 **Environment note**: `uv` is installed under pyenv's Python 3.13.7, not globally on PATH — the
 `uv` shim only resolves once a directory is pinned to that pyenv version. This repo has a
@@ -98,16 +98,49 @@ unit-testable without touching disk. `routers/` stays thin — HTTP/HTMX glue on
     `from app... import ...` without installing the project as a package.
   - `tests/integration/test_health.py` exercises the endpoint via FastAPI `TestClient`.
 
-- [ ] **Phase 1 — Core ledger read/write + locking**: `storage/lock.py` (PID-based stale-lock
+- [x] **Phase 1 — Core ledger read/write + locking**: `storage/lock.py` (PID-based stale-lock
   recovery), `storage/ledger.py` + `storage/accounts.py` + `storage/categories.py`,
   `services/consistency.py` (orphaned transfers, invalid `account_id`). *Verify*: `uv run pytest
   tests/unit -k ledger`; stale-PID lock test (spawn+kill a process, confirm lock clears).
+  - `app/models/{account,transaction,category}.py` add the pydantic domain models
+    (`Account`, `Transaction`/`TransactionType`) and the `CategoryTree` type alias.
+  - `app/storage/lock.py`: `file_lock(target, timeout, poll_interval)` context manager. Uses
+    `os.open(..., O_CREAT | O_EXCL)` for atomic lock-file creation, clears a lock whose PID is no
+    longer alive (`os.kill(pid, 0)`) before each acquisition attempt, and raises `LockError` if
+    a live-owned lock isn't released before `timeout`.
+  - `app/storage/ledger.py`, `accounts.py`, `categories.py` all follow the same pattern: read
+    returns an empty collection if the file doesn't exist; write takes `file_lock`, then writes
+    to a `.tmp` sibling and `Path.replace()`s it into place (atomic, no partial-write risk).
+  - `starting_balance` is stored as a **quoted TOML string**, not a bare float — `tomli_w`
+    serializes `Decimal` as a bare TOML float literal and `tomllib` reads it back as Python
+    `float`, which risks silent precision loss for money. Round-tripping through `str` avoids it
+    (see `app/storage/accounts.py` module docstring).
+  - `app/services/consistency.py`: `check_consistency(transactions, accounts)` — pure function,
+    no file I/O — flags unknown `account_id` references and transfer-type rows that aren't part
+    of an exactly-two-row, zero-net `transfer_id` pair.
+  - `app/main.py` now runs `check_consistency` in a `lifespan` startup hook (issues logged as
+    warnings, never block startup) — the "runs automatically on startup" half of the consistency
+    check invariant. The on-demand half needs a UI action and lands with a later phase's routers.
+  - 15 new unit tests (`tests/unit/test_{lock,ledger,accounts,categories,consistency}.py`), all
+    `tmp_path`-isolated; full suite is 19 tests, all passing. `ruff check` / `ruff format --check`
+    clean.
 
 - [ ] **Phase 2 — Accounts, transactions, transfers (manual entry)**: account CRUD
   router/templates, manual transaction entry with on-the-fly category/subcategory creation,
   transfer entry (`services/transactions.py` builds the linked two-row pair),
   `services/balances.py`. *Verify*: integration test confirms both transfer rows share
   `transfer_id` with opposite-sign amounts; balance reflects `starting_balance` + rows.
+  - Also add `scripts/seed_sample_data.py`: a dev-only script that populates
+    `config/accounts.toml`, `config/categories.toml`, and `data/ledger.csv` with fake accounts,
+    categories, and a few months of transactions (including at least one transfer pair), using
+    the Phase 1 storage read/write functions. This is the first phase with a UI worth manually
+    clicking through, so it's the point where seed data starts earning its keep — for browser
+    smoke-testing account balances and transaction entry once those views exist.
+  - The script itself is checked into git (it's code); the `data/`/`config/` files it generates
+    stay gitignored, same as real user data — never commit generated sample data alongside real
+    financial data conventions.
+  - Rerunning the script should be safe (overwrite, not append/duplicate) so it stays useful as a
+    "reset to a known state" tool through the rest of development.
 
 - [ ] **Phase 3 — Bank CSV import**: upload + parse endpoint, mapping-setup UI persisted to
   `config/import_mappings/<bank>.toml`, auto-reuse on next import from the same bank,

@@ -4,10 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-Phase 0 (scaffolding) is complete: the `uv` project, directory tree, and a Jinja2-rendered
-`/health` endpoint exist and are covered by a passing integration test. Phase 1 (core ledger
-read/write + locking) has not started. See `docs/implementation-plan.md` for the full phased plan,
-finalized schemas, and per-phase status checkboxes.
+Phases 0–1 are complete: the `uv` project/directory tree, a Jinja2-rendered `/health` endpoint,
+PID-based file locking, ledger/account/category read-write storage, and the ledger consistency
+check (wired into a non-blocking startup hook) all exist and are covered by passing tests. Phase 2
+(accounts, manual transaction entry, transfers, balances) has not started. See
+`docs/implementation-plan.md` for the full phased plan, finalized schemas, and per-phase status
+checkboxes/implementation notes.
 
 **Work proceeds one phase at a time.** Each phase in `docs/implementation-plan.md` is a discrete,
 separately-reviewable unit — implement it, verify it, stop, and update docs (this file plus the
@@ -40,6 +42,7 @@ uv run pytest tests/unit -k ledger         # run a filtered subset
 uv run pytest tests/unit/test_x.py::test_y # run a single test
 uv run ruff check .                        # lint
 uv run ruff format .                       # format
+uv run python scripts/seed_sample_data.py  # reset data/config to fake sample data (Phase 2+)
 uv run python scripts/launch.py            # one-click launcher (starts server + opens browser)
 ```
 
@@ -59,11 +62,29 @@ data/ledger.csv           # created on first run if absent
 config/                     # accounts.toml, categories.toml, rules.toml, import_mappings/<bank>.toml
 tests/unit/                  # storage/ + services/, tmp_path-isolated, never touches real data/config
 tests/integration/            # router-level, FastAPI TestClient
+scripts/seed_sample_data.py    # dev-only: resets data/config to fake sample data (Phase 2+)
 scripts/launch.py              # starts uvicorn, waits for readiness, opens browser
 ```
 
 `storage/` owns all disk access and file locking. `services/` holds business rules and must stay
 unit-testable without touching disk (inject paths/tmp_path in tests). `routers/` stays thin.
+
+### Storage module pattern (established in `app/storage/{lock,ledger,accounts,categories}.py`)
+
+Every `storage/*.py` read/write module follows the same shape — reuse it rather than inventing a
+new one for `rules.py` / `import_mappings.py` in later phases:
+
+- `read_x(path: Path = DEFAULT_PATH) -> ...`: returns an empty list/dict if `path` doesn't exist
+  yet (files are created lazily on first write, never at startup).
+- `write_x(items, path: Path = DEFAULT_PATH) -> None`: wraps the write in
+  `app.storage.lock.file_lock(path)`, writes to a `<path>.tmp` sibling, then `Path.replace()`s it
+  into place — atomic, so a crash mid-write can never leave a truncated/partial file.
+- Default `path` args come from `app/config.py`, so callers rarely need to pass one explicitly;
+  tests always pass an explicit `tmp_path`-based path instead.
+- Money fields (e.g. `Account.starting_balance`) are pydantic `Decimal`, but serialize to TOML as
+  a **quoted string**, not a bare float — `tomli_w` writes `Decimal` as a bare TOML float literal
+  and `tomllib` reads it back as Python `float`, risking silent precision loss. The same care is
+  needed for `Transaction.amount` in the ledger CSV, which is already string-typed there.
 
 ## Core architecture
 
@@ -91,13 +112,17 @@ unit-testable without touching disk (inject paths/tmp_path in tests). `routers/`
   row in the destination account, joined by a shared `transfer_id`, with opposite-sign amounts.
   Never model a transfer as a single row, and never let one side of a transfer pair be
   edited/deleted without the other.
-- **File locking on every write** to `ledger.csv` and config files being edited. Locks store the
-  writer's PID; lock acquisition must check whether that PID is still alive and auto-clear stale
-  locks — no manual lock-file cleanup should ever be required.
+- **File locking on every write** to `ledger.csv` and config files being edited, via
+  `app.storage.lock.file_lock` (a `<path>.lock` sibling file storing the writer's PID). Acquiring
+  the lock checks whether that PID is still alive (`os.kill(pid, 0)`) and auto-clears the lock
+  file if not — no manual lock-file cleanup should ever be required. A lock still held by a live
+  process raises `LockError` after a timeout rather than blocking forever.
 - **Referential integrity is enforced in application code**, not a database (there is no DB).
-  `services/consistency.py` checks for orphaned transfers and invalid `account_id` references; it
-  runs both automatically (non-blocking) on startup and on demand via a "Check consistency"
-  action. Any change to transfer or account-reference logic should keep this check in mind.
+  `services/consistency.py::check_consistency(transactions, accounts)` checks for orphaned
+  transfers and invalid `account_id` references; `app/main.py`'s `lifespan` hook runs it
+  automatically (non-blocking, warnings-only) on every startup. The on-demand "Check consistency"
+  action still needs a router + UI — add it once a settings/reports router exists. Any change to
+  transfer or account-reference logic should keep this check in mind.
 - **Regex rules must fail loudly** on invalid patterns — compile-check at save time, never
   silently match zero rows at apply time.
 - **Bulk reclassification always previews first**: a rule run against the ledger must show a full
