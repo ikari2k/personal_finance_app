@@ -30,7 +30,8 @@ unsupported.
 
 Stack: Python 3.11+ / FastAPI backend, Jinja2 + HTMX for server-rendered UI (minimal JS), CSV/TOML
 for storage (no database), `uv` for dependency management, a launcher script that starts Uvicorn
-and opens the browser.
+and opens the browser. Styling is Pico.css (classless build) + a vendored JetBrains Mono variable
+font — see "UI conventions" below.
 
 ## Commands
 
@@ -53,7 +54,7 @@ app/
   main.py         # FastAPI app factory, startup consistency check, router mounting
   templating.py    # shared Jinja2Templates instance (avoids a circular import into main)
   config.py         # resolves data/config paths, binds 127.0.0.1 only
-  models/             # pydantic domain models: Account, Transaction/TransactionType, CategoryTree
+  models/             # pydantic domain models: Account, Transaction/TransactionType, CategoriesByType
   storage/              # file I/O + locking — the ONLY layer allowed to touch data/ or config/ files
     lock.py, ledger.py, accounts.py, categories.py  # (rules.py, import_mappings.py land in Phase 3-4)
   services/                # business logic — pure functions, no direct file I/O
@@ -61,7 +62,7 @@ app/
   routers/                  # FastAPI routers, one per feature area — thin HTTP/HTMX glue only
     accounts.py, transactions.py, transfers.py  # (import_, rules.py, reports.py land in Phase 3-5)
   templates/                 # Jinja2 pages + HTMX partials, one subdir per feature area
-  static/                     # style.css, htmx.min.js (vendored), vendored chart JS in Phase 5
+  static/                     # pico.min.css, style.css, htmx.min.js, fonts/ (all vendored)
 data/ledger.csv                # created on first run if absent
 config/                          # accounts.toml, categories.toml, rules.toml, import_mappings/<bank>.toml
 tests/unit/                       # storage/ + services/, tmp_path-isolated, never touches real data/config
@@ -98,7 +99,7 @@ new one for `rules.py` / `import_mappings.py` in later phases:
 ### Service module pattern (established in `app/services/{consistency,accounts,balances,transactions}.py`)
 
 Every `services/*.py` function is **pure**: it takes in-memory data (lists of `Transaction`,
-`Account`, a `CategoryTree`) and returns new in-memory data, raising `ValueError` on invalid
+`Account`, a `CategoriesByType`) and returns new in-memory data, raising `ValueError` on invalid
 input — no reads or writes of `data/`/`config/` files, ever. Routers do the I/O: read via
 `storage`, call a service function to validate/build/transform, write the result back via
 `storage`. This keeps business rules (unique account IDs, transfer pairing, on-the-fly category
@@ -114,6 +115,61 @@ monkeypatches `app.config.{LEDGER,ACCOUNTS,CATEGORIES}_PATH` to `tmp_path`-based
 constructing the `TestClient`. Add a matching `_PATH` attribute + monkeypatch line there once
 `rules.toml` / `import_mappings/` need the same treatment in Phase 3-4.
 
+## UI conventions
+
+- **Styling**: `app/static/pico.min.css` (Pico.css v2.1.1, classless build — styles semantic HTML
+  directly, no utility classes needed) loads before `app/static/style.css` (small app-specific
+  overrides: the font, and `.amount-negative`/`.amount-positive` via Pico's own
+  `--pico-del-color`/`--pico-ins-color` variables so they adapt to light/dark automatically).
+  Prefer Pico's existing elements/variables (`<article>`, `<dialog>`, `--pico-spacing`,
+  `--pico-muted-border-color`, etc.) over new custom CSS. Because
+  Pico's classless build keys off direct children of `<body>`, every page's content sits inside
+  `<header><nav>...</nav></header><main>...</main>`, per `app/templates/base.html` — don't add
+  content as a bare `<body>` child outside those two.
+- **Font**: `app/static/fonts/jetbrains-mono-variable.woff2` (JetBrains Mono, variable weight),
+  applied globally by overriding Pico's `--pico-font-family` in `style.css`. Vendored the same
+  way as htmx and Pico — see the "no CDN" invariant below.
+- **Every form is a native `<dialog>` modal**, styled by Pico, not a JS modal library — see
+  `app/templates/accounts/list.html` / `app/routers/accounts.py` for the reference
+  implementation; the transactions page has three side by side ("Add income", "Add expense",
+  "Record transfer" — the last handled by a different router, see below). There is no more
+  inline-swap-below-the-button form pattern anywhere in the app; new forms should be a dialog
+  too, not a reversion to that. The pattern:
+  - A `<dialog id="X-dialog">` with an empty `<div id="X-dialog-content" hx-on::after-swap="...">`
+    lives once on the page. Trigger elements (`Add account`, `Edit`, `Add income`, `Add expense`,
+    `Record transfer`) just `hx-get` into `#X-dialog-content`; the `hx-on::after-swap` handler on
+    that div opens the dialog via `showModal()`, guarded by `if (!d.open)` so it's a no-op on an
+    error re-render (calling `showModal()` on an already-open `<dialog>` throws).
+  - When more than one dialog can hold rendered content at the same time (as with "Add income"
+    and "Add expense" — either can be open independently), any element `id` inside the shared
+    form partial must be parametrized per dialog (e.g. `transactions/_form.html`'s
+    `id="transaction-form-{{ values.type }}"` and its per-type `<datalist>` ids) — duplicate DOM
+    ids across the two dialogs would otherwise make `list=` autocomplete bind to the wrong one.
+  - Trigger buttons get a semantic color via a CSS class (`.btn-income` green, `.btn-expense`
+    red, `.btn-transfer` amber — `app/static/style.css`), overriding both Pico's base button vars
+    (`--pico-background-color`/`--pico-border-color`/`--pico-color`) *and* its hover-state vars
+    (`--pico-primary-hover-background`/`-border`), since Pico's `:hover`/`:focus`/`:active` rule
+    reads the hover vars, not the base ones — override only the base and the color reverts to
+    Pico's default blue on hover.
+  - The dialog closes itself via `hx-on:close-dialog="this.close()"` on the `<dialog>`, plus a
+    click-outside-to-close handler (`hx-on:click="if (event.target === this) this.close()"`).
+    Escape-to-close is free (native `<dialog>` behavior).
+  - The form inside posts back to the same content div (`hx-target="#X-dialog-content"
+    hx-swap="innerHTML"`). **On validation error**: the router re-renders the form fragment with
+    an `error` message and the user's submitted values preserved (routers build a `values: dict`
+    from the raw form fields specifically so a rejected submission doesn't lose the user's
+    input) — no `HX-Trigger` header, so the dialog stays open. **On success**: the router sends
+    back the *table* fragment marked `hx-swap-oob="true"` (see each `_table.html`'s `oob` param)
+    so it refreshes wherever it actually lives on the page (which may be a different router's
+    fragment — see `app/routers/transfers.py` importing `render_table` from
+    `app.routers.transactions` to refresh the transactions table from the transfer dialog), and
+    sets response header `HX-Trigger: close-dialog`, which fires a bubbling DOM event that the
+    dialog's own listener catches. This generic `close-dialog` event name is reused by every
+    dialog on the page, not per-dialog-named, so adding a new dialog elsewhere needs no new JS.
+  - Reuse this exact pattern for Phase 4's bulk-reclassification preview dialog rather than
+    inventing a new one — it's a good fit for "load content into a dialog, confirm, refresh a
+    table elsewhere on success."
+
 ## Core architecture
 
 ### Data files
@@ -121,9 +177,14 @@ constructing the `TestClient`. Add a matching `_PATH` attribute + monkeypatch li
 - `config/accounts.toml` — `[[accounts]]` tables: `id, name, number, description,
   starting_balance`. `id` is a stable short code that **never changes** even if name/description
   does — transactions reference `id`, never the account name.
-- `config/categories.toml` — mapping of category name → list of subcategory names. Editable by
-  hand, via settings UI, or on the fly during transaction entry/import. No automatic dedup — the
-  app does not tidy this up.
+- `config/categories.toml` — **two separate trees**, under top-level `[income]` and `[expense]`
+  tables, each mapping category name → list of subcategory names (`app.models.category.
+  CategoriesByType`, keyed by `TransactionType.value`). Income and expense never share
+  categories — "Salary" has no business appearing on the expense side. Transfers don't use this
+  tree at all; they get a fixed `category="Transfer"` (see `services.transactions
+  .new_transfer_pair`). Editable by hand, via settings UI, or on the fly during transaction
+  entry/import (`services.transactions.ensure_category` adds to the correct bucket by type). No
+  automatic dedup — the app does not tidy this up.
 - `data/ledger.csv` — single flat file, one row per transaction, columns (finalized order):
   `id, date, account_id, category, subcategory, description, amount, type, transfer_id, notes`.
   `amount` is a signed decimal string; `type` ∈ `income|expense|transfer`. This is the one file
@@ -159,9 +220,11 @@ constructing the `TestClient`. Add a matching `_PATH` attribute + monkeypatch li
 - Reports pull from **one shared aggregation layer** (`services/aggregation.py`, group-by
   year/month/category/subcategory), not per-view one-off aggregation logic — wire new report
   views through it rather than duplicating grouping logic.
-- **No CDN scripts, ever** — the app must run with no network access. `app/static/htmx.min.js`
-  (htmx 2.0.10) is already vendored this way; Phase 5's charting library follows the same
-  pattern (fetch once during development, commit the file, reference it locally).
+- **No CDN scripts or stylesheets, ever** — the app must run with no network access. Vendored so
+  far: `app/static/htmx.min.js` (htmx 2.0.10), `app/static/pico.min.css` (Pico.css 2.1.1,
+  classless), `app/static/fonts/jetbrains-mono-variable.woff2` (JetBrains Mono). Phase 5's
+  charting library follows the same pattern: fetch once during development, commit the file,
+  reference it locally — never a `<script src="https://...">` or `@import url(...)`.
 
 ### Scale assumptions
 

@@ -10,21 +10,33 @@ from collections.abc import Iterable
 from datetime import date as date_
 from decimal import Decimal
 
-from app.models.category import CategoryTree
+from app.models.category import CategoriesByType
 from app.models.transaction import Transaction, TransactionType
 
 
 def ensure_category(
-    categories: CategoryTree, category: str, subcategory: str
-) -> CategoryTree:
+    categories: CategoriesByType,
+    txn_type: TransactionType,
+    category: str,
+    subcategory: str,
+) -> CategoriesByType:
     """Return ``categories`` with ``category``/``subcategory`` added if new.
 
     Implements the PRD's "create categories on the fly" rule: entering a
     transaction against an unknown category or subcategory adds it rather
     than rejecting the transaction. A blank ``subcategory`` is not added.
+    Income and expense have separate trees, keyed by ``txn_type.value``;
+    ``txn_type`` must be ``INCOME`` or ``EXPENSE`` (transfers use a fixed
+    category outside this tree — see ``new_transfer_pair``).
     """
-    updated = {name: list(subs) for name, subs in categories.items()}
-    subcategories = updated.setdefault(category, [])
+    if txn_type is TransactionType.TRANSFER:
+        raise ValueError("transfers do not use the managed category tree")
+    updated = {
+        bucket: {name: list(subs) for name, subs in tree.items()}
+        for bucket, tree in categories.items()
+    }
+    tree = updated.setdefault(txn_type.value, {})
+    subcategories = tree.setdefault(category, [])
     if subcategory and subcategory not in subcategories:
         subcategories.append(subcategory)
     return updated

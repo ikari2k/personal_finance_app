@@ -170,6 +170,25 @@ unit-testable without touching disk. `routers/` stays thin — HTTP/HTMX glue on
     clean. Also manually verified live via `scripts/seed_sample_data.py` + `curl` against a real
     `uvicorn` process: balances, transaction entry, transfer creation, and the duplicate-account
     error path all behaved correctly before the server was stopped and sample data reset.
+  - **Post-Phase-2 UI refinements** (still within Phase 2 scope, done as follow-up polish before
+    starting Phase 3):
+    - Vendored **Pico.css 2.1.1** (classless) and a **JetBrains Mono** variable font — see
+      `CLAUDE.md`'s "UI conventions" section for the full styling/dialog convention writeup.
+    - Converted **every form to a native `<dialog>` modal** (Add/Edit account, Add income, Add
+      expense, Record transfer) — no more inline-swap-below-the-button forms anywhere. Standard
+      pattern: `HX-Trigger: close-dialog` response header closes the dialog on success, an
+      out-of-band table swap refreshes whatever table is actually on the page (which may belong
+      to a different router — see `transfers.py` reusing `transactions.render_table`), and a
+      validation error re-renders the form in place with the user's input preserved.
+    - **Split category storage into separate income/expense trees**: `categories.toml` now has
+      top-level `[income]`/`[expense]` tables instead of one flat tree (`app.models.category
+      .CategoriesByType`, superseding the flat `CategoryTree` used since Phase 1).
+      `services.transactions.ensure_category` takes a `TransactionType` and updates the matching
+      bucket only. "Add income" and "Add expense" are now separate buttons/routes
+      (`GET /transactions/new/{income,expense}`) each showing only that type's categories, rather
+      than one form with a type dropdown.
+    - Trigger buttons are color-coded: `.btn-income` (green), `.btn-expense` (red), `.btn-transfer`
+      (amber) in `app/static/style.css`.
 
 - [ ] **Phase 3 — Bank CSV import**: upload + parse endpoint, mapping-setup UI persisted to
   `config/import_mappings/<bank>.toml`, auto-reuse on next import from the same bank,

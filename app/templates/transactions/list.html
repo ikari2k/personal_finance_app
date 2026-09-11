@@ -3,8 +3,55 @@
 {% block content %}
   <h1>Transactions</h1>
   {% include "transactions/_table.html" %}
-  <button hx-get="/transactions/new" hx-target="#transaction-form-container" hx-swap="innerHTML">
-    Add transaction
+  <button class="btn-income" hx-get="/transactions/new/income"
+          hx-target="#income-dialog-content" hx-swap="innerHTML">
+    Add income
   </button>
-  <div id="transaction-form-container"></div>
+  <button class="btn-expense" hx-get="/transactions/new/expense"
+          hx-target="#expense-dialog-content" hx-swap="innerHTML">
+    Add expense
+  </button>
+  <button class="btn-transfer" hx-get="/transfers/new" hx-target="#transfer-dialog-content"
+          hx-swap="innerHTML">
+    Record transfer
+  </button>
+
+  <dialog id="income-dialog" hx-on:close-dialog="this.close()"
+          hx-on:click="if (event.target === this) this.close()">
+    <article>
+      <header>
+        <button aria-label="Close" rel="prev"
+                onclick="document.getElementById('income-dialog').close()"></button>
+        <strong>Add income</strong>
+      </header>
+      <div id="income-dialog-content"
+           hx-on::after-swap="const d = this.closest('dialog'); if (!d.open) d.showModal();"></div>
+    </article>
+  </dialog>
+
+  <dialog id="expense-dialog" hx-on:close-dialog="this.close()"
+          hx-on:click="if (event.target === this) this.close()">
+    <article>
+      <header>
+        <button aria-label="Close" rel="prev"
+                onclick="document.getElementById('expense-dialog').close()"></button>
+        <strong>Add expense</strong>
+      </header>
+      <div id="expense-dialog-content"
+           hx-on::after-swap="const d = this.closest('dialog'); if (!d.open) d.showModal();"></div>
+    </article>
+  </dialog>
+
+  <dialog id="transfer-dialog" hx-on:close-dialog="this.close()"
+          hx-on:click="if (event.target === this) this.close()">
+    <article>
+      <header>
+        <button aria-label="Close" rel="prev"
+                onclick="document.getElementById('transfer-dialog').close()"></button>
+        <strong>Record transfer</strong>
+      </header>
+      <div id="transfer-dialog-content"
+           hx-on::after-swap="const d = this.closest('dialog'); if (!d.open) d.showModal();"></div>
+    </article>
+  </dialog>
 {% endblock %}

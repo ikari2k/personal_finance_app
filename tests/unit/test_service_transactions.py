@@ -16,31 +16,49 @@ ACCOUNT_IDS = ["chk", "sav"]
 
 
 def test_ensure_category_adds_new_category_and_subcategory():
-    result = ensure_category({}, "Groceries", "Supermarket")
+    result = ensure_category({}, TransactionType.EXPENSE, "Groceries", "Supermarket")
 
-    assert result == {"Groceries": ["Supermarket"]}
+    assert result == {"expense": {"Groceries": ["Supermarket"]}}
 
 
 def test_ensure_category_does_not_duplicate_existing_subcategory():
-    existing = {"Groceries": ["Supermarket"]}
+    existing = {"expense": {"Groceries": ["Supermarket"]}}
 
-    result = ensure_category(existing, "Groceries", "Supermarket")
+    result = ensure_category(
+        existing, TransactionType.EXPENSE, "Groceries", "Supermarket"
+    )
 
-    assert result == {"Groceries": ["Supermarket"]}
+    assert result == {"expense": {"Groceries": ["Supermarket"]}}
 
 
 def test_ensure_category_does_not_mutate_the_input():
-    existing = {"Groceries": ["Supermarket"]}
+    existing = {"expense": {"Groceries": ["Supermarket"]}}
 
-    ensure_category(existing, "Groceries", "Restaurants")
+    ensure_category(existing, TransactionType.EXPENSE, "Groceries", "Restaurants")
 
-    assert existing == {"Groceries": ["Supermarket"]}
+    assert existing == {"expense": {"Groceries": ["Supermarket"]}}
 
 
 def test_ensure_category_skips_blank_subcategory():
-    result = ensure_category({}, "Groceries", "")
+    result = ensure_category({}, TransactionType.EXPENSE, "Groceries", "")
 
-    assert result == {"Groceries": []}
+    assert result == {"expense": {"Groceries": []}}
+
+
+def test_ensure_category_keeps_income_and_expense_trees_separate():
+    existing = {"expense": {"Groceries": ["Supermarket"]}}
+
+    result = ensure_category(existing, TransactionType.INCOME, "Salary", "")
+
+    assert result == {
+        "expense": {"Groceries": ["Supermarket"]},
+        "income": {"Salary": []},
+    }
+
+
+def test_ensure_category_rejects_transfer_type():
+    with pytest.raises(ValueError):
+        ensure_category({}, TransactionType.TRANSFER, "Transfer", "")
 
 
 def test_new_transaction_normalizes_expense_to_negative():

@@ -1,4 +1,4 @@
-"""Routes for recording transfers between accounts."""
+"""Routes for recording transfers between accounts, via the transfer dialog."""
 
 from datetime import date
 from decimal import Decimal, InvalidOperation
@@ -6,6 +6,7 @@ from decimal import Decimal, InvalidOperation
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 
+from app.routers.transactions import render_table as render_transactions_table
 from app.services.transactions import new_transfer_pair
 from app.storage.accounts import read_accounts
 from app.storage.ledger import read_ledger, write_ledger
@@ -13,15 +14,32 @@ from app.templating import templates
 
 router = APIRouter(prefix="/transfers", tags=["transfers"])
 
+CLOSE_DIALOG = {"HX-Trigger": "close-dialog"}
+
+
+def _render_form(
+    request: Request, *, values: dict[str, str], error: str | None = None
+) -> HTMLResponse:
+    """Render the transfer form fragment shown inside the dialog."""
+    return templates.TemplateResponse(
+        request,
+        "transfers/_form.html",
+        {"accounts": read_accounts(), "values": values, "error": error},
+    )
+
 
 @router.get("/new", response_class=HTMLResponse)
 def new_transfer_form(request: Request) -> HTMLResponse:
-    """Render the "record transfer" form."""
-    return templates.TemplateResponse(
-        request,
-        "transfers/new.html",
-        {"accounts": read_accounts(), "today": date.today(), "error": None},
-    )
+    """Render the "record transfer" form for the dialog."""
+    values = {
+        "from_account_id": "",
+        "to_account_id": "",
+        "date": date.today().isoformat(),
+        "amount": "",
+        "description": "",
+        "notes": "",
+    }
+    return _render_form(request, values=values)
 
 
 @router.post("", response_class=HTMLResponse)
@@ -34,9 +52,22 @@ def create_transfer(
     description: str = Form(""),
     notes: str = Form(""),
 ) -> HTMLResponse:
-    """Record a transfer as a linked two-row pair and show a confirmation."""
-    accounts = read_accounts()
-    account_ids = [account.id for account in accounts]
+    """Record a transfer as a linked two-row pair.
+
+    On success, closes the dialog and refreshes the transactions table
+    (out-of-band, since this router doesn't own that fragment) with the two
+    new rows. On error, re-renders the form in place with the error and the
+    user's input preserved.
+    """
+    values = {
+        "from_account_id": from_account_id,
+        "to_account_id": to_account_id,
+        "date": date.isoformat(),
+        "amount": amount,
+        "description": description,
+        "notes": notes,
+    }
+    account_ids = [account.id for account in read_accounts()]
     try:
         parsed_amount = Decimal(amount)
         outflow, inflow = new_transfer_pair(
@@ -49,19 +80,10 @@ def create_transfer(
             notes=notes or None,
         )
     except (ValueError, InvalidOperation) as exc:
-        return templates.TemplateResponse(
-            request,
-            "transfers/_form.html",
-            {"accounts": accounts, "today": date, "error": str(exc)},
-        )
+        return _render_form(request, values=values, error=str(exc))
 
     transactions = read_ledger()
     transactions.extend([outflow, inflow])
     write_ledger(transactions)
 
-    accounts_by_id = {account.id: account for account in accounts}
-    return templates.TemplateResponse(
-        request,
-        "transfers/_confirmation.html",
-        {"outflow": outflow, "inflow": inflow, "accounts": accounts_by_id},
-    )
+    return render_transactions_table(request, oob=True, headers=CLOSE_DIALOG)

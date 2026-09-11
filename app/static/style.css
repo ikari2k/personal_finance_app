@@ -1,70 +1,62 @@
-body {
-  font-family: system-ui, sans-serif;
-  max-width: 900px;
-  margin: 2rem auto;
-  padding: 0 1rem;
-  color: #1a1a1a;
+/* App-specific overrides layered on top of vendored pico.min.css (loaded first). */
+
+@font-face {
+  font-family: "JetBrains Mono Variable";
+  src: url("fonts/jetbrains-mono-variable.woff2") format("woff2");
+  font-weight: 100 800;
+  font-style: normal;
+  font-display: swap;
 }
 
-nav {
-  display: flex;
-  gap: 1rem;
-  margin-bottom: 1.5rem;
-  padding-bottom: 0.75rem;
-  border-bottom: 1px solid #ddd;
-}
-
-nav a {
-  text-decoration: none;
-  color: #205081;
-  font-weight: 600;
-}
-
-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin: 1rem 0;
-}
-
-th, td {
-  text-align: left;
-  padding: 0.4rem 0.6rem;
-  border-bottom: 1px solid #eee;
+:root {
+  --pico-font-family:
+    "JetBrains Mono Variable", ui-monospace, "SFMono-Regular", Menlo, Consolas,
+    monospace;
 }
 
 .amount-negative {
-  color: #b3261e;
+  color: var(--pico-del-color);
 }
 
 .amount-positive {
-  color: #146c2e;
-}
-
-form.inline-form {
-  display: grid;
-  gap: 0.5rem;
-  max-width: 420px;
-  padding: 1rem;
-  margin: 1rem 0;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-}
-
-form.inline-form label {
-  display: grid;
-  gap: 0.2rem;
-  font-size: 0.9rem;
+  color: var(--pico-ins-color);
 }
 
 .error {
-  color: #b3261e;
+  color: var(--pico-del-color);
   font-weight: 600;
 }
 
-.row-actions button, .row-actions a {
-  margin-right: 0.4rem;
+.row-actions > * {
+  margin-right: 0.5rem;
 }
 
-button {
-  cursor: pointer;
+/*
+ * Colored action buttons. Pico's hover/focus/active state reads
+ * --pico-primary-hover-background/-border (not the base color vars), so
+ * both the base and hover vars need overriding for the color to hold
+ * across all button states.
+ */
+button.btn-income {
+  --pico-background-color: #15803d;
+  --pico-border-color: #15803d;
+  --pico-color: #fff;
+  --pico-primary-hover-background: #116830;
+  --pico-primary-hover-border: #116830;
+}
+
+button.btn-expense {
+  --pico-background-color: #b91c1c;
+  --pico-border-color: #b91c1c;
+  --pico-color: #fff;
+  --pico-primary-hover-background: #991717;
+  --pico-primary-hover-border: #991717;
+}
+
+button.btn-transfer {
+  --pico-background-color: #b45309;
+  --pico-border-color: #b45309;
+  --pico-color: #fff;
+  --pico-primary-hover-background: #944407;
+  --pico-primary-hover-border: #944407;
 }

@@ -1,4 +1,4 @@
-<div id="transactions-table-wrapper">
+<div id="transactions-table-wrapper" {% if oob %}hx-swap-oob="true"{% endif %}>
   {% if error %}<p class="error">{{ error }}</p>{% endif %}
   <table>
     <thead>

@@ -16,7 +16,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.models.account import Account  # noqa: E402
-from app.models.category import CategoryTree  # noqa: E402
+from app.models.category import CategoriesByType  # noqa: E402
 from app.models.transaction import Transaction, TransactionType  # noqa: E402
 from app.services.transactions import new_transaction, new_transfer_pair  # noqa: E402
 from app.storage.accounts import write_accounts  # noqa: E402
@@ -51,14 +51,19 @@ def build_sample_accounts() -> list[Account]:
     ]
 
 
-def build_sample_categories() -> CategoryTree:
-    """Return a small fake category tree."""
+def build_sample_categories() -> CategoriesByType:
+    """Return small fake income and expense category trees."""
     return {
-        "Groceries": ["Supermarket", "Farmers Market"],
-        "Housing": ["Rent", "Utilities"],
-        "Transportation": ["Fuel", "Public Transit"],
-        "Income": ["Salary", "Freelance"],
-        "Entertainment": ["Dining Out", "Streaming"],
+        "income": {
+            "Salary": [],
+            "Freelance": [],
+        },
+        "expense": {
+            "Groceries": ["Supermarket", "Farmers Market"],
+            "Housing": ["Rent", "Utilities"],
+            "Transportation": ["Fuel", "Public Transit"],
+            "Entertainment": ["Dining Out", "Streaming"],
+        },
     }
 
 
@@ -69,8 +74,8 @@ def build_sample_transactions(account_ids: list[str]) -> list[Transaction]:
             account_ids,
             account_id="chk",
             date=date(2026, 7, 1),
-            category="Income",
-            subcategory="Salary",
+            category="Salary",
+            subcategory="",
             description="July paycheck",
             amount=Decimal("3200.00"),
             type=TransactionType.INCOME,
@@ -99,8 +104,8 @@ def build_sample_transactions(account_ids: list[str]) -> list[Transaction]:
             account_ids,
             account_id="chk",
             date=date(2026, 8, 1),
-            category="Income",
-            subcategory="Salary",
+            category="Salary",
+            subcategory="",
             description="August paycheck",
             amount=Decimal("3200.00"),
             type=TransactionType.INCOME,
@@ -138,9 +143,10 @@ def main() -> None:
     write_categories(categories)
     write_ledger(transactions)
 
+    category_count = sum(len(tree) for tree in categories.values())
     print(
-        f"Seeded {len(accounts)} accounts, {len(categories)} categories, "
-        f"{len(transactions)} transactions."
+        f"Seeded {len(accounts)} accounts, {category_count} categories "
+        f"(income + expense), {len(transactions)} transactions."
     )
 
 

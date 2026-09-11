@@ -1,8 +1,9 @@
 """Read/write access to ``config/categories.toml``.
 
-The category tree is a flat mapping of category name → list of subcategory
-names, stored under a single ``[categories]`` table. No dedup or cleanup is
-performed here — keeping the tree tidy is a user responsibility per the PRD.
+Two separate category → subcategory trees are stored, under top-level
+``[income]`` and ``[expense]`` tables — see ``app.models.category`` for why
+they're kept apart. No dedup or cleanup is performed here — keeping either
+tree tidy is a user responsibility per the PRD.
 """
 
 import tomllib
@@ -11,26 +12,26 @@ from pathlib import Path
 import tomli_w
 
 from app import config
-from app.models.category import CategoryTree
+from app.models.category import CategoriesByType
 from app.storage.lock import file_lock
 
 
-def read_categories(path: Path | None = None) -> CategoryTree:
-    """Read the category tree from the TOML file at ``path``.
+def read_categories(path: Path | None = None) -> CategoriesByType:
+    """Read the income/expense category trees from the TOML file at ``path``.
 
     Defaults to ``app.config.CATEGORIES_PATH``, resolved at call time (not
     at import time) so tests can redirect it via ``monkeypatch``. Returns
-    an empty tree if the file does not exist yet.
+    two empty trees if the file does not exist yet.
     """
     path = path if path is not None else config.CATEGORIES_PATH
     if not path.exists():
-        return {}
+        return {"income": {}, "expense": {}}
     with path.open("rb") as categories_file:
         data = tomllib.load(categories_file)
-    return data.get("categories", {})
+    return {"income": data.get("income", {}), "expense": data.get("expense", {})}
 
 
-def write_categories(categories: CategoryTree, path: Path | None = None) -> None:
+def write_categories(categories: CategoriesByType, path: Path | None = None) -> None:
     """Overwrite the categories TOML file at ``path`` with ``categories``.
 
     Defaults to ``app.config.CATEGORIES_PATH``, resolved at call time.
@@ -40,7 +41,10 @@ def write_categories(categories: CategoryTree, path: Path | None = None) -> None
     path = path if path is not None else config.CATEGORIES_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
     with file_lock(path):
-        data = {"categories": categories}
+        data = {
+            "income": categories.get("income", {}),
+            "expense": categories.get("expense", {}),
+        }
         tmp_path = path.with_name(path.name + ".tmp")
         with tmp_path.open("wb") as tmp_file:
             tomli_w.dump(data, tmp_file)

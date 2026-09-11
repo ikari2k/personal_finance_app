@@ -53,10 +53,55 @@ def test_create_transaction_registers_new_category_on_the_fly(client):
         },
     )
 
-    form_response = client.get("/transactions/new")
+    form_response = client.get("/transactions/new/expense")
 
     assert "BrandNewCategory" in form_response.text
     assert "BrandNewSub" in form_response.text
+
+
+def test_expense_category_does_not_leak_into_income_form(client):
+    _create_account(client)
+
+    client.post(
+        "/transactions",
+        data={
+            "account_id": "chk",
+            "date": "2026-01-15",
+            "type": "expense",
+            "category": "Groceries",
+            "subcategory": "Supermarket",
+            "description": "x",
+            "amount": "1.00",
+            "notes": "",
+        },
+    )
+    client.post(
+        "/transactions",
+        data={
+            "account_id": "chk",
+            "date": "2026-01-15",
+            "type": "income",
+            "category": "Salary",
+            "subcategory": "",
+            "description": "x",
+            "amount": "100.00",
+            "notes": "",
+        },
+    )
+
+    income_form = client.get("/transactions/new/income")
+    expense_form = client.get("/transactions/new/expense")
+
+    assert "Groceries" not in income_form.text
+    assert "Salary" not in expense_form.text
+    assert "Salary" in income_form.text
+    assert "Groceries" in expense_form.text
+
+
+def test_new_transaction_form_rejects_transfer_type(client):
+    response = client.get("/transactions/new/transfer")
+
+    assert response.status_code == 404
 
 
 def test_create_transaction_rejects_unknown_account(client):
