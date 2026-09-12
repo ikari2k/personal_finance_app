@@ -38,5 +38,16 @@
         <tr><td colspan="4">No accounts yet.</td></tr>
       {% endfor %}
     </tbody>
+    {% if accounts %}
+      {% set total = balances.values() | sum %}
+      <tfoot>
+        <tr>
+          <td colspan="3">Total</td>
+          <td class="{{ 'amount-negative' if total < 0 else 'amount-positive' }}">
+            {{ "%.2f"|format(total) }}
+          </td>
+        </tr>
+      </tfoot>
+    {% endif %}
   </table>
 </div>

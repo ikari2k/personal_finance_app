@@ -16,7 +16,7 @@
         <strong>Account</strong>
       </header>
       <div id="account-dialog-content"
-           hx-on::after-swap="const d = this.closest('dialog'); if (!d.open) d.showModal();"></div>
+           hx-on::after-swap="if (this.firstElementChild) { const d = this.closest('dialog'); if (!d.open) d.showModal(); }"></div>
     </article>
   </dialog>
 {% endblock %}

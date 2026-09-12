@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}" />
     <script src="{{ url_for('static', path='htmx.min.js') }}"></script>
   </head>
-  <body>
+  <body hx-on:toast="const t = document.createElement('div'); t.className = 'toast'; t.textContent = event.detail.value; const c = document.getElementById('toast-container'); c.appendChild(t); requestAnimationFrame(() => t.classList.add('show')); setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 200); }, 3000);">
     <header>
       <nav>
         <ul>
@@ -21,6 +21,7 @@
     </header>
     <main>
       {% block content %}{% endblock %}
+      <div id="toast-container"></div>
     </main>
   </body>
 </html>

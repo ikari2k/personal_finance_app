@@ -2,25 +2,33 @@
       hx-post="{{ '/accounts/' + values.account_id if mode == 'edit' else '/accounts' }}"
       hx-target="#account-dialog-content" hx-swap="innerHTML">
   {% if error %}<p class="error">{{ error }}</p>{% endif %}
-  {% if mode == 'new' %}
-    <label>Account ID (short code, permanent)
-      <input type="text" name="account_id" value="{{ values.account_id }}" required autofocus>
+  <div class="form-grid-2">
+    <label title="Short code, permanent — chosen once and never changed">Account ID
+      {% if mode == 'new' %}
+        <input type="text" name="account_id" value="{{ values.account_id }}"
+               placeholder="e.g. chk" required autofocus>
+      {% else %}
+        <input type="text" value="{{ values.account_id }}" disabled>
+      {% endif %}
     </label>
-  {% endif %}
-  <label>Name
-    <input type="text" name="name" value="{{ values.name }}" required>
-  </label>
-  <label>Number
-    <input type="text" name="number" value="{{ values.number }}">
-  </label>
+    <label>Name
+      <input type="text" name="name" value="{{ values.name }}" required
+             {{ 'autofocus' if mode == 'edit' }}>
+    </label>
+  </div>
+  <div class="form-grid-2">
+    <label>Number
+      <input type="text" name="number" value="{{ values.number }}">
+    </label>
+    <label>Starting balance
+      <input type="text" name="starting_balance" value="{{ values.starting_balance }}" required>
+    </label>
+  </div>
   <label>Description
     <input type="text" name="description" value="{{ values.description }}">
   </label>
-  <label>Starting balance
-    <input type="text" name="starting_balance" value="{{ values.starting_balance }}" required>
-  </label>
-  <footer>
-    <button type="button" class="secondary"
+  <footer class="dialog-footer">
+    <button type="button" class="btn-outline"
             onclick="document.getElementById('account-dialog').close()">Cancel</button>
     <button type="submit">{{ 'Save' if mode == 'edit' else 'Add account' }}</button>
   </footer>

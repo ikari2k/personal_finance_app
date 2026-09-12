@@ -6,6 +6,7 @@ from decimal import Decimal, InvalidOperation
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 
+from app.routers.htmx_events import toast
 from app.routers.transactions import render_table as render_transactions_table
 from app.services.transactions import new_transfer_pair
 from app.storage.accounts import read_accounts
@@ -13,8 +14,6 @@ from app.storage.ledger import read_ledger, write_ledger
 from app.templating import templates
 
 router = APIRouter(prefix="/transfers", tags=["transfers"])
-
-CLOSE_DIALOG = {"HX-Trigger": "close-dialog"}
 
 
 def _render_form(
@@ -86,4 +85,6 @@ def create_transfer(
     transactions.extend([outflow, inflow])
     write_ledger(transactions)
 
-    return render_transactions_table(request, oob=True, headers=CLOSE_DIALOG)
+    return render_transactions_table(
+        request, oob=True, headers=toast("Transfer recorded", close_dialog=True)
+    )

@@ -7,6 +7,7 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 
 from app.models.transaction import TransactionType
+from app.routers.htmx_events import toast
 from app.services.aggregation import grouped_transaction_view
 from app.services.transactions import (
     ensure_category,
@@ -20,8 +21,6 @@ from app.storage.ledger import read_ledger, write_ledger
 from app.templating import templates
 
 router = APIRouter(prefix="/transactions", tags=["transactions"])
-
-CLOSE_DIALOG = {"HX-Trigger": "close-dialog"}
 
 
 def render_table(
@@ -227,7 +226,11 @@ def create_transaction(
     transactions.append(transaction)
     write_ledger(transactions)
 
-    return render_table(request, oob=True, headers=CLOSE_DIALOG)
+    return render_table(
+        request,
+        oob=True,
+        headers=toast(f"{type.value.capitalize()} added", close_dialog=True),
+    )
 
 
 @router.post("/{transaction_id}", response_class=HTMLResponse)
@@ -288,16 +291,26 @@ def update_transaction_route(
     write_categories(ensure_category(read_categories(), type, category, subcategory))
     write_ledger(ledger)
 
-    return render_table(request, oob=True, headers=CLOSE_DIALOG)
+    return render_table(
+        request,
+        oob=True,
+        headers=toast(f"{type.value.capitalize()} updated", close_dialog=True),
+    )
 
 
 @router.post("/{transaction_id}/delete", response_class=HTMLResponse)
 def delete_transaction(request: Request, transaction_id: str) -> HTMLResponse:
     """Delete a transaction (both legs, if it's a transfer) and re-render the list."""
     ledger = read_ledger()
+    target = next((t for t in ledger if t.id == transaction_id), None)
     try:
         ledger = remove_transaction(ledger, transaction_id)
     except ValueError as exc:
         return render_table(request, error=str(exc))
     write_ledger(ledger)
-    return render_table(request)
+    message = (
+        "Transfer deleted"
+        if target and target.type is TransactionType.TRANSFER
+        else "Transaction deleted"
+    )
+    return render_table(request, headers=toast(message))

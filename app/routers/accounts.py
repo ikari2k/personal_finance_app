@@ -6,6 +6,7 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 
 from app.models.account import Account
+from app.routers.htmx_events import toast
 from app.services.accounts import add_account, remove_account, update_account
 from app.services.balances import all_balances
 from app.storage.accounts import read_accounts, write_accounts
@@ -13,8 +14,6 @@ from app.storage.ledger import read_ledger
 from app.templating import templates
 
 router = APIRouter(prefix="/accounts", tags=["accounts"])
-
-CLOSE_DIALOG = {"HX-Trigger": "close-dialog"}
 
 
 def _render_table(
@@ -127,7 +126,9 @@ def create_account(
     except (ValueError, InvalidOperation) as exc:
         return _render_form(request, mode="new", values=values, error=str(exc))
     write_accounts(accounts)
-    return _render_table(request, oob=True, headers=CLOSE_DIALOG)
+    return _render_table(
+        request, oob=True, headers=toast("Account added", close_dialog=True)
+    )
 
 
 @router.post("/{account_id}", response_class=HTMLResponse)
@@ -161,7 +162,9 @@ def edit_account(
     except (ValueError, InvalidOperation) as exc:
         return _render_form(request, mode="edit", values=values, error=str(exc))
     write_accounts(accounts)
-    return _render_table(request, oob=True, headers=CLOSE_DIALOG)
+    return _render_table(
+        request, oob=True, headers=toast("Account updated", close_dialog=True)
+    )
 
 
 @router.post("/{account_id}/delete", response_class=HTMLResponse)
@@ -174,4 +177,4 @@ def delete_account(request: Request, account_id: str) -> HTMLResponse:
     except ValueError as exc:
         return _render_table(request, error=str(exc))
     write_accounts(accounts)
-    return _render_table(request)
+    return _render_table(request, headers=toast("Account deleted"))
