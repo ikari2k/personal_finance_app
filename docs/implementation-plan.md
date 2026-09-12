@@ -4,8 +4,8 @@ This elaborates `finance-app-prd.md` into concrete technical decisions and a pha
 Phases are implemented one at a time, each its own reviewable unit of work with its own commit(s).
 `CLAUDE.md` is updated after each phase lands to reflect what became concrete during that phase.
 
-**Status**: Phases 0–2 complete. Phase 2.5 (Categories management) not yet started. Phase 3 not
-yet started.
+**Status**: Phases 0–2 and 2.6 (Edit/delete transactions) complete. Phase 2.5 (Categories
+management) and 2.7 (Account view improvements) not yet started. Phase 3 not yet started.
 
 **Environment note**: `uv` is installed under pyenv's Python 3.13.7, not globally on PATH — the
 `uv` shim only resolves once a directory is pinned to that pyenv version. This repo has a
@@ -254,6 +254,86 @@ unit-testable without touching disk. `routers/` stays thin — HTTP/HTMX glue on
   - *Verify*: adding/renaming/deleting a category or subcategory updates
     `config/categories.toml` correctly, and the "Add income"/"Add expense" dialogs' category/
     subcategory `<datalist>`s immediately reflect the change on next open.
+
+- [x] **Phase 2.6 — Edit/delete transactions**: transactions were create-only since Phase 2; this
+  closes that gap. Same decimal-insertion reasoning as 2.5 — slots after it without renumbering
+  Phase 3+.
+  - Each non-transfer row gets an Edit glyph opening the same dialog pattern as "Add
+    income"/"Add expense" (`GET /transactions/{id}/edit`, prefilled), posting to
+    `POST /transactions/{id}`. `services.transactions.update_transaction` shares its
+    validation (`_signed_amount`) with `new_transaction` but keeps the original `id` instead of
+    minting a new one, and rejects editing a row that's currently a transfer leg.
+  - **Transfers are never edited in place — only deleted, as a pair.**
+    `services.transactions.remove_transaction` deletes a plain row by `id`, but for a row with a
+    `transfer_id` it removes *every* row sharing that `transfer_id` (i.e. both legs) in the same
+    call — never just the one clicked. This is the same invariant as transfer creation
+    (`CLAUDE.md`), just for the deletion direction: one leg can never be edited or deleted
+    without the other, since either would desync the pair or orphan a leg — exactly what
+    `services.consistency.check_consistency` flags. To change a transfer's amount/date/accounts,
+    delete it and record a new one via "Record transfer".
+  - **Row-action design, generalized beyond this phase**: Edit/Delete render as stroke-SVG glyphs
+    (`app/templates/_icons.html` — shared, not per-table: blue pencil, red trash), hidden via
+    `opacity: 0` until the row is hovered *or* has keyboard focus inside it
+    (`tr:hover`/`tr:focus-within .row-actions`). They float `position: absolute; left: -4.25rem`
+    outside the table entirely (icons live inside the row's first `<td>`, not a trailing actions
+    column) rather than sitting in a normal trailing table cell. That's a deliberate fix, not
+    just a style choice: in `transactions/_table.html` each type-group renders its own separate
+    `<table>`, so a trailing actions cell was sized differently per table (1 icon for a transfer
+    leg's row, 2 for income/expense), which made the Amount column land at a different
+    x-position depending on which sub-table a row belonged to. Taking the icons out of the
+    column flow entirely fixes that as a side effect — column count/width no longer depends on
+    how many action icons a row has.
+    - **Went through two iterations on where "outside the table" actually floats to.** The first
+      cut carved out a dedicated gutter via `margin-left` on the `<table>` itself — this worked,
+      but left a permanent empty band down the left of every table even when nothing was
+      hovered, which looked wrong on its own terms once seen live. Reverted: the table now sits
+      at its natural, unindented position (flush with the rest of the page), and the icons float
+      further out still, into the page's own ambient side margin, so nothing is reserved or
+      visible while idle. Trade-off accepted deliberately: on a narrow browser window (little
+      ambient margin to begin with) the icons can sit close to, or past, the viewport edge —
+      judged acceptable for a desktop-only local tool. Don't reintroduce the `margin-left` gutter
+      to make this "safer"; that re-creates the exact look that got rejected.
+    - Row padding (`padding-top`/`padding-bottom: 0.6rem` on these tables' `td`s) is still needed
+      regardless of gutter approach, so a vertically-centered 2rem icon button doesn't spill into
+      the row above/below when revealed — tuned by eye against a live screenshot, not derived up
+      front; re-check it if icon size changes.
+    Applied to the accounts table too (previously plain "Edit"/"Delete" text). **Use this same
+    convention for every future table where a row can be edited/deleted** — e.g. the Phase 2.5
+    categories list — rather than introducing a different affordance.
+  - *Verify*: editing an income/expense row's amount or category updates the account balance and
+    category tree correctly; deleting a transfer removes both legs in the same write, and a
+    startup/on-demand consistency check afterward finds no orphaned-transfer issue. Verified live
+    against the real dev server (edit, delete-plain-row, delete-transfer-pair) as well as via
+    unit/integration tests.
+
+- [ ] **Phase 2.7 — Account view improvements**: three related account/transactions-view
+  usability gaps noticed while using the app day to day. Same decimal-insertion reasoning as 2.5
+  and 2.6.
+  - **Show `starting_balance` on the accounts list**, alongside the already-shown current
+    balance — currently the only place `starting_balance` is visible at all is the edit-account
+    dialog.
+  - **Clicking an account name navigates to its filtered transactions**: link to
+    `/transactions?account_id=<id>` — this is almost entirely UI wiring, not new backend work,
+    since Phase 2's account filter (`account_id` query param on `GET /transactions`) already
+    does the filtering; the accounts page just needs to link to it.
+  - **Make the month/type grouping choice persist across page navigation** — today it resets to
+    the default (both on) every time you land on `/transactions` fresh, including via the plain
+    nav link or the new account-name link above, because `hx-push-url` only updates the URL for
+    HTMX-driven requests, not a plain `<a href>` elsewhere in the app. Plan: persist
+    `by_month`/`by_type` server-side in a cookie, set whenever a grouping toggle fires, and have
+    `GET /transactions` fall back to the cookie's value when the query param is absent (never
+    when it's explicitly present, so a link that deliberately sets `by_month=false` etc. isn't
+    overridden by an old cookie). This also lets `render_table()` read the same cookie instead of
+    hardcoding "both on" for the post-create/transfer OOB refresh — resolving that "known
+    simplification" documented under Phase 2's addendum above, as a side effect rather than a
+    separate task.
+  - **`account_id` deliberately does NOT get the same cookie treatment.** It's a per-visit filter
+    (you look at one account, then probably want "all accounts" again next time you arrive fresh)
+    rather than a standing display preference like the groupings — don't conflate the two when
+    implementing this.
+  - *Verify*: starting balance visible per account; clicking an account name lands on its
+    filtered transaction list; toggling a grouping, then navigating to `/accounts` and back to
+    `/transactions` via the nav link (not the browser back button), preserves the toggle choice.
 
 - [ ] **Phase 3 — Bank CSV import**: upload + parse endpoint, mapping-setup UI persisted to
   `config/import_mappings/<bank>.toml`, auto-reuse on next import from the same bank,

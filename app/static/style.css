@@ -27,8 +27,89 @@
   font-weight: 600;
 }
 
-.row-actions > * {
-  margin-right: 0.5rem;
+/*
+ * Row-action glyphs (edit/delete): hidden until the row is hovered or has
+ * keyboard focus inside it, so a data table isn't cluttered with always-
+ * visible action buttons on every row. They float outside the table's
+ * normal column flow — originally via a dedicated margin-left gutter on
+ * the table, but that left a permanent empty band down the left of every
+ * table even while nothing was hovered, which looked wrong on its own
+ * merits. Now the table keeps its natural (unindented) position, flush
+ * with the rest of the page's content, and the icons float further out
+ * still, into the page's own ambient side margin — nothing is reserved
+ * or visible when a row isn't hovered. Trade-off: on a narrow browser
+ * window (little ambient margin to begin with) the icons can sit close
+ * to, or past, the viewport edge; accepted deliberately for a desktop
+ * tool over reintroducing a permanent visible gutter.
+ *
+ * The underlying reason they're out-of-flow at all, not a styling
+ * preference: in transactions/_table.html each type-group renders its
+ * own <table>, so a normal *trailing* actions cell was sized differently
+ * per sub-table (1 icon for a transfer leg, 2 for income/expense),
+ * throwing the Amount column's x-position out of alignment between them.
+ * Pulling the icons out of column flow entirely fixes that as a side
+ * effect — column widths never depend on how many action icons a row has.
+ * Reuse this convention for any future table where a row can be
+ * edited/deleted — see CLAUDE.md.
+ */
+#accounts-table-wrapper tr,
+#transactions-table-wrapper tr {
+  position: relative;
+}
+
+/* Rows need to be at least as tall as the floating buttons (2rem) or the
+ * buttons spill vertically into the row above/below when revealed. */
+#accounts-table-wrapper td,
+#transactions-table-wrapper td {
+  padding-top: 0.6rem;
+  padding-bottom: 0.6rem;
+}
+
+.row-actions {
+  position: absolute;
+  left: -4.25rem;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  opacity: 0;
+  transition: opacity 0.1s ease;
+}
+
+tr:hover .row-actions,
+tr:focus-within .row-actions {
+  opacity: 1;
+}
+
+.row-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: none;
+  border-radius: var(--pico-border-radius);
+  background: transparent;
+  cursor: pointer;
+}
+
+.row-actions button.icon-edit {
+  color: #2563eb;
+}
+
+.row-actions button.icon-delete {
+  color: #b91c1c;
+}
+
+.row-actions button.icon-edit:hover {
+  background: rgba(37, 99, 235, 0.12);
+}
+
+.row-actions button.icon-delete:hover {
+  background: rgba(185, 28, 28, 0.12);
 }
 
 /*

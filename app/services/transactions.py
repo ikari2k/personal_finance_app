@@ -42,6 +42,29 @@ def ensure_category(
     return updated
 
 
+def _signed_amount(
+    account_ids: Iterable[str],
+    *,
+    account_id: str,
+    amount: Decimal,
+    type: TransactionType,
+) -> Decimal:
+    """Validate and sign-normalize an income/expense amount.
+
+    Shared by ``new_transaction`` and ``update_transaction``. Raises
+    ``ValueError`` if ``account_id`` isn't known, ``amount`` isn't
+    positive, or ``type`` is ``TRANSFER`` (transfers never go through this
+    path — see ``new_transfer_pair``).
+    """
+    if type is TransactionType.TRANSFER:
+        raise ValueError("use new_transfer_pair() to record a transfer")
+    if account_id not in set(account_ids):
+        raise ValueError(f"unknown account_id '{account_id}'")
+    if amount <= 0:
+        raise ValueError("amount must be positive")
+    return -amount if type is TransactionType.EXPENSE else amount
+
+
 def new_transaction(
     account_ids: Iterable[str],
     *,
@@ -62,14 +85,9 @@ def new_transaction(
     isn't positive, or ``type`` is ``TRANSFER`` (use ``new_transfer_pair``
     instead, since a transfer is two linked rows, not one).
     """
-    if type is TransactionType.TRANSFER:
-        raise ValueError("use new_transfer_pair() to record a transfer")
-    if account_id not in set(account_ids):
-        raise ValueError(f"unknown account_id '{account_id}'")
-    if amount <= 0:
-        raise ValueError("amount must be positive")
-
-    signed_amount = -amount if type is TransactionType.EXPENSE else amount
+    signed_amount = _signed_amount(
+        account_ids, account_id=account_id, amount=amount, type=type
+    )
     return Transaction(
         id=uuid.uuid4().hex,
         date=date,
@@ -82,6 +100,77 @@ def new_transaction(
         transfer_id=None,
         notes=notes,
     )
+
+
+def update_transaction(
+    transactions: list[Transaction],
+    transaction_id: str,
+    account_ids: Iterable[str],
+    *,
+    account_id: str,
+    date: date_,
+    category: str,
+    subcategory: str,
+    description: str,
+    amount: Decimal,
+    type: TransactionType,
+    notes: str | None = None,
+) -> list[Transaction]:
+    """Return ``transactions`` with ``transaction_id``'s row replaced.
+
+    Same validation as ``new_transaction`` (unknown account, non-positive
+    amount, ``TRANSFER`` type all raise ``ValueError``), but keeps the
+    original ``id`` rather than minting a new one. Also raises
+    ``ValueError`` if no transaction with ``transaction_id`` exists, or if
+    it currently *is* a transfer leg — transfers can't be edited in place
+    (see ``remove_transaction``'s docstring for why) — the caller should
+    offer delete-and-re-record instead.
+    """
+    existing = next((t for t in transactions if t.id == transaction_id), None)
+    if existing is None:
+        raise ValueError(f"no transaction with id '{transaction_id}'")
+    if existing.type is TransactionType.TRANSFER:
+        raise ValueError(
+            "transfers can't be edited directly; delete and re-record instead"
+        )
+
+    signed_amount = _signed_amount(
+        account_ids, account_id=account_id, amount=amount, type=type
+    )
+    updated = Transaction(
+        id=transaction_id,
+        date=date,
+        account_id=account_id,
+        category=category,
+        subcategory=subcategory,
+        description=description,
+        amount=signed_amount,
+        type=type,
+        transfer_id=None,
+        notes=notes,
+    )
+    return [updated if t.id == transaction_id else t for t in transactions]
+
+
+def remove_transaction(
+    transactions: list[Transaction], transaction_id: str
+) -> list[Transaction]:
+    """Return ``transactions`` with ``transaction_id`` removed.
+
+    A transfer is two linked rows sharing a ``transfer_id`` (see
+    ``new_transfer_pair``); deleting only one leg would either leave the
+    other orphaned or desync the pair's amounts — exactly what
+    ``services.consistency.check_consistency`` flags. So deleting a
+    transfer leg removes *both* legs together in this one call; deleting
+    a plain income/expense row removes just that row. Raises
+    ``ValueError`` if no transaction with ``transaction_id`` exists.
+    """
+    target = next((t for t in transactions if t.id == transaction_id), None)
+    if target is None:
+        raise ValueError(f"no transaction with id '{transaction_id}'")
+    if target.transfer_id is not None:
+        return [t for t in transactions if t.transfer_id != target.transfer_id]
+    return [t for t in transactions if t.id != transaction_id]
 
 
 def new_transfer_pair(

@@ -4,10 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-Phases 0–2 are complete: storage/locking (Phase 1), plus a working HTMX UI for accounts (CRUD),
-manual transaction entry (with on-the-fly category/subcategory creation), transfers, and balance
-display (Phase 2) — all covered by passing tests, and manually smoke-tested live via
-`scripts/seed_sample_data.py`. Phase 3 (bank CSV import) has not started. See
+Phases 0–2 and 2.6 are complete: storage/locking (Phase 1), a working HTMX UI for accounts (CRUD),
+manual transaction entry/edit/delete (with on-the-fly category/subcategory creation), transfers
+(create + pair-delete), balance display, and a redesigned transactions list (month/type grouping,
+account filter) — all covered by passing tests, and manually smoke-tested live via
+`scripts/seed_sample_data.py`. Phases 2.5 (categories management) and 2.7 (account view
+improvements) have not started, nor has Phase 3 (bank CSV import). See
 `docs/implementation-plan.md` for the full phased plan, finalized schemas, and per-phase status
 checkboxes/implementation notes.
 
@@ -233,6 +235,31 @@ constructing the `TestClient`. Add a matching `_PATH` attribute + monkeypatch li
   read as two different kinds of control rather than one undifferentiated row of buttons. This
   split is itself the fix for an earlier "too many buttons in the same place" complaint — don't
   collapse the two rows back into one without a similar visual/semantic separation.
+- **Row-level Edit/Delete are hover-reveal glyphs floating outside the table entirely, never a
+  trailing table column, and never in a dedicated reserved gutter either.** Icons come from
+  `app/templates/_icons.html` (shared stroke-SVG macros — `edit_icon()` blue, `delete_icon()`
+  red); markup lives inside the row's *first* `<td>`, not a separate actions cell. `.row-actions`
+  is `opacity: 0` until `tr:hover`/`tr:focus-within`, and `position: absolute; left: -4.25rem`
+  relative to the row (`tr { position: relative }`) — floating into the page's own ambient side
+  margin. **A first version carved out a dedicated gutter via `margin-left` on the `<table>`
+  itself; that was reverted** — it left a permanent empty band down the left of every table even
+  when nothing was hovered, which looked wrong on its own regardless of alignment. The table now
+  keeps its natural, unindented position flush with the rest of the page. Trade-off knowingly
+  accepted: on a narrow browser window (little ambient margin to begin with) the icons can sit
+  close to, or past, the viewport edge — judged acceptable for a desktop-only local tool. Don't
+  reintroduce a `margin-left`-based reserved gutter to "fix" that; it re-creates the exact look
+  that was rejected.
+  - The out-of-flow positioning itself is a correctness fix, not a style preference: in
+    `transactions/_table.html`, each type-group renders its own `<table>`, so a normal *trailing*
+    actions cell was sized differently per sub-table (1 icon for a transfer row, 2 for
+    income/expense), throwing the Amount column's x-position out of alignment between them.
+    Pulling the icons out of column flow entirely fixes that as a side effect — column widths
+    never depend on how many action icons a row has.
+  - Row padding (`padding-top`/`padding-bottom: 0.6rem` on these tables' `td`s) exists so a
+    vertically-centered 2rem icon button doesn't spill into the row above/below when revealed —
+    tuned against an actual screenshot, not derived from a formula; re-check it if icon size
+    changes. **Reuse this exact pattern for every future table with row-level actions** (e.g.
+    Phase 2.5's categories list) rather than inventing a different affordance.
 
 ## Core architecture
 
@@ -311,8 +338,12 @@ See `docs/implementation-plan.md` for the full phase-by-phase plan and status:
 0. Scaffolding (`uv` project, directory tree, health-check app)
 1. Core ledger read/write + file locking + consistency check
 2. Accounts, manual transaction entry, transfers, balance calculation
-2.5. Categories management (dedicated add/rename/delete UI — inserted between 2 and 3, not
-   renumbered into the sequence below, to avoid churning phase numbers referenced elsewhere)
+2.5. Categories management (dedicated add/rename/delete UI)
+2.6. Edit/delete transactions (transfers: delete-both-legs only, never edit-in-place)
+2.7. Account view improvements (starting balance shown, click-through to filtered
+   transactions, sticky month/type grouping via cookie)
+   — 2.5/2.6/2.7 are inserted between 2 and 3, not renumbered into the sequence below, to avoid
+   churning phase numbers referenced elsewhere
 3. Bank CSV import (mapping setup + reuse, import-time auto-categorization)
 4. Rule engine (bulk reclassification with preview/apply)
 5. Reporting & visualization (shared aggregation layer, drill-downs, MoM/YoY, net worth charts)

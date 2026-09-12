@@ -1,4 +1,5 @@
-<form id="transaction-form-{{ values.type }}" hx-post="/transactions"
+<form id="transaction-form-{{ values.type }}"
+      hx-post="{{ '/transactions/' + transaction_id if transaction_id else '/transactions' }}"
       hx-target="#{{ dialog_content_id }}" hx-swap="innerHTML">
   {% if error %}<p class="error">{{ error }}</p>{% endif %}
   <input type="hidden" name="type" value="{{ values.type }}">
@@ -40,6 +41,14 @@
   <footer>
     <button type="button" class="secondary"
             onclick="document.getElementById('{{ dialog_id }}').close()">Cancel</button>
-    <button type="submit">{{ 'Add income' if values.type == 'income' else 'Add expense' }}</button>
+    <button type="submit">
+      {% if transaction_id %}
+        Save changes
+      {% elif values.type == 'income' %}
+        Add income
+      {% else %}
+        Add expense
+      {% endif %}
+    </button>
   </footer>
 </form>

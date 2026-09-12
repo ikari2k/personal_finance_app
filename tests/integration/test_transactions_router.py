@@ -1,5 +1,10 @@
 """Integration tests for the transactions router."""
 
+from decimal import Decimal
+
+from app import config
+from app.storage.ledger import read_ledger
+
 
 def _create_account(client, account_id="chk", starting_balance="1000.00"):
     client.post(
@@ -214,3 +219,108 @@ def test_account_filter_all_accounts_shows_everything(client):
 
     assert "checking purchase" in unfiltered.text
     assert "savings interest" in unfiltered.text
+
+
+def test_edit_transaction_updates_fields(client):
+    _create_account(client)
+    client.post(
+        "/transactions",
+        data={
+            "account_id": "chk",
+            "date": "2026-01-15",
+            "type": "expense",
+            "category": "Groceries",
+            "subcategory": "",
+            "description": "original",
+            "amount": "10.00",
+            "notes": "",
+        },
+    )
+    transaction_id = read_ledger(config.LEDGER_PATH)[0].id
+
+    response = client.post(
+        f"/transactions/{transaction_id}",
+        data={
+            "account_id": "chk",
+            "date": "2026-01-15",
+            "type": "expense",
+            "category": "Groceries",
+            "subcategory": "",
+            "description": "edited",
+            "amount": "25.00",
+            "notes": "",
+        },
+    )
+
+    assert response.status_code == 200
+    ledger = read_ledger(config.LEDGER_PATH)
+    assert len(ledger) == 1
+    assert ledger[0].id == transaction_id
+    assert ledger[0].description == "edited"
+    assert ledger[0].amount == Decimal("-25.00")
+
+
+def test_edit_transaction_form_rejects_a_transfer_leg(client):
+    _create_account(client, "chk")
+    _create_account(client, "sav")
+    client.post(
+        "/transfers",
+        data={
+            "from_account_id": "chk",
+            "to_account_id": "sav",
+            "date": "2026-01-15",
+            "amount": "50.00",
+            "description": "",
+            "notes": "",
+        },
+    )
+    transfer_leg_id = read_ledger(config.LEDGER_PATH)[0].id
+
+    response = client.get(f"/transactions/{transfer_leg_id}/edit")
+
+    assert response.status_code == 400
+
+
+def test_delete_transaction_removes_it(client):
+    _create_account(client)
+    client.post(
+        "/transactions",
+        data={
+            "account_id": "chk",
+            "date": "2026-01-15",
+            "type": "expense",
+            "category": "Groceries",
+            "subcategory": "",
+            "description": "to delete",
+            "amount": "10.00",
+            "notes": "",
+        },
+    )
+    transaction_id = read_ledger(config.LEDGER_PATH)[0].id
+
+    response = client.post(f"/transactions/{transaction_id}/delete")
+
+    assert response.status_code == 200
+    assert read_ledger(config.LEDGER_PATH) == []
+
+
+def test_delete_transfer_removes_both_legs(client):
+    _create_account(client, "chk")
+    _create_account(client, "sav")
+    client.post(
+        "/transfers",
+        data={
+            "from_account_id": "chk",
+            "to_account_id": "sav",
+            "date": "2026-01-15",
+            "amount": "50.00",
+            "description": "",
+            "notes": "",
+        },
+    )
+    outflow_id = read_ledger(config.LEDGER_PATH)[0].id
+
+    response = client.post(f"/transactions/{outflow_id}/delete")
+
+    assert response.status_code == 200
+    assert read_ledger(config.LEDGER_PATH) == []

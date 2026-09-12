@@ -8,7 +8,12 @@ from fastapi.responses import HTMLResponse
 
 from app.models.transaction import TransactionType
 from app.services.aggregation import grouped_transaction_view
-from app.services.transactions import ensure_category, new_transaction
+from app.services.transactions import (
+    ensure_category,
+    new_transaction,
+    remove_transaction,
+    update_transaction,
+)
 from app.storage.accounts import read_accounts
 from app.storage.categories import read_categories, write_categories
 from app.storage.ledger import read_ledger, write_ledger
@@ -96,11 +101,15 @@ def _render_form(
     txn_type: TransactionType,
     values: dict[str, str],
     error: str | None = None,
+    transaction_id: str | None = None,
 ) -> HTMLResponse:
-    """Render the income/expense entry form fragment shown inside its dialog.
+    """Render the income/expense entry/edit form fragment shown inside its dialog.
 
     Categories/subcategories are filtered to ``txn_type``'s own tree —
     income and expense never share categories (see ``app.models.category``).
+    ``transaction_id`` set means this is an edit (posts back to
+    ``/transactions/{id}`` instead of ``/transactions``); ``None`` means a
+    new transaction.
     """
     tree = read_categories().get(txn_type.value, {})
     return templates.TemplateResponse(
@@ -114,6 +123,7 @@ def _render_form(
             "error": error,
             "dialog_id": f"{txn_type.value}-dialog",
             "dialog_content_id": f"{txn_type.value}-dialog-content",
+            "transaction_id": transaction_id,
         },
     )
 
@@ -134,6 +144,36 @@ def new_transaction_form(request: Request, txn_type: TransactionType) -> HTMLRes
         "notes": "",
     }
     return _render_form(request, txn_type=txn_type, values=values)
+
+
+@router.get("/{transaction_id}/edit", response_class=HTMLResponse)
+def edit_transaction_form(request: Request, transaction_id: str) -> HTMLResponse:
+    """Render the edit form for an existing income/expense transaction.
+
+    Transfers can't be edited this way (only deleted, as a pair) — see
+    ``services.transactions.update_transaction`` for why.
+    """
+    transaction = next((t for t in read_ledger() if t.id == transaction_id), None)
+    if transaction is None:
+        return HTMLResponse("Transaction not found", status_code=404)
+    if transaction.type is TransactionType.TRANSFER:
+        return HTMLResponse(
+            "Transfers can't be edited directly; delete and re-record instead.",
+            status_code=400,
+        )
+    values = {
+        "account_id": transaction.account_id,
+        "date": transaction.date.isoformat(),
+        "type": transaction.type.value,
+        "category": transaction.category,
+        "subcategory": transaction.subcategory,
+        "description": transaction.description,
+        "amount": str(abs(transaction.amount)),
+        "notes": transaction.notes or "",
+    }
+    return _render_form(
+        request, txn_type=transaction.type, values=values, transaction_id=transaction_id
+    )
 
 
 @router.post("", response_class=HTMLResponse)
@@ -188,3 +228,76 @@ def create_transaction(
     write_ledger(transactions)
 
     return render_table(request, oob=True, headers=CLOSE_DIALOG)
+
+
+@router.post("/{transaction_id}", response_class=HTMLResponse)
+def update_transaction_route(
+    request: Request,
+    transaction_id: str,
+    account_id: str = Form(...),
+    date: date = Form(...),
+    type: TransactionType = Form(...),
+    category: str = Form(...),
+    subcategory: str = Form(""),
+    description: str = Form(""),
+    amount: str = Form(...),
+    notes: str = Form(""),
+) -> HTMLResponse:
+    """Update an existing income/expense transaction.
+
+    On success, closes the dialog and refreshes the transaction list
+    (out-of-band). On error (including "this is a transfer"), re-renders
+    the form in place with the error and the user's input preserved.
+    """
+    values = {
+        "account_id": account_id,
+        "date": date.isoformat(),
+        "type": type.value,
+        "category": category,
+        "subcategory": subcategory,
+        "description": description,
+        "amount": amount,
+        "notes": notes,
+    }
+    account_ids = [account.id for account in read_accounts()]
+    ledger = read_ledger()
+    try:
+        parsed_amount = Decimal(amount)
+        ledger = update_transaction(
+            ledger,
+            transaction_id,
+            account_ids,
+            account_id=account_id,
+            date=date,
+            category=category,
+            subcategory=subcategory,
+            description=description,
+            amount=parsed_amount,
+            type=type,
+            notes=notes or None,
+        )
+    except (ValueError, InvalidOperation) as exc:
+        return _render_form(
+            request,
+            txn_type=type,
+            values=values,
+            error=str(exc),
+            transaction_id=transaction_id,
+        )
+
+    write_categories(ensure_category(read_categories(), type, category, subcategory))
+    write_ledger(ledger)
+
+    return render_table(request, oob=True, headers=CLOSE_DIALOG)
+
+
+@router.post("/{transaction_id}/delete", response_class=HTMLResponse)
+def delete_transaction(request: Request, transaction_id: str) -> HTMLResponse:
+    """Delete a transaction (both legs, if it's a transfer) and re-render the list."""
+    ledger = read_ledger()
+    try:
+        ledger = remove_transaction(ledger, transaction_id)
+    except ValueError as exc:
+        return render_table(request, error=str(exc))
+    write_ledger(ledger)
+    return render_table(request)
