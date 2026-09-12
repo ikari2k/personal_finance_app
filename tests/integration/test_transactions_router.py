@@ -142,3 +142,75 @@ def test_account_balance_reflects_starting_balance_plus_transactions(client):
     response = client.get("/accounts")
 
     assert "950.00" in response.text
+
+
+def test_account_filter_shows_only_that_accounts_transactions(client):
+    _create_account(client, "chk")
+    _create_account(client, "sav")
+    client.post(
+        "/transactions",
+        data={
+            "account_id": "chk",
+            "date": "2026-01-15",
+            "type": "expense",
+            "category": "Groceries",
+            "subcategory": "",
+            "description": "checking purchase",
+            "amount": "10.00",
+            "notes": "",
+        },
+    )
+    client.post(
+        "/transactions",
+        data={
+            "account_id": "sav",
+            "date": "2026-01-16",
+            "type": "income",
+            "category": "Interest",
+            "subcategory": "",
+            "description": "savings interest",
+            "amount": "5.00",
+            "notes": "",
+        },
+    )
+
+    filtered = client.get("/transactions?account_id=chk")
+
+    assert "checking purchase" in filtered.text
+    assert "savings interest" not in filtered.text
+
+
+def test_account_filter_all_accounts_shows_everything(client):
+    _create_account(client, "chk")
+    _create_account(client, "sav")
+    client.post(
+        "/transactions",
+        data={
+            "account_id": "chk",
+            "date": "2026-01-15",
+            "type": "expense",
+            "category": "Groceries",
+            "subcategory": "",
+            "description": "checking purchase",
+            "amount": "10.00",
+            "notes": "",
+        },
+    )
+    client.post(
+        "/transactions",
+        data={
+            "account_id": "sav",
+            "date": "2026-01-16",
+            "type": "income",
+            "category": "Interest",
+            "subcategory": "",
+            "description": "savings interest",
+            "amount": "5.00",
+            "notes": "",
+        },
+    )
+
+    unfiltered = client.get("/transactions?account_id=")
+
+    assert "checking purchase" in unfiltered.text
+    assert "savings interest" in unfiltered.text

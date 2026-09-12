@@ -4,6 +4,7 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .ruff_cache/
+.DS_Store
 
 # User's real financial data and generated config — never commit these.
 # Directory structure is preserved via .gitkeep files.

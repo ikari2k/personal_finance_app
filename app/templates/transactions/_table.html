@@ -1,31 +1,99 @@
+{% macro txn_row(txn, accounts, show_account) %}
+  <tr>
+    <td>{{ txn.date }}</td>
+    {% if show_account %}
+      <td>{{ accounts[txn.account_id].name if txn.account_id in accounts else txn.account_id }}</td>
+    {% endif %}
+    <td>{{ txn.category }}{% if txn.subcategory %} / {{ txn.subcategory }}{% endif %}</td>
+    <td>{{ txn.description }}</td>
+    <td class="{{ 'amount-negative' if txn.amount < 0 else 'amount-positive' }}">
+      {{ "%.2f"|format(txn.amount) }}
+    </td>
+  </tr>
+{% endmacro %}
+
+{% macro month_body(month, by_type, accounts, show_account) %}
+  {% if by_type %}
+    {% for group in month.groups %}
+      <div class="type-group" data-type="{{ group.type.value }}">
+        <div class="type-group-header">
+          <span>{{ group.type.value|capitalize }}</span>
+          <span>{{ "%.2f"|format(group.subtotal) }}</span>
+        </div>
+        <table>
+          <tbody>
+            {% for txn in group.transactions %}{{ txn_row(txn, accounts, show_account) }}{% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endfor %}
+  {% else %}
+    <table>
+      <tbody>
+        {% for txn in month.transactions %}{{ txn_row(txn, accounts, show_account) }}{% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+{% endmacro %}
+
 <div id="transactions-table-wrapper" {% if oob %}hx-swap-oob="true"{% endif %}>
-  {% if error %}<p class="error">{{ error }}</p>{% endif %}
-  <table>
-    <thead>
-      <tr>
-        <th>Date</th>
-        <th>Account</th>
-        <th>Category</th>
-        <th>Description</th>
-        <th>Amount</th>
-        <th>Type</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for txn in transactions %}
-        <tr>
-          <td>{{ txn.date }}</td>
-          <td>{{ accounts[txn.account_id].name if txn.account_id in accounts else txn.account_id }}</td>
-          <td>{{ txn.category }}{% if txn.subcategory %} / {{ txn.subcategory }}{% endif %}</td>
-          <td>{{ txn.description }}</td>
-          <td class="{{ 'amount-negative' if txn.amount < 0 else 'amount-positive' }}">
-            {{ "%.2f"|format(txn.amount) }}
-          </td>
-          <td>{{ txn.type.value }}</td>
-        </tr>
-      {% else %}
-        <tr><td colspan="6">No transactions yet.</td></tr>
+  <div class="view-options">
+    <span class="view-options-label">Account</span>
+    <select
+        hx-get="/transactions" hx-target="#transactions-table-wrapper" hx-swap="outerHTML"
+        hx-push-url="true" hx-trigger="change" name="account_id"
+        hx-vals='{"by_month": "{{ 'true' if by_month else 'false' }}", "by_type": "{{ 'true' if by_type else 'false' }}"}'>
+      <option value="" {{ 'selected' if not account_id }}>All accounts</option>
+      {% for account in accounts_list %}
+        <option value="{{ account.id }}" {{ 'selected' if account.id == account_id }}>
+          {{ account.name }}
+        </option>
       {% endfor %}
-    </tbody>
-  </table>
+    </select>
+    <button type="button" class="secondary"
+            hx-get="/transactions?by_month={{ 'false' if by_month else 'true' }}&by_type={{ 'true' if by_type else 'false' }}&account_id={{ account_id }}"
+            hx-target="#transactions-table-wrapper" hx-swap="outerHTML" hx-push-url="true">
+      Month grouping: {{ 'on' if by_month else 'off' }}
+    </button>
+    <button type="button" class="secondary"
+            hx-get="/transactions?by_month={{ 'true' if by_month else 'false' }}&by_type={{ 'false' if by_type else 'true' }}&account_id={{ account_id }}"
+            hx-target="#transactions-table-wrapper" hx-swap="outerHTML" hx-push-url="true">
+      Type grouping: {{ 'on' if by_type else 'off' }}
+    </button>
+    {% if by_month %}
+      <span class="toolbar-spacer"></span>
+      <button type="button" class="secondary"
+              onclick="document.querySelectorAll('.month-section').forEach(function (d) { d.open = true; })">
+        Expand all
+      </button>
+      <button type="button" class="secondary"
+              onclick="document.querySelectorAll('.month-section').forEach(function (d) { d.open = false; })">
+        Collapse all
+      </button>
+    {% endif %}
+  </div>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  {% for month in months %}
+    {% if by_month %}
+      <details class="month-section" {% if loop.first %}open{% endif %}>
+        <summary>
+          <span class="month-label">{{ month.label }}</span>
+          <span class="{{ 'amount-negative' if month.net_total < 0 else 'amount-positive' }}">
+            {{ "%.2f"|format(month.net_total) }}
+          </span>
+        </summary>
+        {{ month_body(month, by_type, accounts, not account_id) }}
+      </details>
+    {% else %}
+      <div class="flat-net-total">
+        <span>Net total</span>
+        <span class="{{ 'amount-negative' if month.net_total < 0 else 'amount-positive' }}">
+          {{ "%.2f"|format(month.net_total) }}
+        </span>
+      </div>
+      {{ month_body(month, by_type, accounts, not account_id) }}
+    {% endif %}
+  {% else %}
+    <p>No transactions yet.</p>
+  {% endfor %}
 </div>

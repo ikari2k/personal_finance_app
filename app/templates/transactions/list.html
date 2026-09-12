@@ -1,20 +1,25 @@
 {% extends "base.html" %}
 {% block title %}Transactions — Finance Tracker{% endblock %}
 {% block content %}
-  <h1>Transactions</h1>
+  <div class="page-header-row">
+    <h1>Transactions</h1>
+    <div class="cta-row">
+      <button class="btn-income" hx-get="/transactions/new/income"
+              hx-target="#income-dialog-content" hx-swap="innerHTML">
+        Add income
+      </button>
+      <button class="btn-expense" hx-get="/transactions/new/expense"
+              hx-target="#expense-dialog-content" hx-swap="innerHTML">
+        Add expense
+      </button>
+      <button class="btn-transfer" hx-get="/transfers/new" hx-target="#transfer-dialog-content"
+              hx-swap="innerHTML">
+        Record transfer
+      </button>
+    </div>
+  </div>
+
   {% include "transactions/_table.html" %}
-  <button class="btn-income" hx-get="/transactions/new/income"
-          hx-target="#income-dialog-content" hx-swap="innerHTML">
-    Add income
-  </button>
-  <button class="btn-expense" hx-get="/transactions/new/expense"
-          hx-target="#expense-dialog-content" hx-swap="innerHTML">
-    Add expense
-  </button>
-  <button class="btn-transfer" hx-get="/transfers/new" hx-target="#transfer-dialog-content"
-          hx-swap="innerHTML">
-    Record transfer
-  </button>
 
   <dialog id="income-dialog" hx-on:close-dialog="this.close()"
           hx-on:click="if (event.target === this) this.close()">

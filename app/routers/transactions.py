@@ -7,6 +7,7 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 
 from app.models.transaction import TransactionType
+from app.services.aggregation import grouped_transaction_view
 from app.services.transactions import ensure_category, new_transaction
 from app.storage.accounts import read_accounts
 from app.storage.categories import read_categories, write_categories
@@ -25,21 +26,29 @@ def render_table(
     error: str | None = None,
     headers: dict[str, str] | None = None,
 ) -> HTMLResponse:
-    """Render the transaction list table fragment, newest first.
+    """Render the transaction list fragment, grouped by month and by type.
 
-    ``oob=True`` marks the fragment as an out-of-band swap target — used by
+    Always uses the default view (both groupings on, no account filter):
+    this is called after creating a transaction/transfer, which has no way
+    to know what grouping/filter the page currently has selected, so it
+    deliberately resets to the default rather than guessing. ``oob=True``
+    marks the fragment as an out-of-band swap target — used by
     ``app.routers.transfers`` to refresh this table from the transfer
     dialog, whose own response targets the dialog's content area instead.
     Public (no leading underscore) because it's reused across routers.
     """
-    transactions = sorted(read_ledger(), key=lambda t: t.date, reverse=True)
-    accounts = {account.id: account for account in read_accounts()}
+    accounts_list = read_accounts()
+    months = grouped_transaction_view(read_ledger(), by_month=True, by_type=True)
     return templates.TemplateResponse(
         request,
         "transactions/_table.html",
         {
-            "transactions": transactions,
-            "accounts": accounts,
+            "months": months,
+            "accounts": {account.id: account for account in accounts_list},
+            "accounts_list": accounts_list,
+            "by_month": True,
+            "by_type": True,
+            "account_id": "",
             "oob": oob,
             "error": error,
         },
@@ -48,15 +57,37 @@ def render_table(
 
 
 @router.get("", response_class=HTMLResponse)
-def list_transactions(request: Request) -> HTMLResponse:
-    """Render the transaction list page."""
-    transactions = sorted(read_ledger(), key=lambda t: t.date, reverse=True)
-    accounts = {account.id: account for account in read_accounts()}
-    return templates.TemplateResponse(
-        request,
-        "transactions/list.html",
-        {"transactions": transactions, "accounts": accounts, "error": None},
+def list_transactions(
+    request: Request, by_month: bool = True, by_type: bool = True, account_id: str = ""
+) -> HTMLResponse:
+    """Render the transaction list.
+
+    Full navigation renders the whole page; an HTMX request (from the
+    grouping-toggle buttons or the account filter) renders just the table
+    fragment they swap in. ``account_id`` filters to one account's rows
+    before grouping when set; an empty string (the default) means "all
+    accounts".
+    """
+    ledger = read_ledger()
+    if account_id:
+        ledger = [t for t in ledger if t.account_id == account_id]
+    accounts_list = read_accounts()
+    months = grouped_transaction_view(ledger, by_month=by_month, by_type=by_type)
+    context = {
+        "months": months,
+        "accounts": {account.id: account for account in accounts_list},
+        "accounts_list": accounts_list,
+        "by_month": by_month,
+        "by_type": by_type,
+        "account_id": account_id,
+        "error": None,
+    }
+    template = (
+        "transactions/_table.html"
+        if request.headers.get("HX-Request") == "true"
+        else "transactions/list.html"
     )
+    return templates.TemplateResponse(request, template, context)
 
 
 def _render_form(

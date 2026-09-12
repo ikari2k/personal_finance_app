@@ -4,7 +4,8 @@ This elaborates `finance-app-prd.md` into concrete technical decisions and a pha
 Phases are implemented one at a time, each its own reviewable unit of work with its own commit(s).
 `CLAUDE.md` is updated after each phase lands to reflect what became concrete during that phase.
 
-**Status**: Phases 0–2 complete. Phase 3 not yet started.
+**Status**: Phases 0–2 complete. Phase 2.5 (Categories management) not yet started. Phase 3 not
+yet started.
 
 **Environment note**: `uv` is installed under pyenv's Python 3.13.7, not globally on PATH — the
 `uv` shim only resolves once a directory is pinned to that pyenv version. This repo has a
@@ -189,6 +190,70 @@ unit-testable without touching disk. `routers/` stays thin — HTTP/HTMX glue on
       than one form with a type dropdown.
     - Trigger buttons are color-coded: `.btn-income` (green), `.btn-expense` (red), `.btn-transfer`
       (amber) in `app/static/style.css`.
+    - **Transactions list redesigned as month-then-type groups** (explored as 3 design-canvas
+      propositions; "month-first, type nested" was chosen). Adds `app/services/aggregation.py`
+      ahead of Phase 5, which will extend it with category/subcategory grouping rather than get a
+      second group-by module. Collapsible `<details>` per month (Pico styles these as an
+      accordion for free), color-coded Income/Expense/Transfer sub-blocks with subtotals, a net
+      total per month (excludes transfers — see the module docstring for why the transfer
+      subtotal is volume-moved, not a signed sum: it's always zero otherwise).
+    - **Both grouping dimensions became independently toggleable** after user feedback that
+      grouping should be optional, not fixed: `by_month`/`by_type` query params on
+      `GET /transactions`, backed by `aggregation.grouped_transaction_view` (always computes the
+      full breakdown, then collapses whichever dimension is off via `merge_months` / clearing
+      `.groups` — one code path, not four). A pure-CSS "just hide the type headers" approach was
+      tried first and rejected: it can't fix the underlying sort order when type grouping is off
+      (transactions need to actually interleave chronologically, not just lose their section
+      labels), so this is a real HTMX round-trip, not a client-side filter. Known simplification:
+      the OOB refresh after creating a transaction/transfer always resets to the default (both
+      on) rather than threading the page's current toggle through those unrelated POST flows.
+    - **Toolbar decluttered (round 1)** after user feedback that the original 8-button toolbar (3
+      entry buttons + expand-all/collapse-all + 3 type-visibility filter chips) was too busy. The
+      type-visibility chips were dropped entirely — the "type grouping: on/off" toggle covers the
+      same underlying need. Expand-all/collapse-all now only render when month grouping is on.
+      The month label (`<summary>`) and the flat-mode net-total line are both styled
+      larger/bolder (`.month-label` / `.flat-net-total`) so they read as a clear top-level heading
+      rather than blending into the rows below.
+    - **Toolbar decluttered (round 2)**: further feedback that the CTA buttons' *placement* still
+      felt wrong even after round 1. Previewed the redesign as a static artifact (built from the
+      real vendored `pico.min.css` + `style.css`, so it was a faithful preview) before touching
+      real templates. Landed on: `<h1>` + the 3 colored entry CTAs share one `.page-header-row`
+      (`position: sticky`), shrunk slightly so they read as page actions, not a wall of buttons;
+      everything about *how you view the data* — grouping toggles, expand/collapse, and the new
+      account filter — moved into `.view-options`, a visually distinct, muted, **non-sticky**
+      band inside `_table.html` (a deliberate trade-off: it scrolls away, but the primary
+      entry-point buttons never do).
+    - **Account filter** added (`account_id` query param, same pattern as `by_month`/`by_type`):
+      filters the ledger *before* aggregating, so subtotals reflect only the selected account.
+      All three controls (account select, month toggle, type toggle) round-trip all three params
+      every time, so changing one never resets the others. The row-level Account column hides
+      itself when filtered to one account, since it'd otherwise show the same name on every row.
+    - **Fixed a real CSS bug found while building the redesign preview**: monthly net totals
+      didn't align with each other. Cause: Pico's `summary::after` chevron becomes a third flex
+      item inside a `display: flex` `<summary>`, so `justify-content: space-between` put the net
+      total in the middle slot, not flush right, at a position that shifted with each month's
+      label width. Fixed with `display: grid; grid-template-columns: 1fr auto auto` instead.
+
+- [ ] **Phase 2.5 — Categories management**: a dedicated `/categories` page for the income and
+  expense trees the app has been building on-the-fly since Phase 2 — the "editable by hand or via
+  a settings screen" half of the PRD's categories requirement (§4.2), which nothing has covered
+  yet. Inserted here (not renumbered into Phase 3+) so the phase numbers already referenced
+  elsewhere (this doc, `CLAUDE.md`, code comments) don't need churning.
+  - Add category (to the income or expense tree), add subcategory (to an existing category),
+    rename either, delete either. Reuse the established `<dialog>` pattern (open via `hx-get`,
+    close via `HX-Trigger: close-dialog`, OOB-refresh the affected list on success, re-render
+    the form in place with input preserved on error) rather than inventing a new one.
+  - **Deletion is not guarded by ledger usage, unlike account deletion.** A ledger row's
+    `category`/`subcategory` are free-text strings copied in at entry time (see
+    `services.transactions.ensure_category`) — not a foreign key the consistency checker
+    validates, the way `account_id` is. Deleting or renaming a category in the tree does **not**
+    touch existing ledger rows and is never blocked by their existing use, consistent with the
+    PRD's "no automatic dedup/cleanup — keeping the list tidy is a user responsibility" stance
+    (§4.2). Don't add a usage guard here by analogy with accounts; the two aren't the same kind
+    of reference.
+  - *Verify*: adding/renaming/deleting a category or subcategory updates
+    `config/categories.toml` correctly, and the "Add income"/"Add expense" dialogs' category/
+    subcategory `<datalist>`s immediately reflect the change on next open.
 
 - [ ] **Phase 3 — Bank CSV import**: upload + parse endpoint, mapping-setup UI persisted to
   `config/import_mappings/<bank>.toml`, auto-reuse on next import from the same bank,

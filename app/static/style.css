@@ -60,3 +60,161 @@ button.btn-transfer {
   --pico-primary-hover-background: #944407;
   --pico-primary-hover-border: #944407;
 }
+
+/*
+ * Transactions page header: title + the 3 entry CTAs share one sticky
+ * line, so they stay reachable without scrolling back up a long list.
+ * Grouping/filter controls (.view-options, in _table.html) deliberately
+ * live below this, not sticky — they're view options, not primary
+ * actions, and keeping them out of the sticky bar is what keeps this
+ * header from turning back into "too many buttons in the same place".
+ */
+.page-header-row {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--pico-background-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 0.75rem 0;
+  border-bottom: var(--pico-border-width) solid var(--pico-muted-border-color);
+}
+
+.page-header-row h1 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.cta-row {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.cta-row button {
+  padding: 0.45rem 0.9rem;
+  font-size: 0.85rem;
+}
+
+/* Grouping/account-filter controls: a visually distinct, non-sticky band
+ * between the header and the list. */
+.view-options {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  padding: 0.6rem 0.75rem;
+  margin: 0.75rem 0;
+  background: rgba(127, 127, 127, 0.08);
+  border-radius: var(--pico-border-radius);
+}
+
+.view-options select {
+  width: auto;
+  flex: 0 0 auto;
+  margin-bottom: 0;
+  padding: 0.35rem 2rem 0.35rem 0.6rem;
+  font-size: 0.85rem;
+}
+
+.view-options button {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8rem;
+  margin-bottom: 0;
+}
+
+.view-options-label {
+  font-size: 0.75rem;
+  color: var(--pico-muted-color);
+  margin-right: -0.25rem;
+}
+
+.toolbar-spacer {
+  flex: 1 1 auto;
+}
+
+/* Transactions list: collapsible month sections (when month grouping is
+ * on), each optionally split into color-coded type groups (see
+ * app/services/aggregation.py::grouped_transaction_view). */
+.month-section {
+  margin-bottom: 0.75rem;
+}
+
+/*
+ * Grid, not flex: Pico appends a chevron via summary::after, and since a
+ * pseudo-element inside a flex container becomes a real flex item, that
+ * chevron was a *third* flex item — with justify-content: space-between,
+ * the net-total span ended up as the middle item, landing at a different
+ * x-position per row depending on that row's month-label width instead of
+ * a fixed right-aligned column. Grid's `1fr auto auto` pins the label to
+ * fill remaining space and keeps the amount + chevron columns fixed-width
+ * and flush right, so every month's net total lines up in the same place.
+ */
+.month-section summary {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  column-gap: 1rem;
+  padding: 0.5rem 0;
+}
+
+.month-section summary .amount-negative,
+.month-section summary .amount-positive {
+  min-width: 6ch;
+  text-align: right;
+}
+
+.month-label {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--pico-h1-color);
+}
+
+/* Shown instead of a month <summary> when month grouping is off — same
+ * visual weight as .month-label so turning grouping off doesn't just
+ * make the net total disappear. */
+.flat-net-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem 0;
+  margin-bottom: 0.5rem;
+  border-bottom: var(--pico-border-width) solid var(--pico-muted-border-color);
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.type-group {
+  margin: 0.5rem 0 1rem;
+}
+
+.type-group-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 700;
+  font-size: 0.85rem;
+  padding-bottom: 0.25rem;
+  margin-bottom: 0.25rem;
+  border-bottom-width: 2px;
+  border-bottom-style: solid;
+}
+
+.type-group[data-type="income"] .type-group-header {
+  color: #15803d;
+  border-color: #15803d;
+}
+
+.type-group[data-type="expense"] .type-group-header {
+  color: #b91c1c;
+  border-color: #b91c1c;
+}
+
+.type-group[data-type="transfer"] .type-group-header {
+  color: #b45309;
+  border-color: #b45309;
+}

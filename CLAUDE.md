@@ -58,7 +58,7 @@ app/
   storage/              # file I/O + locking — the ONLY layer allowed to touch data/ or config/ files
     lock.py, ledger.py, accounts.py, categories.py  # (rules.py, import_mappings.py land in Phase 3-4)
   services/                # business logic — pure functions, no direct file I/O
-    consistency.py, accounts.py, balances.py, transactions.py
+    consistency.py, accounts.py, balances.py, transactions.py, aggregation.py
   routers/                  # FastAPI routers, one per feature area — thin HTTP/HTMX glue only
     accounts.py, transactions.py, transfers.py  # (import_, rules.py, reports.py land in Phase 3-5)
   templates/                 # Jinja2 pages + HTMX partials, one subdir per feature area
@@ -105,8 +105,8 @@ input — no reads or writes of `data/`/`config/` files, ever. Routers do the I/
 `storage`. This keeps business rules (unique account IDs, transfer pairing, on-the-fly category
 creation, sign normalization, referential-integrity guards on delete) unit-testable without
 `tmp_path`/disk at all — reuse this split for `services/importer.py` / `services/categorizer.py`
-/ `services/aggregation.py` in later phases rather than letting a router grow business logic of
-its own.
+in later phases (`services/aggregation.py` already exists, see below) rather than letting a
+router grow business logic of its own.
 
 ### HTTP form testing pattern
 
@@ -169,6 +169,70 @@ constructing the `TestClient`. Add a matching `_PATH` attribute + monkeypatch li
   - Reuse this exact pattern for Phase 4's bulk-reclassification preview dialog rather than
     inventing a new one — it's a good fit for "load content into a dialog, confirm, refresh a
     table elsewhere on success."
+- **The transactions list's month/type grouping is a genuine structural choice, not a display
+  filter** — both dimensions are independently toggleable (`by_month`, `by_type` query params on
+  `GET /transactions`), and each combination actually reorders/reshapes the transactions shown
+  (turning type grouping off, for instance, interleaves all types chronologically — it doesn't
+  just hide the type headers on an otherwise type-clustered list). This is why it's implemented
+  as a full server round-trip (`hx-get` re-rendering `#transactions-table-wrapper`) rather than a
+  client-side CSS/JS toggle: a pure-CSS "hide the headers" approach was tried and rejected during
+  design because it can't fix the underlying sort order.
+  - `app/services/aggregation.py::grouped_transaction_view(transactions, by_month, by_type)` is
+    the single entry point — it always computes the full month-and-type breakdown
+    (`group_by_month_and_type`) and then collapses whichever dimension is off (`merge_months` for
+    month, clearing `.groups` for type), rather than having 4 separate aggregation code paths.
+    **The transfer subtotal is total volume moved, not a signed sum** — every transfer is a
+    balanced pair (one negative leg, one positive leg of equal size), so a plain sum is always
+    zero; it's `sum(abs(amount)) / 2` instead, and stays associative under the month-merge (so
+    merging doesn't need to re-derive it from scratch). Don't "fix" this back to a signed sum.
+  - `GET /transactions` serves both the full page and (when `request.headers["HX-Request"] ==
+    "true"`) just the table fragment — the same URL/route, branching on that header, rather than
+    a second route for what's conceptually the same resource at different render granularity.
+    The toggle buttons compute their own next-state URL server-side (flip one dimension, keep the
+    other) and use `hx-push-url="true"`, so reload/back-button correctly restore the last-picked
+    grouping.
+  - **Known simplification**: after creating a transaction/transfer, the out-of-band table
+    refresh (`render_table()`) always resets to the default (both groupings on, no account
+    filter) rather than threading the page's current toggle/filter state through the unrelated
+    create/transfer POST — that state isn't available there without extra plumbing (hidden form
+    fields or parsing the `Referer` header), which wasn't judged worth it for a one-click-to-
+    restore inconvenience.
+  - Expand-all/collapse-all stays a pure client-side `onclick` (no round-trip — it doesn't change
+    what data is shown, just whether an already-rendered `<details>` is open) and is only shown
+    in the toolbar when `by_month` is on, since there's nothing to expand/collapse otherwise.
+- **Account filter** (`account_id` query param, alongside `by_month`/`by_type`) filters the
+  ledger to one account *before* aggregating — so subtotals/net-totals reflect only that
+  account's activity, not the whole ledger with irrelevant rows hidden. Empty string means "all
+  accounts" (the default), not `None` — every control always sends all three params explicitly,
+  so there's one consistent "unset" representation rather than sometimes omitting the param.
+  - The account `<select>` fires via `hx-trigger="change"` and carries its own `account_id`
+    value automatically (it has `name="account_id"`), plus a static, server-rendered `hx-vals`
+    JSON blob carrying the *current* `by_month`/`by_type` so switching the account filter doesn't
+    reset grouping — and conversely, the grouping-toggle buttons' own hrefs always interpolate
+    the current `account_id` so switching grouping doesn't reset the filter. All three controls
+    must keep round-tripping all three params like this; dropping one from any single control's
+    URL/vals silently resets it for that action.
+  - When filtered to one account, the row-level Account column disappears (`txn_row(txn,
+    accounts, show_account)` in `_table.html` — `show_account` is `not account_id`) since every
+    row would show the same, now-redundant, name.
+- **`<summary>` needs `display: grid`, not `display: flex`, for a right-aligned trailing
+  value** — Pico appends a chevron via `summary::after`, and a pseudo-element inside a flex
+  container becomes a real flex item. With `justify-content: space-between` and 3 flex items
+  (label, value, chevron), the value lands in the *middle* slot, not flush right, at a position
+  that shifts with the label's text width — which is exactly why the per-month net totals in
+  `.month-section summary` didn't line up with each other. Fixed via `grid-template-columns: 1fr
+  auto auto` (label fills remaining space; value and chevron are fixed-width, flush right) plus a
+  `min-width` on the value so its own column width doesn't wobble with digit count either. Reuse
+  this grid approach for any future `<summary>` that ends in a value — the flex version looks
+  right for a single row and then visibly disagrees with its neighbors once there's more than one.
+- **Page layout, top to bottom**: `.page-header-row` (`position: sticky`) holds the `<h1>` and
+  the 3 colored entry CTAs (`.cta-row`) — these are the only things that stay pinned while
+  scrolling. Below it, `.view-options` (in `_table.html`, so it re-renders with every table
+  refresh) holds the account filter and the grouping/expand controls — deliberately *not*
+  sticky, and visually set apart with a muted background band, so "actions" and "view options"
+  read as two different kinds of control rather than one undifferentiated row of buttons. This
+  split is itself the fix for an earlier "too many buttons in the same place" complaint — don't
+  collapse the two rows back into one without a similar visual/semantic separation.
 
 ## Core architecture
 
@@ -217,9 +281,10 @@ constructing the `TestClient`. Add a matching `_PATH` attribute + monkeypatch li
 - **Bulk reclassification always previews first**: a rule run against the ledger must show a full
   before/after diff per affected row (old category/subcategory → new, plus any other changed
   fields), never just a count. Preview output must match apply output exactly.
-- Reports pull from **one shared aggregation layer** (`services/aggregation.py`, group-by
-  year/month/category/subcategory), not per-view one-off aggregation logic — wire new report
-  views through it rather than duplicating grouping logic.
+- Reports pull from **one shared aggregation layer**, `services/aggregation.py` — it already has
+  `group_by_month_and_type` (backing the transactions list); Phase 5 extends it with
+  category/subcategory grouping rather than duplicating a second group-by module. Not per-view
+  one-off aggregation logic — wire new report views through it.
 - **No CDN scripts or stylesheets, ever** — the app must run with no network access. Vendored so
   far: `app/static/htmx.min.js` (htmx 2.0.10), `app/static/pico.min.css` (Pico.css 2.1.1,
   classless), `app/static/fonts/jetbrains-mono-variable.woff2` (JetBrains Mono). Phase 5's
@@ -246,6 +311,8 @@ See `docs/implementation-plan.md` for the full phase-by-phase plan and status:
 0. Scaffolding (`uv` project, directory tree, health-check app)
 1. Core ledger read/write + file locking + consistency check
 2. Accounts, manual transaction entry, transfers, balance calculation
+2.5. Categories management (dedicated add/rename/delete UI — inserted between 2 and 3, not
+   renumbered into the sequence below, to avoid churning phase numbers referenced elsewhere)
 3. Bank CSV import (mapping setup + reuse, import-time auto-categorization)
 4. Rule engine (bulk reclassification with preview/apply)
 5. Reporting & visualization (shared aggregation layer, drill-downs, MoM/YoY, net worth charts)
