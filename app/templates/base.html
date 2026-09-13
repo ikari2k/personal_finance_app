@@ -4,10 +4,11 @@
     <meta charset="utf-8" />
     <title>{% block title %}Finance Tracker{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', path='pico.min.css') }}" />
-    <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}" />
+    <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}?v={{ static_version('style.css') }}" />
     <script src="{{ url_for('static', path='htmx.min.js') }}"></script>
   </head>
-  <body hx-on:toast="const t = document.createElement('div'); t.className = 'toast'; t.textContent = event.detail.value; const c = document.getElementById('toast-container'); c.appendChild(t); requestAnimationFrame(() => t.classList.add('show')); setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 200); }, 3000);">
+  <body hx-on:toast="const t = document.createElement('div'); t.className = 'toast'; t.textContent = event.detail.value; const c = document.getElementById('toast-container'); c.appendChild(t); requestAnimationFrame(() => t.classList.add('show')); setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 200); }, 3000);"
+        hx-on::confirm="if (!event.detail.question) return; event.preventDefault(); document.getElementById('confirm-dialog-message').textContent = event.detail.question; document.getElementById('confirm-dialog-confirm').onclick = function () { document.getElementById('confirm-dialog').close(); event.detail.issueRequest(true); }; document.getElementById('confirm-dialog').showModal();">
     <header>
       <nav>
         <ul>
@@ -22,6 +23,22 @@
     <main>
       {% block content %}{% endblock %}
       <div id="toast-container"></div>
+
+      <dialog id="confirm-dialog" hx-on:click="if (event.target === this) this.close()">
+        <article>
+          <header>
+            <button aria-label="Close" rel="prev"
+                    onclick="document.getElementById('confirm-dialog').close()"></button>
+            <strong>Confirm</strong>
+          </header>
+          <p id="confirm-dialog-message"></p>
+          <footer class="dialog-footer">
+            <button type="button" class="btn-outline"
+                    onclick="document.getElementById('confirm-dialog').close()">Cancel</button>
+            <button type="button" id="confirm-dialog-confirm" class="btn-danger">Delete</button>
+          </footer>
+        </article>
+      </dialog>
     </main>
   </body>
 </html>

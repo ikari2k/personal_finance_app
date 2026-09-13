@@ -126,7 +126,9 @@ button.btn-income {
   --pico-primary-hover-border: #116830;
 }
 
-button.btn-expense {
+/* .btn-danger shares the expense red — both mean "destructive/negative". */
+button.btn-expense,
+button.btn-danger {
   --pico-background-color: #b91c1c;
   --pico-border-color: #b91c1c;
   --pico-color: #fff;
@@ -331,22 +333,34 @@ button.btn-transfer {
   margin-bottom: 0;
 }
 
+/*
+ * Pico's base button rule sets the custom property --pico-color (not just
+ * the color property) to --pico-primary-inverse (white) — and its :hover
+ * rule resets --pico-color to the same white on top of that. Referencing
+ * --pico-color without also *setting* it just inherits that white, making
+ * the label invisible in light mode. Both states must override the
+ * custom property itself, same as the .btn-income/-expense/-transfer
+ * pattern above.
+ */
 button.btn-outline {
   background: transparent;
   border: var(--pico-border-width) solid var(--pico-muted-border-color);
+  --pico-color: var(--pico-contrast);
   color: var(--pico-color);
 }
 
 button.btn-outline:hover {
   background: rgba(127, 127, 127, 0.12);
+  --pico-color: var(--pico-contrast);
+  color: var(--pico-color);
 }
 
 /*
  * Toast notifications: transient success confirmations after
- * create/edit/delete, fired app-wide via the HX-Trigger-After-Settle
- * response header (see app/routers/htmx_events.py) and rendered by the
- * single listener in base.html. Stacked bottom-right so they never cover
- * the sticky page header or an open dialog.
+ * create/edit/delete, fired app-wide via the HX-Trigger response header
+ * (see app/routers/htmx_events.py) and rendered by the single listener in
+ * base.html. Stacked bottom-right so they never cover the sticky page
+ * header or an open dialog.
  */
 #toast-container {
   position: fixed;

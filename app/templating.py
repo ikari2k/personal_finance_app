@@ -9,4 +9,18 @@ from pathlib import Path
 from fastapi.templating import Jinja2Templates
 
 APP_DIR = Path(__file__).resolve().parent
+STATIC_DIR = APP_DIR / "static"
 templates = Jinja2Templates(directory=APP_DIR / "templates")
+
+
+def static_version(path: str) -> int:
+    """Return a static asset's mtime, used as a cache-busting query param.
+
+    Browsers otherwise keep serving a cached ``style.css``/``htmx.min.js``
+    after an edit, since neither uvicorn's ``--reload`` nor a plain page
+    reload is guaranteed to force a re-fetch — only the URL changing does.
+    """
+    return int((STATIC_DIR / path).stat().st_mtime)
+
+
+templates.env.globals["static_version"] = static_version
