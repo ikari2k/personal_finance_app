@@ -39,14 +39,24 @@ def test_ensure_category_adds_new_category_and_subcategory():
     result = ensure_category({}, TransactionType.EXPENSE, "Groceries", "Supermarket")
 
     assert result == {
-        "expense": {"Groceries": {"icon": "", "subcategories": {"Supermarket": ""}}}
+        "expense": {
+            "Groceries": {
+                "icon": "",
+                "budget": "",
+                "subcategories": {"Supermarket": {"icon": "", "budget": ""}},
+            }
+        }
     }
 
 
 def test_ensure_category_does_not_duplicate_existing_subcategory():
     existing = {
         "expense": {
-            "Groceries": {"icon": "cart", "subcategories": {"Supermarket": "store"}}
+            "Groceries": {
+                "icon": "cart",
+                "budget": "",
+                "subcategories": {"Supermarket": {"icon": "store", "budget": ""}},
+            }
         }
     }
 
@@ -59,32 +69,58 @@ def test_ensure_category_does_not_duplicate_existing_subcategory():
 
 def test_ensure_category_does_not_mutate_the_input():
     existing = {
-        "expense": {"Groceries": {"icon": "", "subcategories": {"Supermarket": ""}}}
+        "expense": {
+            "Groceries": {
+                "icon": "",
+                "budget": "",
+                "subcategories": {"Supermarket": {"icon": "", "budget": ""}},
+            }
+        }
     }
 
     ensure_category(existing, TransactionType.EXPENSE, "Groceries", "Restaurants")
 
     assert existing == {
-        "expense": {"Groceries": {"icon": "", "subcategories": {"Supermarket": ""}}}
+        "expense": {
+            "Groceries": {
+                "icon": "",
+                "budget": "",
+                "subcategories": {"Supermarket": {"icon": "", "budget": ""}},
+            }
+        }
     }
 
 
 def test_ensure_category_skips_blank_subcategory():
     result = ensure_category({}, TransactionType.EXPENSE, "Groceries", "")
 
-    assert result == {"expense": {"Groceries": {"icon": "", "subcategories": {}}}}
+    assert result == {
+        "expense": {"Groceries": {"icon": "", "budget": "", "subcategories": {}}}
+    }
 
 
 def test_ensure_category_keeps_income_and_expense_trees_separate():
     existing = {
-        "expense": {"Groceries": {"icon": "", "subcategories": {"Supermarket": ""}}}
+        "expense": {
+            "Groceries": {
+                "icon": "",
+                "budget": "",
+                "subcategories": {"Supermarket": {"icon": "", "budget": ""}},
+            }
+        }
     }
 
     result = ensure_category(existing, TransactionType.INCOME, "Salary", "")
 
     assert result == {
-        "expense": {"Groceries": {"icon": "", "subcategories": {"Supermarket": ""}}},
-        "income": {"Salary": {"icon": "", "subcategories": {}}},
+        "expense": {
+            "Groceries": {
+                "icon": "",
+                "budget": "",
+                "subcategories": {"Supermarket": {"icon": "", "budget": ""}},
+            }
+        },
+        "income": {"Salary": {"icon": "", "budget": "", "subcategories": {}}},
     }
 
 

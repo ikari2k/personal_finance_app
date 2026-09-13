@@ -4,7 +4,7 @@
 {% macro txn_row(txn, accounts, show_account, categories) %}
   {% set cat_entry = categories.get(txn.type.value, {}).get(txn.category, {}) %}
   {% set cat_icon = cat_entry.get('icon', '') %}
-  {% set sub_icon = cat_entry.get('subcategories', {}).get(txn.subcategory, '') %}
+  {% set sub_icon = cat_entry.get('subcategories', {}).get(txn.subcategory, {}).get('icon', '') %}
   <tr>
     <td>
       <span class="row-actions">
@@ -24,12 +24,13 @@
       <td>{{ accounts[txn.account_id].name if txn.account_id in accounts else txn.account_id }}</td>
     {% endif %}
     <td class="cat-cell">
-      {% if cat_icon %}<span class="cat-cell-icon cat-cell-icon-{{ txn.type.value }}">{{ category_icon(cat_icon) }}</span>{% endif %}
-      {{ txn.category }}
-      {%- if txn.subcategory %} /
+      {% if txn.subcategory %}
         {% if sub_icon %}<span class="cat-cell-icon cat-cell-icon-{{ txn.type.value }}">{{ category_icon(sub_icon) }}</span>{% endif %}
         {{ txn.subcategory }}
-      {%- endif %}
+      {% else %}
+        {% if cat_icon %}<span class="cat-cell-icon cat-cell-icon-{{ txn.type.value }}">{{ category_icon(cat_icon) }}</span>{% endif %}
+        {{ txn.category }}
+      {% endif %}
     </td>
     <td>{{ txn.description }}</td>
     <td class="{{ 'amount-negative' if txn.amount < 0 else 'amount-positive' }}">

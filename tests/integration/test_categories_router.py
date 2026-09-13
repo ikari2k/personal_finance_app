@@ -20,8 +20,72 @@ def test_create_category_appears_in_tree(client):
     assert "Groceries" in response.text
     assert read_categories(config.CATEGORIES_PATH) == {
         "income": {},
-        "expense": {"Groceries": {"icon": "cart", "subcategories": {}}},
+        "expense": {"Groceries": {"icon": "cart", "budget": "", "subcategories": {}}},
     }
+
+
+def test_create_category_accepts_budget(client):
+    response = client.post(
+        "/categories/expense", data={"name": "Groceries", "budget": "400.00"}
+    )
+
+    assert response.status_code == 200
+    result = read_categories(config.CATEGORIES_PATH)
+    assert result["expense"]["Groceries"]["budget"] == "400.00"
+
+
+def test_create_category_rejects_budget_for_income(client):
+    response = client.post(
+        "/categories/income", data={"name": "Salary", "budget": "100"}
+    )
+
+    assert response.status_code == 200
+    assert "cannot have a monthly budget" in response.text
+    assert "Salary" not in read_categories(config.CATEGORIES_PATH)["income"]
+
+
+def test_new_income_category_form_hides_budget_field(client):
+    response = client.get("/categories/income/new")
+
+    assert response.status_code == 200
+    assert "Monthly budget" not in response.text
+
+
+def test_new_expense_category_form_shows_budget_field(client):
+    response = client.get("/categories/expense/new")
+
+    assert response.status_code == 200
+    assert "Monthly budget" in response.text
+
+
+def test_category_list_flags_when_subcategory_budgets_exceed_category(client):
+    client.post("/categories/expense", data={"name": "Groceries", "budget": "100"})
+    client.post(
+        "/categories/expense/Groceries/subcategories",
+        data={"name": "Supermarket", "budget": "50"},
+    )
+    client.post(
+        "/categories/expense/Groceries/subcategories",
+        data={"name": "Farmers Market", "budget": "75"},
+    )
+
+    response = client.get("/categories")
+
+    assert response.status_code == 200
+    assert "budget-pill warning" in response.text
+
+
+def test_category_list_does_not_flag_when_subcategory_budgets_fit(client):
+    client.post("/categories/expense", data={"name": "Groceries", "budget": "100"})
+    client.post(
+        "/categories/expense/Groceries/subcategories",
+        data={"name": "Supermarket", "budget": "50"},
+    )
+
+    response = client.get("/categories")
+
+    assert response.status_code == 200
+    assert "budget-pill warning" not in response.text
 
 
 def test_create_category_rejects_duplicate_name(client):
@@ -96,7 +160,25 @@ def test_add_subcategory_appears_under_category(client):
     assert response.status_code == 200
     assert "Supermarket" in response.text
     result = read_categories(config.CATEGORIES_PATH)
-    assert result["expense"]["Groceries"]["subcategories"] == {"Supermarket": "store"}
+    assert result["expense"]["Groceries"]["subcategories"] == {
+        "Supermarket": {"icon": "store", "budget": ""}
+    }
+
+
+def test_add_subcategory_accepts_budget(client):
+    client.post("/categories/expense", data={"name": "Groceries", "icon": "cart"})
+
+    response = client.post(
+        "/categories/expense/Groceries/subcategories",
+        data={"name": "Supermarket", "budget": "150"},
+    )
+
+    assert response.status_code == 200
+    result = read_categories(config.CATEGORIES_PATH)
+    assert (
+        result["expense"]["Groceries"]["subcategories"]["Supermarket"]["budget"]
+        == "150"
+    )
 
 
 def test_add_subcategory_rejects_unknown_category(client):
@@ -122,7 +204,9 @@ def test_update_subcategory_renames_and_reicons(client):
 
     assert response.status_code == 200
     result = read_categories(config.CATEGORIES_PATH)
-    assert result["expense"]["Groceries"]["subcategories"] == {"Store": "store"}
+    assert result["expense"]["Groceries"]["subcategories"] == {
+        "Store": {"icon": "store", "budget": ""}
+    }
 
 
 def test_delete_subcategory_removes_it(client):

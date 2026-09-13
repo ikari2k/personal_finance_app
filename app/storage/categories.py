@@ -12,8 +12,27 @@ from pathlib import Path
 import tomli_w
 
 from app import config
-from app.models.category import CategoriesByType, CategoryEntry
+from app.models.category import CategoriesByType, CategoryEntry, SubcategoryEntry
 from app.storage.lock import file_lock
+
+
+def _normalize_subcategory(raw: str | dict[str, object]) -> SubcategoryEntry:
+    """Coerce one subcategory's raw TOML value into the current shape.
+
+    Pre-budget-feature files store a subcategory as a bare icon string
+    (``Rent = "home"``); this upgrades that into
+    ``{"icon": "home", "budget": ""}`` in memory so old files keep loading
+    without a separate migration step. The next ``write_categories`` call
+    persists the upgraded shape.
+    """
+    if isinstance(raw, str):
+        return {"icon": raw, "budget": ""}
+    icon = raw.get("icon", "")
+    budget = raw.get("budget", "")
+    return {
+        "icon": icon if isinstance(icon, str) else "",
+        "budget": budget if isinstance(budget, str) else "",
+    }
 
 
 def _normalize_entry(raw: list[str] | dict[str, object]) -> CategoryEntry:
@@ -21,17 +40,28 @@ def _normalize_entry(raw: list[str] | dict[str, object]) -> CategoryEntry:
 
     Pre-icon-feature files store a category as a bare list of subcategory
     names (``Salary = []``, ``Groceries = ["Supermarket"]``); this upgrades
-    that into ``{"icon": "", "subcategories": {name: ""}}`` in memory so
-    old files keep loading without a separate migration step. The next
-    ``write_categories`` call persists the upgraded shape.
+    that into ``{"icon": "", "budget": "", "subcategories": {name: {"icon":
+    "", "budget": ""}}}`` in memory so old files keep loading without a
+    separate migration step. The next ``write_categories`` call persists
+    the upgraded shape.
     """
     if isinstance(raw, list):
-        return {"icon": "", "subcategories": {name: "" for name in raw}}
+        return {
+            "icon": "",
+            "budget": "",
+            "subcategories": {name: {"icon": "", "budget": ""} for name in raw},
+        }
     icon = raw.get("icon", "")
+    budget = raw.get("budget", "")
     subcategories = raw.get("subcategories", {})
     return {
         "icon": icon if isinstance(icon, str) else "",
-        "subcategories": dict(subcategories) if isinstance(subcategories, dict) else {},
+        "budget": budget if isinstance(budget, str) else "",
+        "subcategories": (
+            {name: _normalize_subcategory(sub) for name, sub in subcategories.items()}
+            if isinstance(subcategories, dict)
+            else {}
+        ),
     }
 
 

@@ -17,16 +17,46 @@ macro) and its own subcategories, each of which carries its own optional
 icon. ``""`` means "no icon assigned" rather than a missing key or
 ``None`` — TOML has no null, and this matches the rest of the app's
 convention of an empty string for "unset" (e.g. ``Transaction.subcategory``).
+
+Both a category and each of its subcategories also carry an optional
+monthly budget (``""`` means "no budget set", else a quoted non-negative
+decimal string — same TOML-quoting convention as ``Account
+.starting_balance``, kept as a plain ``str`` here rather than
+``Decimal`` since these are TypedDicts, not pydantic models). A
+category's budget and its subcategories' budgets are independent
+thresholds, not a hierarchy: the category's budget is checked against
+total spend across *all* of its transactions that month (every
+subcategory plus any transaction with no subcategory), while each
+subcategory's budget is checked only against that subcategory's own
+spend. There is deliberately no validation that subcategory budgets sum
+to (or stay under) the category budget — that's what lets "category
+only", "some subcategories only", "all subcategories", and "both levels
+at once" all be valid simultaneously without special-casing. Budget
+validation (non-negative) lives in ``services.categories``; the
+monthly spend-vs-budget comparison itself is a future phase (a
+dedicated Monthly Budgets page), not implemented yet.
 """
 
 from typing import TypedDict
 
 
-class CategoryEntry(TypedDict):
-    """One category: its icon and its subcategory → icon mapping."""
+class SubcategoryEntry(TypedDict):
+    """One subcategory: its icon and its own optional monthly budget."""
 
     icon: str
-    subcategories: dict[str, str]
+    budget: str
+
+
+class CategoryEntry(TypedDict):
+    """One category.
+
+    Carries its icon, its own optional monthly budget, and its
+    subcategory → ``SubcategoryEntry`` mapping.
+    """
+
+    icon: str
+    budget: str
+    subcategories: dict[str, SubcategoryEntry]
 
 
 CategoryTree = dict[str, CategoryEntry]

@@ -540,12 +540,74 @@ button.add-btn {
   position: relative;
 }
 
+/* The shared .row-actions pattern floats left into the page's own ambient
+ * margin (see the .row-actions comment above) — fine for the Income
+ * column, since that margin sits to its left. But Income/Expense sit
+ * side by side with only a 3rem gap, smaller than .row-actions' 4.25rem
+ * offset, so the Expense column's rows would float left *past* the gap
+ * and into Income's own content. Mirror the offset to the right for the
+ * Expense column instead, where the page's own right margin is free. */
+#categories-tree-wrapper .columns > div:nth-child(2) .row-actions {
+  left: auto;
+  right: -4.25rem;
+}
+
 details.cat-row summary {
   display: grid;
-  grid-template-columns: auto 1fr auto auto;
+  grid-template-columns: auto 1fr auto auto auto;
   align-items: center;
   column-gap: 0.6rem;
   padding: 0.55rem 0;
+}
+
+/* Configured monthly budget, shown next to the category/subcategory name.
+ * This is just the configured amount, not a spend-vs-budget indicator
+ * (that's a future Monthly Budgets page) — so it's a plain muted label by
+ * default. Always rendered (even when unset) for category rows so the
+ * sub-count-pill/chevron stay in the same grid column across every row,
+ * same reasoning as .sub-count-pill above; subcategory rows aren't a
+ * shared grid, so theirs can be conditionally rendered instead. */
+.budget-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.3rem;
+  min-width: 4.5rem;
+  height: 1.3rem;
+  padding: 0 0.5rem;
+  border-radius: var(--pico-border-radius);
+  background: rgba(127, 127, 127, 0.12);
+  color: var(--pico-muted-color);
+  font-size: 0.7rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.budget-pill.empty {
+  visibility: hidden;
+}
+
+/* A category-level exception: its subcategory budgets add up to more than
+ * its own budget (see services.categories
+ * .subcategories_exceed_category_budget) — a legitimate, non-blocking
+ * configuration choice, not a spend-vs-actual overage, so amber (matching
+ * the app's other amber, .btn-transfer) rather than the red used for
+ * expense amounts elsewhere. Color alone doesn't read as "alert" clearly
+ * enough (an amber pill just looks like a different category of label),
+ * so it also gets an explicit warning-triangle glyph, not just a tint. */
+.budget-pill.warning {
+  background: rgba(180, 83, 9, 0.18);
+  color: #b45309;
+}
+
+.budget-pill-warning-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.budget-pill-warning-icon svg {
+  width: 0.85rem;
+  height: 0.85rem;
 }
 
 /* Subcategory count, so it's obvious at a glance which categories are
@@ -699,14 +761,27 @@ fieldset legend {
   color: var(--pico-primary-background);
 }
 
-.icon-none {
-  color: var(--pico-muted-color);
-  font-size: 0.9rem;
+.icon-grid-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.4rem;
+}
+
+.icon-clear-btn {
+  padding: 0.25rem 0.75rem;
+  font-size: 0.8rem;
 }
 
 @media (max-width: 700px) {
   #categories-tree-wrapper .columns {
     grid-template-columns: 1fr;
     gap: 1.5rem;
+  }
+
+  /* Stacked single-column layout below this width — Expense rows no
+     longer sit beside Income, so the left-margin float is safe again. */
+  #categories-tree-wrapper .columns > div:nth-child(2) .row-actions {
+    left: -4.25rem;
+    right: auto;
   }
 }

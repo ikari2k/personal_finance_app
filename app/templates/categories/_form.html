@@ -5,13 +5,20 @@
   <label>Name
     <input type="text" name="name" value="{{ values.name }}" required autofocus>
   </label>
+  {% if show_budget %}
+    <label>Monthly budget (optional)
+      <input type="text" name="budget" value="{{ values.budget }}" placeholder="e.g. 500.00">
+    </label>
+  {% endif %}
   <fieldset>
     <legend>Icon</legend>
+    <div class="icon-grid-toolbar">
+      <button type="button" class="secondary outline icon-clear-btn"
+              onclick="this.closest('fieldset').querySelectorAll('input[name=icon]:checked').forEach(function (r) { r.checked = false; })">
+        Clear icon
+      </button>
+    </div>
     <div class="icon-grid">
-      <label class="icon-choice-wrap" title="No icon">
-        <input type="radio" name="icon" value="" {{ 'checked' if not values.icon }}>
-        <span class="icon-none">&ndash;</span>
-      </label>
       {% for key in icon_keys %}
         <label class="icon-choice-wrap" title="{{ icon_hints.get(key, key) }}">
           <input type="radio" name="icon" value="{{ key }}" {{ 'checked' if values.icon == key }}>

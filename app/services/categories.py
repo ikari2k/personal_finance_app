@@ -16,7 +16,9 @@ here by analogy with ``services.accounts.remove_account``; they aren't the
 same kind of reference.
 """
 
-from app.models.category import VALID_ICONS, CategoriesByType
+from decimal import Decimal
+
+from app.models.category import VALID_ICONS, CategoriesByType, CategoryEntry
 from app.models.transaction import TransactionType
 
 
@@ -36,6 +38,23 @@ def _validate_icon(icon: str) -> None:
         raise ValueError(f"unknown icon '{icon}'")
 
 
+def _budget_str(txn_type: TransactionType, budget: Decimal | None) -> str:
+    """Validate and serialize a monthly budget to the on-disk ``str`` form.
+
+    ``None`` means "no budget set" (stored as ``""``). Raises
+    ``ValueError`` if ``budget`` is negative, or if it's set at all for an
+    income category/subcategory — budgets exist to flag overspending, which
+    isn't a meaningful concept for income.
+    """
+    if budget is None:
+        return ""
+    if txn_type is TransactionType.INCOME:
+        raise ValueError("income categories cannot have a monthly budget")
+    if budget < 0:
+        raise ValueError("budget must not be negative")
+    return str(budget)
+
+
 def _with_tree(
     categories: CategoriesByType, txn_type: TransactionType, tree: dict
 ) -> CategoriesByType:
@@ -44,13 +63,41 @@ def _with_tree(
     return updated
 
 
+def subcategories_exceed_category_budget(entry: CategoryEntry) -> bool:
+    """Return whether ``entry``'s subcategory budgets add up to more than its own.
+
+    Category and subcategory budgets are independent thresholds (see
+    ``app.models.category``) — this is deliberately not enforced as a
+    save-time validation error, since either combination is a legitimate
+    setup. It's surfaced instead as a non-blocking warning on the
+    category listing, so an "optimistic" setup (subcategory budgets that
+    only work out if not everyone maxes out at once) is a visible choice
+    rather than a silent one.
+    """
+    if not entry["budget"]:
+        return False
+    subcategory_total = sum(
+        (
+            Decimal(sub["budget"])
+            for sub in entry["subcategories"].values()
+            if sub["budget"]
+        ),
+        start=Decimal(0),
+    )
+    return subcategory_total > Decimal(entry["budget"])
+
+
 def add_category(
-    categories: CategoriesByType, txn_type: TransactionType, name: str, icon: str = ""
+    categories: CategoriesByType,
+    txn_type: TransactionType,
+    name: str,
+    icon: str = "",
+    budget: Decimal | None = None,
 ) -> CategoriesByType:
     """Return ``categories`` with a new category added to ``txn_type``'s tree.
 
     Raises ``ValueError`` if ``name`` is blank, already exists in that
-    tree, or ``icon`` isn't a known icon key.
+    tree, ``icon`` isn't a known icon key, or ``budget`` is negative.
     """
     name = name.strip()
     if not name:
@@ -59,7 +106,11 @@ def add_category(
     if name in tree:
         raise ValueError(f"category '{name}' already exists")
     _validate_icon(icon)
-    tree[name] = {"icon": icon, "subcategories": {}}
+    tree[name] = {
+        "icon": icon,
+        "budget": _budget_str(txn_type, budget),
+        "subcategories": {},
+    }
     return _with_tree(categories, txn_type, tree)
 
 
@@ -70,13 +121,14 @@ def update_category(
     *,
     name: str,
     icon: str = "",
+    budget: Decimal | None = None,
 ) -> CategoriesByType:
-    """Return ``categories`` with ``current_name`` renamed/re-iconed.
+    """Return ``categories`` with ``current_name`` renamed/re-iconed/re-budgeted.
 
     Keeps ``current_name``'s subcategories under the new name. Raises
     ``ValueError`` if ``current_name`` doesn't exist, ``name`` is blank, a
-    *different* category already uses ``name``, or ``icon`` isn't a known
-    icon key.
+    *different* category already uses ``name``, ``icon`` isn't a known
+    icon key, or ``budget`` is negative.
     """
     name = name.strip()
     if not name:
@@ -89,6 +141,7 @@ def update_category(
     _validate_icon(icon)
     entry = tree.pop(current_name)
     entry["icon"] = icon
+    entry["budget"] = _budget_str(txn_type, budget)
     tree[name] = entry
     return _with_tree(categories, txn_type, tree)
 
@@ -114,12 +167,13 @@ def add_subcategory(
     category_name: str,
     name: str,
     icon: str = "",
+    budget: Decimal | None = None,
 ) -> CategoriesByType:
     """Return ``categories`` with a new subcategory added under ``category_name``.
 
     Raises ``ValueError`` if ``category_name`` doesn't exist, ``name`` is
-    blank or already exists under that category, or ``icon`` isn't a known
-    icon key.
+    blank or already exists under that category, ``icon`` isn't a known
+    icon key, or ``budget`` is negative.
     """
     name = name.strip()
     if not name:
@@ -131,7 +185,7 @@ def add_subcategory(
     if name in subcategories:
         raise ValueError(f"subcategory '{name}' already exists")
     _validate_icon(icon)
-    subcategories[name] = icon
+    subcategories[name] = {"icon": icon, "budget": _budget_str(txn_type, budget)}
     tree[category_name] = {**tree[category_name], "subcategories": subcategories}
     return _with_tree(categories, txn_type, tree)
 
@@ -144,12 +198,13 @@ def update_subcategory(
     *,
     name: str,
     icon: str = "",
+    budget: Decimal | None = None,
 ) -> CategoriesByType:
-    """Return ``categories`` with a subcategory renamed/re-iconed.
+    """Return ``categories`` with a subcategory renamed/re-iconed/re-budgeted.
 
     Raises ``ValueError`` if ``category_name`` or ``current_name`` doesn't
     exist, ``name`` is blank, a *different* subcategory already uses
-    ``name``, or ``icon`` isn't a known icon key.
+    ``name``, ``icon`` isn't a known icon key, or ``budget`` is negative.
     """
     name = name.strip()
     if not name:
@@ -164,7 +219,7 @@ def update_subcategory(
         raise ValueError(f"subcategory '{name}' already exists")
     _validate_icon(icon)
     del subcategories[current_name]
-    subcategories[name] = icon
+    subcategories[name] = {"icon": icon, "budget": _budget_str(txn_type, budget)}
     tree[category_name] = {**tree[category_name], "subcategories": subcategories}
     return _with_tree(categories, txn_type, tree)
 

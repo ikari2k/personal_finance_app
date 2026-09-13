@@ -1,4 +1,4 @@
-{% from "_icons.html" import edit_icon, delete_icon %}
+{% from "_icons.html" import edit_icon, delete_icon, warning_icon %}
 {% from "_category_icons.html" import category_icon %}
 <div id="categories-tree-wrapper" {% if oob %}hx-swap-oob="true"{% endif %}>
   {% if error %}<p class="error">{{ error }}</p>{% endif %}
@@ -28,13 +28,22 @@
               <summary>
                 <span class="glyph-slot{{ ' empty' if not entry.icon }}">{{ category_icon(entry.icon) }}</span>
                 <span class="cat-name">{{ name }}</span>
+                <span class="budget-pill{{ '' if entry.budget else ' empty' }}{{ ' warning' if budget_warnings[txn_type][name] }}"
+                      {% if budget_warnings[txn_type][name] %}
+                        title="Subcategory budgets add up to more than this category's own budget"
+                      {% endif %}>
+                  {% if budget_warnings[txn_type][name] %}
+                    <span class="budget-pill-warning-icon">{{ warning_icon() }}</span>
+                  {% endif %}
+                  {{ "%.2f"|format(entry.budget|float) if entry.budget else "" }}/mo
+                </span>
                 <span class="sub-count-pill{{ '' if entry.subcategories else ' empty' }}"
                       title="{{ entry.subcategories | length }} subcategor{{ 'y' if entry.subcategories | length == 1 else 'ies' }}">
                   {{ entry.subcategories | length }}
                 </span>
               </summary>
               <div class="sub-list">
-                {% for sub_name, sub_icon in entry.subcategories | dictsort %}
+                {% for sub_name, sub_entry in entry.subcategories | dictsort %}
                   <div class="sub-row-wrap">
                     <span class="row-actions">
                       <button type="button" class="icon-edit" aria-label="Edit subcategory"
@@ -48,8 +57,11 @@
                       </button>
                     </span>
                     <div class="sub-row">
-                      <span class="glyph-slot sub{{ ' empty' if not sub_icon }}">{{ category_icon(sub_icon) }}</span>
+                      <span class="glyph-slot sub{{ ' empty' if not sub_entry.icon }}">{{ category_icon(sub_entry.icon) }}</span>
                       <span class="sub-name">{{ sub_name }}</span>
+                      {% if sub_entry.budget %}
+                        <span class="budget-pill">{{ "%.2f"|format(sub_entry.budget|float) }}/mo</span>
+                      {% endif %}
                     </div>
                   </div>
                 {% endfor %}
