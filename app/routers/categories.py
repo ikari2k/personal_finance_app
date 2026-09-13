@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 
-from app.models.category import VALID_ICONS
+from app.models.category import ICON_HINTS, VALID_ICONS
 from app.models.transaction import TransactionType
 from app.routers.htmx_events import toast
 from app.services.categories import (
@@ -66,6 +66,7 @@ def _render_form(
             "values": values,
             "editing": editing,
             "icon_keys": ICON_KEYS,
+            "icon_hints": ICON_HINTS,
             "error": error,
         },
     )

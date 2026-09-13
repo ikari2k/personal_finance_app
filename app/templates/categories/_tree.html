@@ -28,6 +28,10 @@
               <summary>
                 <span class="glyph-slot{{ ' empty' if not entry.icon }}">{{ category_icon(entry.icon) }}</span>
                 <span class="cat-name">{{ name }}</span>
+                <span class="sub-count-pill{{ '' if entry.subcategories else ' empty' }}"
+                      title="{{ entry.subcategories | length }} subcategor{{ 'y' if entry.subcategories | length == 1 else 'ies' }}">
+                  {{ entry.subcategories | length }}
+                </span>
               </summary>
               <div class="sub-list">
                 {% for sub_name, sub_icon in entry.subcategories | dictsort %}

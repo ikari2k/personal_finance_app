@@ -12,6 +12,15 @@
   --pico-font-family:
     "JetBrains Mono Variable", ui-monospace, "SFMono-Regular", Menlo, Consolas,
     monospace;
+  /* Two size tiers for the vendored category icon set (_category_icons.html),
+   * shared across every place they render — the categories page's category
+   * rows and the icon-picker grid use --category-icon-size (the picker is
+   * literally previewing what a category-row icon looks like, so they must
+   * match); the categories page's subcategory rows and the transactions
+   * list's inline glyphs use --subcategory-icon-size. Change a size here,
+   * not per-selector, to keep all three contexts in sync. */
+  --category-icon-size: 22px;
+  --subcategory-icon-size: 18px;
 }
 
 .amount-negative {
@@ -32,9 +41,9 @@
 }
 
 .cat-cell-icon svg {
-  width: 18px;
-  height: 18px;
-  stroke-width: 1.6;
+  width: var(--subcategory-icon-size);
+  height: var(--subcategory-icon-size);
+  stroke-width: 1.5;
 }
 
 /* Colored to match the type-group headers/CTA buttons (income green,
@@ -533,15 +542,38 @@ button.add-btn {
 
 details.cat-row summary {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto 1fr auto auto;
   align-items: center;
   column-gap: 0.6rem;
   padding: 0.55rem 0;
 }
 
+/* Subcategory count, so it's obvious at a glance which categories are
+ * worth expanding. Always rendered (even at zero) so the chevron stays
+ * in the same grid column/x-position across every row — see the
+ * .month-section summary comment above for why that matters — and just
+ * hidden rather than removed when there's nothing to show. */
+.sub-count-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.5rem;
+  height: 1.3rem;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  background: rgba(127, 127, 127, 0.18);
+  color: var(--pico-muted-color);
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.sub-count-pill.empty {
+  visibility: hidden;
+}
+
 .glyph-slot {
-  width: 1.8rem;
-  height: 1.8rem;
+  width: 2.5rem;
+  height: 2.5rem;
   border-radius: var(--pico-border-radius);
   display: inline-flex;
   align-items: center;
@@ -550,19 +582,26 @@ details.cat-row summary {
   flex-shrink: 0;
 }
 
+.glyph-slot svg {
+  width: var(--category-icon-size);
+  height: var(--category-icon-size);
+  stroke-width: 1.3;
+}
+
 .glyph-slot.empty {
   border: 1px dashed var(--pico-muted-border-color);
   background: transparent;
 }
 
 .glyph-slot.sub {
-  width: 1.5rem;
-  height: 1.5rem;
+  width: 2rem;
+  height: 2rem;
 }
 
 .glyph-slot.sub svg {
-  width: 13px;
-  height: 13px;
+  width: var(--subcategory-icon-size);
+  height: var(--subcategory-icon-size);
+  stroke-width: 1.5;
 }
 
 .sub-list {
@@ -612,9 +651,9 @@ fieldset legend {
 
 .icon-grid {
   display: grid;
-  grid-template-columns: repeat(8, 1fr);
+  grid-template-columns: repeat(7, 1fr);
   gap: 0.4rem;
-  max-height: 9.5rem;
+  max-height: 12.5rem;
   overflow-y: auto;
   padding: 0.5rem;
   border: 1px solid var(--pico-form-element-border-color);
@@ -623,8 +662,8 @@ fieldset legend {
 }
 
 .icon-choice-wrap {
-  width: 2.1rem;
-  height: 2.1rem;
+  width: 2.5rem;
+  height: 2.5rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -633,6 +672,12 @@ fieldset legend {
   cursor: pointer;
   margin-bottom: 0;
   color: var(--pico-color);
+}
+
+.icon-choice-wrap svg {
+  width: var(--category-icon-size);
+  height: var(--category-icon-size);
+  stroke-width: 1.3;
 }
 
 .icon-choice-wrap input[type="radio"] {
