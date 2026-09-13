@@ -210,15 +210,16 @@ def new_transaction_form(request: Request, txn_type: TransactionType) -> HTMLRes
 def edit_transaction_form(request: Request, transaction_id: str) -> HTMLResponse:
     """Render the edit form for an existing income/expense transaction.
 
-    Transfers can't be edited this way (only deleted, as a pair) — see
-    ``services.transactions.update_transaction`` for why.
+    Transfers can't be edited via this route — both legs must change
+    together, which ``app.routers.transfers``'s own edit route
+    (``GET /transfers/{transfer_id}/edit``) handles instead.
     """
     transaction = next((t for t in read_ledger() if t.id == transaction_id), None)
     if transaction is None:
         return HTMLResponse("Transaction not found", status_code=404)
     if transaction.type is TransactionType.TRANSFER:
         return HTMLResponse(
-            "Transfers can't be edited directly; delete and re-record instead.",
+            "Transfers are edited via the transfer dialog, not here.",
             status_code=400,
         )
     values = {

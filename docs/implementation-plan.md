@@ -369,6 +369,41 @@ unit-testable without touching disk. `routers/` stays thin — HTTP/HTMX glue on
     `tests/integration/test_accounts_router.py`) and repeated live smoke tests (including
     pixel-level measurement of column edges) against the running app.
 
+- [x] **Post-2.7 addendum — Transfer editing, and dialog-form redesign for income/expense/
+  transfer**: two related requests that came in once 2.7 shipped; not part of the original phased
+  plan, recorded here rather than folded into an existing phase's checklist.
+  - **The income/expense/transfer dialogs now use the same compact 2-column grid + outlined
+    Cancel/primary Save footer the account form already used** (`.form-grid-2`/`.dialog-footer`
+    in `app/static/style.css` — reused as-is, not reimplemented). Transaction form pairs:
+    Account+Date, Category+Subcategory, Description+Amount, Notes full-width. Transfer form
+    pairs: From+To account, Date+Amount, Description+Notes.
+  - **Dialog titles are now generic** ("Income", "Expense", "Transfer" — matching the account
+    dialog's plain "Account") instead of the previous action-specific "Add income"/"Add
+    expense"/"Record transfer", which read wrong once editing reused the same dialog and showed a
+    "Save changes" button under an "Add expense" heading. Reuse the generic-title convention for
+    any future dialog rather than re-introducing an action-specific one that goes stale on edit.
+  - **Transfers can now be edited in place** — `app.services.transactions.update_transfer_pair`
+    rebuilds both legs from the submitted field values and swaps them in together (never one
+    without the other, preserving the invariant in CLAUDE.md's "Key invariants" section), keeping
+    each leg's original `id`. `update_transaction` still refuses to touch a transfer leg directly
+    (single-row edits can't safely do this) and its error message now points callers at
+    `update_transfer_pair` instead of "delete and re-record" — that phrasing is gone from the
+    code, though deleting and re-recording still works fine as an alternative, it's just no
+    longer the *only* option.
+  - **Router/template wiring**: `GET /transfers/{transfer_id}/edit` (prefilled from whichever leg
+    is the outflow vs. inflow, by amount sign) and `POST /transfers/{transfer_id}` (mirrors
+    `create_transfer`'s validation/error-rendering shape) in `app/routers/transfers.py`.
+    `transactions/_table.html`'s row-actions Edit icon is no longer conditionally hidden for
+    transfer rows — it now branches its `hx-get` URL by type (`/transfers/{transfer_id}/edit` vs
+    `/transactions/{id}/edit`) but always targets `#{{ txn.type.value }}-dialog-content`, which
+    already resolves to the right dialog for all three types without extra plumbing.
+  - *Verified*: unit tests for `update_transfer_pair` (both legs replaced keeping ids, unknown
+    transfer id / unknown account / same account / non-positive amount all rejected) in
+    `tests/unit/test_service_transactions.py`; integration tests for the edit-form prefill and
+    the update route (including that a rejected edit leaves the ledger unchanged) in
+    `tests/integration/test_transfers_router.py`; live smoke test confirming the dialog title,
+    "Save changes" label, dialog close, toast, and updated row all behave correctly end to end.
+
 - [ ] **Phase 3 — Bank CSV import**: upload + parse endpoint, mapping-setup UI persisted to
   `config/import_mappings/<bank>.toml`, auto-reuse on next import from the same bank,
   `services/importer.py` applying import-time regex rules via `services/categorizer.py`.

@@ -122,16 +122,16 @@ def update_transaction(
     amount, ``TRANSFER`` type all raise ``ValueError``), but keeps the
     original ``id`` rather than minting a new one. Also raises
     ``ValueError`` if no transaction with ``transaction_id`` exists, or if
-    it currently *is* a transfer leg — transfers can't be edited in place
-    (see ``remove_transaction``'s docstring for why) — the caller should
-    offer delete-and-re-record instead.
+    it currently *is* a transfer leg — a transfer's two rows must change
+    together or not at all, which this single-row function can't do; use
+    ``update_transfer_pair`` instead.
     """
     existing = next((t for t in transactions if t.id == transaction_id), None)
     if existing is None:
         raise ValueError(f"no transaction with id '{transaction_id}'")
     if existing.type is TransactionType.TRANSFER:
         raise ValueError(
-            "transfers can't be edited directly; delete and re-record instead"
+            "transfers can't be edited via update_transaction; use update_transfer_pair"
         )
 
     signed_amount = _signed_amount(
@@ -150,6 +150,77 @@ def update_transaction(
         notes=notes,
     )
     return [updated if t.id == transaction_id else t for t in transactions]
+
+
+def update_transfer_pair(
+    transactions: list[Transaction],
+    transfer_id: str,
+    account_ids: Iterable[str],
+    *,
+    from_account_id: str,
+    to_account_id: str,
+    date: date_,
+    amount: Decimal,
+    description: str = "",
+    notes: str | None = None,
+) -> list[Transaction]:
+    """Return ``transactions`` with both legs of ``transfer_id`` replaced.
+
+    The single-row ``update_transaction`` refuses to touch a transfer leg
+    (see its docstring) because a transfer is two linked rows that must
+    change together or not at all — this is that atomic path: both legs
+    are rebuilt from the new field values and swapped in together, never
+    just one. Same validation as ``new_transfer_pair`` (unknown account,
+    same account on both sides, non-positive amount all raise
+    ``ValueError``), but each leg keeps its original ``id`` rather than
+    minting new ones. Category/subcategory are carried over from the
+    existing legs unchanged (transfers always use the fixed "Transfer"
+    category — the edit form doesn't expose it). Raises ``ValueError`` if
+    ``transfer_id`` doesn't identify exactly one outflow and one inflow
+    row.
+    """
+    legs = [t for t in transactions if t.transfer_id == transfer_id]
+    outflow = next((t for t in legs if t.amount < 0), None)
+    inflow = next((t for t in legs if t.amount > 0), None)
+    if len(legs) != 2 or outflow is None or inflow is None:
+        raise ValueError(f"no transfer with id '{transfer_id}'")
+
+    known_ids = set(account_ids)
+    if from_account_id not in known_ids:
+        raise ValueError(f"unknown account_id '{from_account_id}'")
+    if to_account_id not in known_ids:
+        raise ValueError(f"unknown account_id '{to_account_id}'")
+    if from_account_id == to_account_id:
+        raise ValueError("a transfer must be between two different accounts")
+    if amount <= 0:
+        raise ValueError("amount must be positive")
+
+    updated_outflow = Transaction(
+        id=outflow.id,
+        date=date,
+        account_id=from_account_id,
+        category=outflow.category,
+        subcategory=outflow.subcategory,
+        description=description,
+        amount=-amount,
+        type=TransactionType.TRANSFER,
+        transfer_id=transfer_id,
+        notes=notes,
+    )
+    updated_inflow = Transaction(
+        id=inflow.id,
+        date=date,
+        account_id=to_account_id,
+        category=inflow.category,
+        subcategory=inflow.subcategory,
+        description=description,
+        amount=amount,
+        type=TransactionType.TRANSFER,
+        transfer_id=transfer_id,
+        notes=notes,
+    )
+    replacements = {outflow.id: updated_outflow, inflow.id: updated_inflow}
+    return [replacements.get(t.id, t) for t in transactions]
 
 
 def remove_transaction(

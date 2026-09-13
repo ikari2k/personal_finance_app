@@ -12,6 +12,7 @@ from app.services.transactions import (
     new_transfer_pair,
     remove_transaction,
     update_transaction,
+    update_transfer_pair,
 )
 
 ACCOUNT_IDS = ["chk", "sav"]
@@ -301,3 +302,116 @@ def test_remove_transaction_deletes_both_legs_of_a_transfer():
     result = remove_transaction([outflow, inflow, other], "t1")
 
     assert [t.id for t in result] == ["t3"]
+
+
+def _transfer_pair(transfer_id="x1", amount=Decimal("-100"), **overrides):
+    outflow = _txn(
+        id="t1",
+        account_id="chk",
+        amount=amount,
+        type=TransactionType.TRANSFER,
+        category="Transfer",
+        subcategory="",
+        transfer_id=transfer_id,
+        **overrides,
+    )
+    inflow = _txn(
+        id="t2",
+        account_id="sav",
+        amount=-amount,
+        type=TransactionType.TRANSFER,
+        category="Transfer",
+        subcategory="",
+        transfer_id=transfer_id,
+        **overrides,
+    )
+    return outflow, inflow
+
+
+def test_update_transfer_pair_replaces_both_legs_keeping_ids():
+    outflow, inflow = _transfer_pair()
+    other = _txn(id="t3")
+
+    result = update_transfer_pair(
+        [outflow, inflow, other],
+        "x1",
+        ["chk", "sav", "cc"],
+        from_account_id="sav",
+        to_account_id="cc",
+        date=date(2026, 3, 3),
+        amount=Decimal("250"),
+        description="renamed",
+        notes="edited",
+    )
+
+    by_id = {t.id: t for t in result}
+    assert len(result) == 3
+    assert by_id["t1"].account_id == "sav"
+    assert by_id["t1"].amount == Decimal("-250")
+    assert by_id["t2"].account_id == "cc"
+    assert by_id["t2"].amount == Decimal("250")
+    assert by_id["t1"].transfer_id == "x1"
+    assert by_id["t2"].transfer_id == "x1"
+    assert by_id["t1"].description == "renamed"
+    assert by_id["t2"].notes == "edited"
+    assert by_id["t3"] is other
+
+
+def test_update_transfer_pair_rejects_unknown_transfer_id():
+    outflow, inflow = _transfer_pair()
+
+    with pytest.raises(ValueError):
+        update_transfer_pair(
+            [outflow, inflow],
+            "ghost",
+            ACCOUNT_IDS,
+            from_account_id="chk",
+            to_account_id="sav",
+            date=date(2026, 1, 1),
+            amount=Decimal("10"),
+        )
+
+
+def test_update_transfer_pair_rejects_same_account_on_both_sides():
+    outflow, inflow = _transfer_pair()
+
+    with pytest.raises(ValueError):
+        update_transfer_pair(
+            [outflow, inflow],
+            "x1",
+            ACCOUNT_IDS,
+            from_account_id="chk",
+            to_account_id="chk",
+            date=date(2026, 1, 1),
+            amount=Decimal("10"),
+        )
+
+
+def test_update_transfer_pair_rejects_unknown_account():
+    outflow, inflow = _transfer_pair()
+
+    with pytest.raises(ValueError):
+        update_transfer_pair(
+            [outflow, inflow],
+            "x1",
+            ACCOUNT_IDS,
+            from_account_id="chk",
+            to_account_id="ghost",
+            date=date(2026, 1, 1),
+            amount=Decimal("10"),
+        )
+
+
+def test_update_transfer_pair_rejects_non_positive_amount():
+    outflow, inflow = _transfer_pair()
+
+    with pytest.raises(ValueError):
+        update_transfer_pair(
+            [outflow, inflow],
+            "x1",
+            ACCOUNT_IDS,
+            from_account_id="chk",
+            to_account_id="sav",
+            date=date(2026, 1, 1),
+            amount=Decimal("0"),
+        )

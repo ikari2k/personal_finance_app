@@ -4,11 +4,9 @@
   <tr>
     <td>
       <span class="row-actions">
-        {% if txn.type.value != 'transfer' %}
-          <button type="button" class="icon-edit" aria-label="Edit transaction"
-                  hx-get="/transactions/{{ txn.id }}/edit"
-                  hx-target="#{{ txn.type.value }}-dialog-content" hx-swap="innerHTML">{{ edit_icon() }}</button>
-        {% endif %}
+        <button type="button" class="icon-edit" aria-label="Edit transaction"
+                hx-get="{{ '/transfers/' + txn.transfer_id + '/edit' if txn.type.value == 'transfer' else '/transactions/' + txn.id + '/edit' }}"
+                hx-target="#{{ txn.type.value }}-dialog-content" hx-swap="innerHTML">{{ edit_icon() }}</button>
         <button type="button" class="icon-delete" aria-label="Delete transaction"
                 hx-post="/transactions/{{ txn.id }}/delete"
                 hx-target="#transactions-table-wrapper" hx-swap="outerHTML"

@@ -342,9 +342,12 @@ button.btn-transfer {
 }
 
 /*
- * Account form (add/edit): compacts 5 stacked full-width rows into a
- * 2-column grid (ID+Name, Number+Balance, Description spans full width)
- * so the dialog reads as one compact block instead of a long scroll.
+ * Compact 2-column dialog forms: pairs of related fields (e.g. account
+ * form's ID+Name, transaction form's Account+Date) share a row instead of
+ * each getting its own full-width stacked row, so the dialog reads as one
+ * compact block instead of a long scroll. Applied to account, transaction
+ * (income/expense), and transfer forms alike — see each form's own
+ * template for how its fields are paired.
  */
 .form-grid-2 {
   display: grid;
@@ -352,7 +355,10 @@ button.btn-transfer {
   column-gap: 1rem;
 }
 
-#account-form label {
+#account-form label,
+#transaction-form-income label,
+#transaction-form-expense label,
+#transfer-form label {
   margin-bottom: 0.65rem;
 }
 

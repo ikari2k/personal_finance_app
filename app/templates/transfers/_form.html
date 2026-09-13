@@ -1,37 +1,44 @@
-<form id="transfer-form" hx-post="/transfers"
+<form id="transfer-form"
+      hx-post="{{ '/transfers/' + transfer_id if transfer_id else '/transfers' }}"
       hx-target="#transfer-dialog-content" hx-swap="innerHTML">
   {% if error %}<p class="error">{{ error }}</p>{% endif %}
-  <label>From account
-    <select name="from_account_id" required>
-      {% for account in accounts %}
-        <option value="{{ account.id }}"
-                {{ 'selected' if account.id == values.from_account_id }}>{{ account.name }}</option>
-      {% endfor %}
-    </select>
-  </label>
-  <label>To account
-    <select name="to_account_id" required>
-      {% for account in accounts %}
-        <option value="{{ account.id }}"
-                {{ 'selected' if account.id == values.to_account_id }}>{{ account.name }}</option>
-      {% endfor %}
-    </select>
-  </label>
-  <label>Date
-    <input type="date" name="date" value="{{ values.date }}" required>
-  </label>
-  <label>Amount
-    <input type="text" name="amount" value="{{ values.amount }}" required>
-  </label>
-  <label>Description
-    <input type="text" name="description" value="{{ values.description }}">
-  </label>
-  <label>Notes
-    <input type="text" name="notes" value="{{ values.notes }}">
-  </label>
-  <footer>
-    <button type="button" class="secondary"
+  <div class="form-grid-2">
+    <label>From account
+      <select name="from_account_id" required>
+        {% for account in accounts %}
+          <option value="{{ account.id }}"
+                  {{ 'selected' if account.id == values.from_account_id }}>{{ account.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>To account
+      <select name="to_account_id" required>
+        {% for account in accounts %}
+          <option value="{{ account.id }}"
+                  {{ 'selected' if account.id == values.to_account_id }}>{{ account.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+  </div>
+  <div class="form-grid-2">
+    <label>Date
+      <input type="date" name="date" value="{{ values.date }}" required>
+    </label>
+    <label>Amount
+      <input type="text" name="amount" value="{{ values.amount }}" required>
+    </label>
+  </div>
+  <div class="form-grid-2">
+    <label>Description
+      <input type="text" name="description" value="{{ values.description }}">
+    </label>
+    <label>Notes
+      <input type="text" name="notes" value="{{ values.notes }}">
+    </label>
+  </div>
+  <footer class="dialog-footer">
+    <button type="button" class="btn-outline"
             onclick="document.getElementById('transfer-dialog').close()">Cancel</button>
-    <button type="submit">Record transfer</button>
+    <button type="submit">{{ 'Save changes' if transfer_id else 'Record transfer' }}</button>
   </footer>
 </form>

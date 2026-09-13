@@ -3,43 +3,49 @@
       hx-target="#{{ dialog_content_id }}" hx-swap="innerHTML">
   {% if error %}<p class="error">{{ error }}</p>{% endif %}
   <input type="hidden" name="type" value="{{ values.type }}">
-  <label>Account
-    <select name="account_id" required>
-      {% for account in accounts %}
-        <option value="{{ account.id }}" {{ 'selected' if account.id == values.account_id }}>
-          {{ account.name }}
-        </option>
-      {% endfor %}
-    </select>
-  </label>
-  <label>Date
-    <input type="date" name="date" value="{{ values.date }}" required>
-  </label>
-  <label>Category (type to create a new one)
-    <input type="text" name="category" list="category-options-{{ values.type }}"
-           value="{{ values.category }}" required>
-    <datalist id="category-options-{{ values.type }}">
-      {% for category in categories %}<option value="{{ category }}">{% endfor %}
-    </datalist>
-  </label>
-  <label>Subcategory (type to create a new one)
-    <input type="text" name="subcategory" list="subcategory-options-{{ values.type }}"
-           value="{{ values.subcategory }}">
-    <datalist id="subcategory-options-{{ values.type }}">
-      {% for subcategory in subcategories %}<option value="{{ subcategory }}">{% endfor %}
-    </datalist>
-  </label>
-  <label>Description
-    <input type="text" name="description" value="{{ values.description }}">
-  </label>
-  <label>Amount
-    <input type="text" name="amount" value="{{ values.amount }}" required>
-  </label>
+  <div class="form-grid-2">
+    <label>Account
+      <select name="account_id" required>
+        {% for account in accounts %}
+          <option value="{{ account.id }}" {{ 'selected' if account.id == values.account_id }}>
+            {{ account.name }}
+          </option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Date
+      <input type="date" name="date" value="{{ values.date }}" required>
+    </label>
+  </div>
+  <div class="form-grid-2">
+    <label>Category (type to create a new one)
+      <input type="text" name="category" list="category-options-{{ values.type }}"
+             value="{{ values.category }}" required>
+      <datalist id="category-options-{{ values.type }}">
+        {% for category in categories %}<option value="{{ category }}">{% endfor %}
+      </datalist>
+    </label>
+    <label>Subcategory (type to create a new one)
+      <input type="text" name="subcategory" list="subcategory-options-{{ values.type }}"
+             value="{{ values.subcategory }}">
+      <datalist id="subcategory-options-{{ values.type }}">
+        {% for subcategory in subcategories %}<option value="{{ subcategory }}">{% endfor %}
+      </datalist>
+    </label>
+  </div>
+  <div class="form-grid-2">
+    <label>Description
+      <input type="text" name="description" value="{{ values.description }}">
+    </label>
+    <label>Amount
+      <input type="text" name="amount" value="{{ values.amount }}" required>
+    </label>
+  </div>
   <label>Notes
     <input type="text" name="notes" value="{{ values.notes }}">
   </label>
-  <footer>
-    <button type="button" class="secondary"
+  <footer class="dialog-footer">
+    <button type="button" class="btn-outline"
             onclick="document.getElementById('{{ dialog_id }}').close()">Cancel</button>
     <button type="submit">
       {% if transaction_id %}

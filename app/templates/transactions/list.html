@@ -27,7 +27,7 @@
       <header>
         <button aria-label="Close" rel="prev"
                 onclick="document.getElementById('income-dialog').close()"></button>
-        <strong>Add income</strong>
+        <strong>Income</strong>
       </header>
       <div id="income-dialog-content"
            hx-on::after-swap="if (this.firstElementChild) { const d = this.closest('dialog'); if (!d.open) d.showModal(); }"></div>
@@ -40,7 +40,7 @@
       <header>
         <button aria-label="Close" rel="prev"
                 onclick="document.getElementById('expense-dialog').close()"></button>
-        <strong>Add expense</strong>
+        <strong>Expense</strong>
       </header>
       <div id="expense-dialog-content"
            hx-on::after-swap="if (this.firstElementChild) { const d = this.closest('dialog'); if (!d.open) d.showModal(); }"></div>
@@ -53,7 +53,7 @@
       <header>
         <button aria-label="Close" rel="prev"
                 onclick="document.getElementById('transfer-dialog').close()"></button>
-        <strong>Record transfer</strong>
+        <strong>Transfer</strong>
       </header>
       <div id="transfer-dialog-content"
            hx-on::after-swap="if (this.firstElementChild) { const d = this.closest('dialog'); if (!d.open) d.showModal(); }"></div>

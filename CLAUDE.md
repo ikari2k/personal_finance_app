@@ -6,12 +6,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Phases 0–2, 2.6, and 2.7 are complete: storage/locking (Phase 1), a working HTMX UI for accounts
 (CRUD, starting balance shown, click-through to filtered transactions), manual transaction
-entry/edit/delete (with on-the-fly category/subcategory creation), transfers (create +
-pair-delete), balance display, and a redesigned transactions list (month/type grouping — now
-sticky across navigation via cookie — and account filter) — all covered by passing tests, and
-manually smoke-tested live via `scripts/seed_sample_data.py`. Phase 2.5 (categories management)
-has not started, nor has Phase 3 (bank CSV import). See `docs/implementation-plan.md` for the full
-phased plan, finalized schemas, and per-phase status checkboxes/implementation notes.
+entry/edit/delete (with on-the-fly category/subcategory creation), transfers (create, edit-both-
+legs-together, and pair-delete), balance display, and a redesigned transactions list (month/type
+grouping and account filter — both now sticky across navigation via cookies) — all covered by
+passing tests, and manually smoke-tested live via `scripts/seed_sample_data.py`. Every add/edit/
+delete dialog form (accounts, transactions, transfers) shares the same compact 2-column layout and
+fires an app-wide success toast on completion. Phase 2.5 (categories management) has not started,
+nor has Phase 3 (bank CSV import). See `docs/implementation-plan.md` for the full phased plan,
+finalized schemas, and per-phase status checkboxes/implementation notes.
 
 **Work proceeds one phase at a time.** Each phase in `docs/implementation-plan.md` is a discrete,
 separately-reviewable unit — implement it, verify it, stop, and update docs (this file plus the
@@ -339,7 +341,8 @@ See `docs/implementation-plan.md` for the full phase-by-phase plan and status:
 1. Core ledger read/write + file locking + consistency check
 2. Accounts, manual transaction entry, transfers, balance calculation
 2.5. Categories management (dedicated add/rename/delete UI)
-2.6. Edit/delete transactions (transfers: delete-both-legs only, never edit-in-place)
+2.6. Edit/delete transactions (transfers: delete-both-legs; in-place editing of both legs
+   together added post-2.6, see below)
 2.7. Account view improvements (starting balance shown, click-through to filtered
    transactions, sticky month/type grouping via cookie)
    — 2.5/2.6/2.7 are inserted between 2 and 3, not renumbered into the sequence below, to avoid
