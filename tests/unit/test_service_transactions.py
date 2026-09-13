@@ -38,41 +38,53 @@ def _txn(**overrides) -> Transaction:
 def test_ensure_category_adds_new_category_and_subcategory():
     result = ensure_category({}, TransactionType.EXPENSE, "Groceries", "Supermarket")
 
-    assert result == {"expense": {"Groceries": ["Supermarket"]}}
+    assert result == {
+        "expense": {"Groceries": {"icon": "", "subcategories": {"Supermarket": ""}}}
+    }
 
 
 def test_ensure_category_does_not_duplicate_existing_subcategory():
-    existing = {"expense": {"Groceries": ["Supermarket"]}}
+    existing = {
+        "expense": {
+            "Groceries": {"icon": "cart", "subcategories": {"Supermarket": "store"}}
+        }
+    }
 
     result = ensure_category(
         existing, TransactionType.EXPENSE, "Groceries", "Supermarket"
     )
 
-    assert result == {"expense": {"Groceries": ["Supermarket"]}}
+    assert result == existing
 
 
 def test_ensure_category_does_not_mutate_the_input():
-    existing = {"expense": {"Groceries": ["Supermarket"]}}
+    existing = {
+        "expense": {"Groceries": {"icon": "", "subcategories": {"Supermarket": ""}}}
+    }
 
     ensure_category(existing, TransactionType.EXPENSE, "Groceries", "Restaurants")
 
-    assert existing == {"expense": {"Groceries": ["Supermarket"]}}
+    assert existing == {
+        "expense": {"Groceries": {"icon": "", "subcategories": {"Supermarket": ""}}}
+    }
 
 
 def test_ensure_category_skips_blank_subcategory():
     result = ensure_category({}, TransactionType.EXPENSE, "Groceries", "")
 
-    assert result == {"expense": {"Groceries": []}}
+    assert result == {"expense": {"Groceries": {"icon": "", "subcategories": {}}}}
 
 
 def test_ensure_category_keeps_income_and_expense_trees_separate():
-    existing = {"expense": {"Groceries": ["Supermarket"]}}
+    existing = {
+        "expense": {"Groceries": {"icon": "", "subcategories": {"Supermarket": ""}}}
+    }
 
     result = ensure_category(existing, TransactionType.INCOME, "Salary", "")
 
     assert result == {
-        "expense": {"Groceries": ["Supermarket"]},
-        "income": {"Salary": []},
+        "expense": {"Groceries": {"icon": "", "subcategories": {"Supermarket": ""}}},
+        "income": {"Salary": {"icon": "", "subcategories": {}}},
     }
 
 

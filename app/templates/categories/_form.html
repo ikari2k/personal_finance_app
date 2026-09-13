@@ -1,0 +1,28 @@
+{% from "_category_icons.html" import category_icon %}
+<form id="category-form" hx-post="{{ action_url }}"
+      hx-target="#{{ dialog_content_id }}" hx-swap="innerHTML">
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <label>Name
+    <input type="text" name="name" value="{{ values.name }}" required autofocus>
+  </label>
+  <fieldset>
+    <legend>Icon</legend>
+    <div class="icon-grid">
+      <label class="icon-choice-wrap">
+        <input type="radio" name="icon" value="" {{ 'checked' if not values.icon }}>
+        <span class="icon-none">&ndash;</span>
+      </label>
+      {% for key in icon_keys %}
+        <label class="icon-choice-wrap">
+          <input type="radio" name="icon" value="{{ key }}" {{ 'checked' if values.icon == key }}>
+          <span class="icon-choice">{{ category_icon(key) }}</span>
+        </label>
+      {% endfor %}
+    </div>
+  </fieldset>
+  <footer class="dialog-footer">
+    <button type="button" class="btn-outline"
+            onclick="document.getElementById('{{ dialog_id }}').close()">Cancel</button>
+    <button type="submit">{{ 'Save changes' if editing else ('Add ' + kind) }}</button>
+  </footer>
+</form>

@@ -22,6 +22,36 @@
   color: var(--pico-ins-color);
 }
 
+/* Category/subcategory glyphs inline in the transactions list's Category
+ * cell (see transactions/_table.html's txn_row macro) — sized down and
+ * vertically nudged to sit on the text baseline rather than the icon's
+ * own box center. */
+.cat-cell-icon {
+  display: inline-flex;
+  vertical-align: -4px;
+}
+
+.cat-cell-icon svg {
+  width: 18px;
+  height: 18px;
+  stroke-width: 1.6;
+}
+
+/* Colored to match the type-group headers/CTA buttons (income green,
+ * expense red, transfer amber) regardless of whether type grouping is on
+ * — a flat (ungrouped) list has no .type-group ancestor to inherit from. */
+.cat-cell-icon-income {
+  color: #15803d;
+}
+
+.cat-cell-icon-expense {
+  color: #b91c1c;
+}
+
+.cat-cell-icon-transfer {
+  color: #b45309;
+}
+
 .error {
   color: var(--pico-del-color);
   font-weight: 600;
@@ -117,7 +147,11 @@
 }
 
 tr:hover .row-actions,
-tr:focus-within .row-actions {
+tr:focus-within .row-actions,
+.cat-row-wrap:hover > .row-actions,
+.cat-row-wrap:focus-within > .row-actions,
+.sub-row-wrap:hover .row-actions,
+.sub-row-wrap:focus-within .row-actions {
   opacity: 1;
 }
 
@@ -437,4 +471,197 @@ button.btn-outline:hover {
 .toast.show {
   opacity: 1;
   transform: translateY(0);
+}
+
+/*
+ * Categories page (Phase 2.5): Income/Expense as two side-by-side
+ * columns, each a flat list of category rows expandable (native
+ * <details>, matching the transactions list's month-section convention)
+ * to reveal their subcategories. Row-actions reuse the app-wide
+ * hover-reveal .row-actions pattern (see the row-actions comment above)
+ * via .cat-row-wrap/.sub-row-wrap standing in for a table's <tr>.
+ */
+#categories-tree-wrapper .columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3rem;
+}
+
+.cat-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 2px solid currentColor;
+}
+
+.cat-section-header.income {
+  color: #15803d;
+}
+
+.cat-section-header.expense {
+  color: #b91c1c;
+}
+
+.cat-section-header .label {
+  font-weight: 700;
+  color: inherit;
+}
+
+button.add-btn {
+  font-size: 0.78rem;
+  padding: 0.35rem 0.7rem;
+  border: none;
+  color: #fff;
+  margin-bottom: 0;
+  width: auto;
+}
+
+.add-btn.income-btn {
+  background: #15803d;
+}
+
+.add-btn.expense-btn {
+  background: #b91c1c;
+}
+
+.cat-row-wrap,
+.sub-row-wrap {
+  position: relative;
+}
+
+details.cat-row summary {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  column-gap: 0.6rem;
+  padding: 0.55rem 0;
+}
+
+.glyph-slot {
+  width: 1.8rem;
+  height: 1.8rem;
+  border-radius: var(--pico-border-radius);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(127, 127, 127, 0.1);
+  flex-shrink: 0;
+}
+
+.glyph-slot.empty {
+  border: 1px dashed var(--pico-muted-border-color);
+  background: transparent;
+}
+
+.glyph-slot.sub {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+.glyph-slot.sub svg {
+  width: 13px;
+  height: 13px;
+}
+
+.sub-list {
+  padding-left: 2.3rem;
+  border-left: 1px solid var(--pico-muted-border-color);
+  margin-left: 0.9rem;
+  padding-bottom: 0.4rem;
+}
+
+.sub-row {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.4rem 0;
+}
+
+.add-sub-ghost {
+  font-family: inherit;
+  font-size: 0.78rem;
+  color: var(--pico-muted-color);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.4rem 0;
+  margin-bottom: 0;
+  width: auto;
+}
+
+.add-sub-ghost:hover {
+  color: var(--pico-color);
+}
+
+/* Icon picker grid (category/subcategory add-edit dialog): a scrollable
+ * grid of the vendored icon set, each a plain radio input wrapped in a
+ * label so the selected state (:has(input:checked)) needs no JS. */
+fieldset {
+  border: none;
+  padding: 0;
+  margin: 0 0 1rem;
+}
+
+fieldset legend {
+  font-size: 0.85rem;
+  margin-bottom: 0.35rem;
+  padding: 0;
+}
+
+.icon-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 0.4rem;
+  max-height: 9.5rem;
+  overflow-y: auto;
+  padding: 0.5rem;
+  border: 1px solid var(--pico-form-element-border-color);
+  border-radius: var(--pico-border-radius);
+  background: var(--pico-form-element-background-color);
+}
+
+.icon-choice-wrap {
+  width: 2.1rem;
+  height: 2.1rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: var(--pico-border-radius);
+  cursor: pointer;
+  margin-bottom: 0;
+  color: var(--pico-color);
+}
+
+.icon-choice-wrap input[type="radio"] {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  margin: 0;
+  pointer-events: none;
+}
+
+.icon-choice-wrap:hover {
+  background: rgba(127, 127, 127, 0.14);
+}
+
+.icon-choice-wrap:has(input:checked) {
+  background: rgba(1, 114, 173, 0.14);
+  border-color: var(--pico-primary-background);
+  color: var(--pico-primary-background);
+}
+
+.icon-none {
+  color: var(--pico-muted-color);
+  font-size: 0.9rem;
+}
+
+@media (max-width: 700px) {
+  #categories-tree-wrapper .columns {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
 }

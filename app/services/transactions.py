@@ -32,13 +32,16 @@ def ensure_category(
     if txn_type is TransactionType.TRANSFER:
         raise ValueError("transfers do not use the managed category tree")
     updated = {
-        bucket: {name: list(subs) for name, subs in tree.items()}
+        bucket: {
+            name: {"icon": entry["icon"], "subcategories": dict(entry["subcategories"])}
+            for name, entry in tree.items()
+        }
         for bucket, tree in categories.items()
     }
     tree = updated.setdefault(txn_type.value, {})
-    subcategories = tree.setdefault(category, [])
-    if subcategory and subcategory not in subcategories:
-        subcategories.append(subcategory)
+    entry = tree.setdefault(category, {"icon": "", "subcategories": {}})
+    if subcategory and subcategory not in entry["subcategories"]:
+        entry["subcategories"][subcategory] = ""
     return updated
 
 

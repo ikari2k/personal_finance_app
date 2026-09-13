@@ -1,6 +1,10 @@
 {% from "_icons.html" import edit_icon, delete_icon %}
+{% from "_category_icons.html" import category_icon %}
 
-{% macro txn_row(txn, accounts, show_account) %}
+{% macro txn_row(txn, accounts, show_account, categories) %}
+  {% set cat_entry = categories.get(txn.type.value, {}).get(txn.category, {}) %}
+  {% set cat_icon = cat_entry.get('icon', '') %}
+  {% set sub_icon = cat_entry.get('subcategories', {}).get(txn.subcategory, '') %}
   <tr>
     <td>
       <span class="row-actions">
@@ -19,7 +23,14 @@
     {% if show_account %}
       <td>{{ accounts[txn.account_id].name if txn.account_id in accounts else txn.account_id }}</td>
     {% endif %}
-    <td>{{ txn.category }}{% if txn.subcategory %} / {{ txn.subcategory }}{% endif %}</td>
+    <td class="cat-cell">
+      {% if cat_icon %}<span class="cat-cell-icon cat-cell-icon-{{ txn.type.value }}">{{ category_icon(cat_icon) }}</span>{% endif %}
+      {{ txn.category }}
+      {%- if txn.subcategory %} /
+        {% if sub_icon %}<span class="cat-cell-icon cat-cell-icon-{{ txn.type.value }}">{{ category_icon(sub_icon) }}</span>{% endif %}
+        {{ txn.subcategory }}
+      {%- endif %}
+    </td>
     <td>{{ txn.description }}</td>
     <td class="{{ 'amount-negative' if txn.amount < 0 else 'amount-positive' }}">
       {{ "%.2f"|format(txn.amount) }}
@@ -46,7 +57,7 @@
   </colgroup>
 {% endmacro %}
 
-{% macro month_body(month, by_type, accounts, show_account) %}
+{% macro month_body(month, by_type, accounts, show_account, categories) %}
   {% if by_type %}
     {% for group in month.groups %}
       <div class="type-group" data-type="{{ group.type.value }}">
@@ -57,7 +68,7 @@
         <table>
           {{ txn_colgroup(show_account) }}
           <tbody>
-            {% for txn in group.transactions %}{{ txn_row(txn, accounts, show_account) }}{% endfor %}
+            {% for txn in group.transactions %}{{ txn_row(txn, accounts, show_account, categories) }}{% endfor %}
           </tbody>
         </table>
       </div>
@@ -66,7 +77,7 @@
     <table>
       {{ txn_colgroup(show_account) }}
       <tbody>
-        {% for txn in month.transactions %}{{ txn_row(txn, accounts, show_account) }}{% endfor %}
+        {% for txn in month.transactions %}{{ txn_row(txn, accounts, show_account, categories) }}{% endfor %}
       </tbody>
     </table>
   {% endif %}
@@ -118,7 +129,7 @@
             {{ "%.2f"|format(month.net_total) }}
           </span>
         </summary>
-        {{ month_body(month, by_type, accounts, not account_id) }}
+        {{ month_body(month, by_type, accounts, not account_id, categories) }}
       </details>
     {% else %}
       <div class="flat-net-total">
@@ -127,7 +138,7 @@
           {{ "%.2f"|format(month.net_total) }}
         </span>
       </div>
-      {{ month_body(month, by_type, accounts, not account_id) }}
+      {{ month_body(month, by_type, accounts, not account_id, categories) }}
     {% endif %}
   {% else %}
     <p>No transactions yet.</p>

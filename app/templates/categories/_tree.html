@@ -1,0 +1,64 @@
+{% from "_icons.html" import edit_icon, delete_icon %}
+{% from "_category_icons.html" import category_icon %}
+<div id="categories-tree-wrapper" {% if oob %}hx-swap-oob="true"{% endif %}>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <div class="columns">
+    {% for txn_type, label in [("income", "Income"), ("expense", "Expense")] %}
+      <div>
+        <div class="cat-section-header {{ txn_type }}">
+          <span class="label">{{ label }}</span>
+          <button type="button" class="add-btn {{ txn_type }}-btn"
+                  hx-get="/categories/{{ txn_type }}/new"
+                  hx-target="#category-dialog-content" hx-swap="innerHTML">+ Add category</button>
+        </div>
+        {% for name, entry in categories[txn_type] | dictsort %}
+          <div class="cat-row-wrap">
+            <span class="row-actions">
+              <button type="button" class="icon-edit" aria-label="Edit category"
+                      hx-get="/categories/{{ txn_type }}/{{ name | urlencode }}/edit"
+                      hx-target="#category-dialog-content" hx-swap="innerHTML">{{ edit_icon() }}</button>
+              <button type="button" class="icon-delete" aria-label="Delete category"
+                      hx-post="/categories/{{ txn_type }}/{{ name | urlencode }}/delete"
+                      hx-target="#categories-tree-wrapper" hx-swap="outerHTML"
+                      hx-confirm="Delete category &quot;{{ name }}&quot;? This also deletes its subcategories and cannot be undone.">
+                {{ delete_icon() }}
+              </button>
+            </span>
+            <details class="cat-row">
+              <summary>
+                <span class="glyph-slot{{ ' empty' if not entry.icon }}">{{ category_icon(entry.icon) }}</span>
+                <span class="cat-name">{{ name }}</span>
+              </summary>
+              <div class="sub-list">
+                {% for sub_name, sub_icon in entry.subcategories | dictsort %}
+                  <div class="sub-row-wrap">
+                    <span class="row-actions">
+                      <button type="button" class="icon-edit" aria-label="Edit subcategory"
+                              hx-get="/categories/{{ txn_type }}/{{ name | urlencode }}/subcategories/{{ sub_name | urlencode }}/edit"
+                              hx-target="#subcategory-dialog-content" hx-swap="innerHTML">{{ edit_icon() }}</button>
+                      <button type="button" class="icon-delete" aria-label="Delete subcategory"
+                              hx-post="/categories/{{ txn_type }}/{{ name | urlencode }}/subcategories/{{ sub_name | urlencode }}/delete"
+                              hx-target="#categories-tree-wrapper" hx-swap="outerHTML"
+                              hx-confirm="Delete subcategory &quot;{{ sub_name }}&quot;? This cannot be undone.">
+                        {{ delete_icon() }}
+                      </button>
+                    </span>
+                    <div class="sub-row">
+                      <span class="glyph-slot sub{{ ' empty' if not sub_icon }}">{{ category_icon(sub_icon) }}</span>
+                      <span class="sub-name">{{ sub_name }}</span>
+                    </div>
+                  </div>
+                {% endfor %}
+                <button type="button" class="add-sub-ghost"
+                        hx-get="/categories/{{ txn_type }}/{{ name | urlencode }}/subcategories/new"
+                        hx-target="#subcategory-dialog-content" hx-swap="innerHTML">+ Add subcategory</button>
+              </div>
+            </details>
+          </div>
+        {% else %}
+          <p>No categories yet.</p>
+        {% endfor %}
+      </div>
+    {% endfor %}
+  </div>
+</div>

@@ -13,7 +13,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.routers import accounts, transactions, transfers
+from app.routers import accounts, categories, transactions, transfers
 from app.services.consistency import check_consistency
 from app.storage.accounts import read_accounts
 from app.storage.ledger import read_ledger
@@ -46,6 +46,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(title="Personal Finance Tracker", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=APP_DIR / "static"), name="static")
 app.include_router(accounts.router)
+app.include_router(categories.router)
 app.include_router(transactions.router)
 app.include_router(transfers.router)
 

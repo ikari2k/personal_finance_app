@@ -4,16 +4,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-Phases 0–2, 2.6, and 2.7 are complete: storage/locking (Phase 1), a working HTMX UI for accounts
+Phases 0–2 and 2.5–2.7 are complete: storage/locking (Phase 1), a working HTMX UI for accounts
 (CRUD, starting balance shown, click-through to filtered transactions), manual transaction
 entry/edit/delete (with on-the-fly category/subcategory creation), transfers (create, edit-both-
-legs-together, and pair-delete), balance display, and a redesigned transactions list (month/type
-grouping and account filter — both now sticky across navigation via cookies) — all covered by
-passing tests, and manually smoke-tested live via `scripts/seed_sample_data.py`. Every add/edit/
-delete dialog form (accounts, transactions, transfers) shares the same compact 2-column layout and
-fires an app-wide success toast on completion. Phase 2.5 (categories management) has not started,
-nor has Phase 3 (bank CSV import). See `docs/implementation-plan.md` for the full phased plan,
-finalized schemas, and per-phase status checkboxes/implementation notes.
+legs-together, and pair-delete), balance display, a dedicated `/categories` management page
+(add/rename/delete category and subcategory, each with an optional icon from a vendored 42-icon
+set — shown inline in the transactions list, colored by transaction type), and a redesigned
+transactions list (month/type grouping and account filter — both now sticky across navigation via
+cookies) — all covered by passing tests, and manually smoke-tested live via
+`scripts/seed_sample_data.py`. Every add/edit/delete dialog form shares the same compact
+2-column layout and fires an app-wide success toast on completion. Phase 3 (bank CSV import) has
+not started. See `docs/implementation-plan.md` for the full phased plan, finalized schemas, and
+per-phase status checkboxes/implementation notes.
 
 **Work proceeds one phase at a time.** Each phase in `docs/implementation-plan.md` is a discrete,
 separately-reviewable unit — implement it, verify it, stop, and update docs (this file plus the
@@ -62,9 +64,10 @@ app/
   storage/              # file I/O + locking — the ONLY layer allowed to touch data/ or config/ files
     lock.py, ledger.py, accounts.py, categories.py  # (rules.py, import_mappings.py land in Phase 3-4)
   services/                # business logic — pure functions, no direct file I/O
-    consistency.py, accounts.py, balances.py, transactions.py, aggregation.py
+    consistency.py, accounts.py, balances.py, transactions.py, categories.py, aggregation.py
   routers/                  # FastAPI routers, one per feature area — thin HTTP/HTMX glue only
-    accounts.py, transactions.py, transfers.py  # (import_, rules.py, reports.py land in Phase 3-5)
+    accounts.py, transactions.py, transfers.py, categories.py, htmx_events.py (shared helper,
+    not a router)  # (import_, rules.py, reports.py land in Phase 3-5)
   templates/                 # Jinja2 pages + HTMX partials, one subdir per feature area
   static/                     # pico.min.css, style.css, htmx.min.js, fonts/ (all vendored)
 data/ledger.csv                # created on first run if absent
@@ -340,7 +343,7 @@ See `docs/implementation-plan.md` for the full phase-by-phase plan and status:
 0. Scaffolding (`uv` project, directory tree, health-check app)
 1. Core ledger read/write + file locking + consistency check
 2. Accounts, manual transaction entry, transfers, balance calculation
-2.5. Categories management (dedicated add/rename/delete UI)
+2.5. Categories management (dedicated add/rename/delete UI, with per-category/subcategory icons)
 2.6. Edit/delete transactions (transfers: delete-both-legs; in-place editing of both legs
    together added post-2.6, see below)
 2.7. Account view improvements (starting balance shown, click-through to filtered

@@ -234,26 +234,72 @@ unit-testable without touching disk. `routers/` stays thin — HTTP/HTMX glue on
       total in the middle slot, not flush right, at a position that shifted with each month's
       label width. Fixed with `display: grid; grid-template-columns: 1fr auto auto` instead.
 
-- [ ] **Phase 2.5 — Categories management**: a dedicated `/categories` page for the income and
+- [x] **Phase 2.5 — Categories management**: a dedicated `/categories` page for the income and
   expense trees the app has been building on-the-fly since Phase 2 — the "editable by hand or via
-  a settings screen" half of the PRD's categories requirement (§4.2), which nothing has covered
-  yet. Inserted here (not renumbered into Phase 3+) so the phase numbers already referenced
-  elsewhere (this doc, `CLAUDE.md`, code comments) don't need churning.
+  a settings screen" half of the PRD's categories requirement (§4.2). Inserted here (not
+  renumbered into Phase 3+) so the phase numbers already referenced elsewhere (this doc,
+  `CLAUDE.md`, code comments) don't need churning. Scope grew beyond the original plan, at
+  explicit request, to add a per-category/per-subcategory **icon** — see below.
   - Add category (to the income or expense tree), add subcategory (to an existing category),
-    rename either, delete either. Reuse the established `<dialog>` pattern (open via `hx-get`,
-    close via `HX-Trigger: close-dialog`, OOB-refresh the affected list on success, re-render
-    the form in place with input preserved on error) rather than inventing a new one.
+    rename either, delete either. Reuses the established `<dialog>` pattern exactly (open via
+    `hx-get`, close via the generic `close-dialog` event, OOB-refresh the tree on success,
+    re-render the form in place with input preserved on error) — one shared
+    `categories/_form.html` serves both category and subcategory add/edit (parametrized by
+    `action_url`/`dialog_id`/`kind`, the same shape as `transactions/_form.html`'s
+    income/expense parametrization), and delete reuses the app-wide `hx-confirm` → shared
+    `#confirm-dialog` mechanism with zero new wiring.
   - **Deletion is not guarded by ledger usage, unlike account deletion.** A ledger row's
     `category`/`subcategory` are free-text strings copied in at entry time (see
     `services.transactions.ensure_category`) — not a foreign key the consistency checker
     validates, the way `account_id` is. Deleting or renaming a category in the tree does **not**
     touch existing ledger rows and is never blocked by their existing use, consistent with the
     PRD's "no automatic dedup/cleanup — keeping the list tidy is a user responsibility" stance
-    (§4.2). Don't add a usage guard here by analogy with accounts; the two aren't the same kind
-    of reference.
-  - *Verify*: adding/renaming/deleting a category or subcategory updates
-    `config/categories.toml` correctly, and the "Add income"/"Add expense" dialogs' category/
-    subcategory `<datalist>`s immediately reflect the change on next open.
+    (§4.2). `services/categories.py`'s module docstring calls this out explicitly so it isn't
+    "fixed" by analogy with `services.accounts.remove_account` later.
+  - **Icon feature** (added mid-phase, after design review — see the two published mockup
+    artifacts from that review for the rejected/considered alternatives): each category and
+    subcategory optionally carries an icon key from a vendored 42-icon stroke set
+    (`app/templates/_category_icons.html`, one Jinja macro per icon plus a `category_icon(key)`
+    dispatcher; `app.models.category.VALID_ICONS` is the source of truth for which keys are
+    valid, checked in `services.categories` — the template file must keep a macro for every key
+    there). New categories/subcategories (including ones created on-the-fly during transaction
+    entry, via `ensure_category`) start with no icon (`""`, never `None` — TOML has no null,
+    matching this app's existing convention of `""` for "unset" elsewhere) until assigned here.
+    The picker is a plain radio-input grid (`categories/_form.html`'s `.icon-grid`), selected
+    state styled via `:has(input:checked)` — no JS needed. Rejected alternatives, in order:
+    free-typed emoji (OS-native picker, zero build cost, but renders inconsistently across
+    platforms and the user wanted a specific look); a curated ~24-icon hand-drawn set (too
+    narrow once the user's actual reference — a native app's category list — showed the real
+    breadth needed: specific transport modes, insurance, refunds, utilities, etc.); settled on
+    hand-drawing a **larger** (42-icon) set in the same visual language as the existing
+    edit/delete row glyphs, after two rounds of "which of these do you actually need" against
+    real reference screenshots, rather than adopting a full third-party icon library.
+  - **Schema change**: `config/categories.toml` moved from `Category = ["Sub", ...]` (bare list)
+    to `[type.Category] icon = "..."` + `[type.Category.subcategories] Sub = "..."` (nested
+    tables, name → icon). `app.storage.categories.read_categories` transparently upgrades the
+    old bare-list shape in memory on read (`_normalize_entry`) — no separate migration script —
+    and the next `write_categories` call persists the upgraded shape. Confirmed against the
+    user's actual pre-existing `config/categories.toml` in the old format: read, edited via the
+    UI, and correctly rewritten in the new format with no data loss.
+  - Transactions list rows now show each category's/subcategory's icon inline (`_table.html`'s
+    `txn_row` macro takes `categories` as a fourth arg to look the icon up by
+    `txn.type.value`/`txn.category`/`txn.subcategory`), colored to match the existing
+    income/expense/transfer color scheme (`.cat-cell-icon-{income,expense,transfer}` — a class
+    per row rather than relying on `.type-group[data-type=…]` ancestor styling, since a flat
+    (type-grouping-off) list has no such ancestor). The category/subcategory `<datalist>`
+    autocomplete in the transaction entry form still shows plain text — native `<datalist>`
+    can't render an icon next to an option, so icons only ever appear in the categories page and
+    the transactions list, not the entry form.
+  - *Verified*: unit tests for every `services.categories` function (add/rename/delete category
+    and subcategory, icon validation, no-usage-guard) in
+    `tests/unit/test_service_categories.py`; the old-format-upgrade shim in
+    `tests/unit/test_categories.py`; router integration tests including that deleting a category
+    with existing ledger rows referencing it succeeds anyway
+    (`tests/integration/test_categories_router.py`); a live smoke test against the running app
+    covering add/edit/rename/delete for both categories and subcategories, plus the user's own
+    concurrent live use of the same running instance during development (edited real categories
+    through the UI, confirming the schema upgrade and icon assignment both round-tripped
+    correctly).
 
 - [x] **Phase 2.6 — Edit/delete transactions**: transactions were create-only since Phase 2; this
   closes that gap. Same decimal-insertion reasoning as 2.5 — slots after it without renumbering

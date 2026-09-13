@@ -69,6 +69,7 @@ def render_table(
             "months": months,
             "accounts": {account.id: account for account in accounts_list},
             "accounts_list": accounts_list,
+            "categories": read_categories(),
             "by_month": by_month,
             "by_type": by_type,
             "account_id": account_id,
@@ -128,6 +129,7 @@ def list_transactions(
         "months": months,
         "accounts": {account.id: account for account in accounts_list},
         "accounts_list": accounts_list,
+        "categories": read_categories(),
         "by_month": resolved_by_month,
         "by_type": resolved_by_type,
         "account_id": resolved_account_id,
@@ -178,7 +180,9 @@ def _render_form(
         {
             "accounts": read_accounts(),
             "categories": sorted(tree),
-            "subcategories": sorted({sub for subs in tree.values() for sub in subs}),
+            "subcategories": sorted(
+                {sub for entry in tree.values() for sub in entry["subcategories"]}
+            ),
             "values": values,
             "error": error,
             "dialog_id": f"{txn_type.value}-dialog",

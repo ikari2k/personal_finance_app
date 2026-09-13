@@ -12,8 +12,27 @@ from pathlib import Path
 import tomli_w
 
 from app import config
-from app.models.category import CategoriesByType
+from app.models.category import CategoriesByType, CategoryEntry
 from app.storage.lock import file_lock
+
+
+def _normalize_entry(raw: list[str] | dict[str, object]) -> CategoryEntry:
+    """Coerce one category's raw TOML value into the current shape.
+
+    Pre-icon-feature files store a category as a bare list of subcategory
+    names (``Salary = []``, ``Groceries = ["Supermarket"]``); this upgrades
+    that into ``{"icon": "", "subcategories": {name: ""}}`` in memory so
+    old files keep loading without a separate migration step. The next
+    ``write_categories`` call persists the upgraded shape.
+    """
+    if isinstance(raw, list):
+        return {"icon": "", "subcategories": {name: "" for name in raw}}
+    icon = raw.get("icon", "")
+    subcategories = raw.get("subcategories", {})
+    return {
+        "icon": icon if isinstance(icon, str) else "",
+        "subcategories": dict(subcategories) if isinstance(subcategories, dict) else {},
+    }
 
 
 def read_categories(path: Path | None = None) -> CategoriesByType:
@@ -28,7 +47,16 @@ def read_categories(path: Path | None = None) -> CategoriesByType:
         return {"income": {}, "expense": {}}
     with path.open("rb") as categories_file:
         data = tomllib.load(categories_file)
-    return {"income": data.get("income", {}), "expense": data.get("expense", {})}
+    return {
+        "income": {
+            name: _normalize_entry(entry)
+            for name, entry in data.get("income", {}).items()
+        },
+        "expense": {
+            name: _normalize_entry(entry)
+            for name, entry in data.get("expense", {}).items()
+        },
+    }
 
 
 def write_categories(categories: CategoriesByType, path: Path | None = None) -> None:
