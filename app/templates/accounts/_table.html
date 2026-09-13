@@ -7,13 +7,15 @@
         <th>Name</th>
         <th>Number</th>
         <th>Description</th>
+        <th>Starting balance</th>
         <th>Balance</th>
       </tr>
     </thead>
     <tbody>
       {% for account in accounts %}
         {% set balance = balances[account.id] %}
-        <tr>
+        <tr class="account-row"
+            onclick="if (!event.target.closest('.row-actions')) location.href='/transactions?account_id={{ account.id }}'">
           <td>
             <span class="row-actions">
               <button type="button" class="icon-edit" aria-label="Edit account"
@@ -30,19 +32,22 @@
           </td>
           <td>{{ account.number }}</td>
           <td>{{ account.description }}</td>
+          <td class="{{ 'amount-negative' if account.starting_balance < 0 else 'amount-positive' }}">
+            {{ "%.2f"|format(account.starting_balance) }}
+          </td>
           <td class="{{ 'amount-negative' if balance < 0 else 'amount-positive' }}">
             {{ "%.2f"|format(balance) }}
           </td>
         </tr>
       {% else %}
-        <tr><td colspan="4">No accounts yet.</td></tr>
+        <tr><td colspan="5">No accounts yet.</td></tr>
       {% endfor %}
     </tbody>
     {% if accounts %}
       {% set total = balances.values() | sum %}
       <tfoot>
         <tr>
-          <td colspan="3">Total</td>
+          <td colspan="4">Total</td>
           <td class="{{ 'amount-negative' if total < 0 else 'amount-positive' }}">
             {{ "%.2f"|format(total) }}
           </td>

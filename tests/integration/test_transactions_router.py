@@ -324,3 +324,122 @@ def test_delete_transfer_removes_both_legs(client):
 
     assert response.status_code == 200
     assert read_ledger(config.LEDGER_PATH) == []
+
+
+def test_grouping_toggle_persists_across_bare_navigation(client):
+    _create_account(client)
+    client.post(
+        "/transactions",
+        data={
+            "account_id": "chk",
+            "date": "2026-01-15",
+            "type": "expense",
+            "category": "Groceries",
+            "subcategory": "",
+            "description": "Trader Joe's",
+            "amount": "10.00",
+            "notes": "",
+        },
+    )
+
+    toggle = client.get("/transactions?by_month=false&by_type=true&account_id=")
+    assert toggle.cookies.get("by_month") == "false"
+
+    bare = client.get("/transactions")
+
+    assert "Month grouping: off" in bare.text
+    assert "flat-net-total" in bare.text
+    assert "month-section" not in bare.text
+
+
+def test_explicit_grouping_param_overrides_cookie(client):
+    _create_account(client)
+    client.post(
+        "/transactions",
+        data={
+            "account_id": "chk",
+            "date": "2026-01-15",
+            "type": "expense",
+            "category": "Groceries",
+            "subcategory": "",
+            "description": "Trader Joe's",
+            "amount": "10.00",
+            "notes": "",
+        },
+    )
+    client.get("/transactions?by_month=false&by_type=true&account_id=")
+
+    explicit = client.get("/transactions?by_month=true&by_type=true&account_id=")
+
+    assert "Month grouping: on" in explicit.text
+    assert "month-section" in explicit.text
+
+
+def test_account_filter_persists_across_bare_navigation(client):
+    _create_account(client, "chk")
+    _create_account(client, "sav")
+    client.post(
+        "/transactions",
+        data={
+            "account_id": "sav",
+            "date": "2026-01-16",
+            "type": "income",
+            "category": "Interest",
+            "subcategory": "",
+            "description": "savings interest",
+            "amount": "5.00",
+            "notes": "",
+        },
+    )
+
+    filtered = client.get("/transactions?account_id=chk")
+    assert filtered.cookies.get("account_id") == "chk"
+
+    bare = client.get("/transactions")
+
+    assert "savings interest" not in bare.text
+
+
+def test_explicit_empty_account_id_overrides_cookie(client):
+    _create_account(client, "chk")
+    _create_account(client, "sav")
+    client.post(
+        "/transactions",
+        data={
+            "account_id": "sav",
+            "date": "2026-01-16",
+            "type": "income",
+            "category": "Interest",
+            "subcategory": "",
+            "description": "savings interest",
+            "amount": "5.00",
+            "notes": "",
+        },
+    )
+    client.get("/transactions?account_id=chk")
+
+    all_accounts = client.get("/transactions?account_id=")
+
+    assert "savings interest" in all_accounts.text
+
+
+def test_post_create_refresh_uses_cookie_grouping(client):
+    _create_account(client)
+    client.get("/transactions?by_month=false&by_type=true&account_id=")
+
+    response = client.post(
+        "/transactions",
+        data={
+            "account_id": "chk",
+            "date": "2026-01-15",
+            "type": "expense",
+            "category": "Groceries",
+            "subcategory": "",
+            "description": "Trader Joe's",
+            "amount": "10.00",
+            "notes": "",
+        },
+    )
+
+    assert "flat-net-total" in response.text
+    assert "month-section" not in response.text

@@ -4,14 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-Phases 0–2 and 2.6 are complete: storage/locking (Phase 1), a working HTMX UI for accounts (CRUD),
-manual transaction entry/edit/delete (with on-the-fly category/subcategory creation), transfers
-(create + pair-delete), balance display, and a redesigned transactions list (month/type grouping,
-account filter) — all covered by passing tests, and manually smoke-tested live via
-`scripts/seed_sample_data.py`. Phases 2.5 (categories management) and 2.7 (account view
-improvements) have not started, nor has Phase 3 (bank CSV import). See
-`docs/implementation-plan.md` for the full phased plan, finalized schemas, and per-phase status
-checkboxes/implementation notes.
+Phases 0–2, 2.6, and 2.7 are complete: storage/locking (Phase 1), a working HTMX UI for accounts
+(CRUD, starting balance shown, click-through to filtered transactions), manual transaction
+entry/edit/delete (with on-the-fly category/subcategory creation), transfers (create +
+pair-delete), balance display, and a redesigned transactions list (month/type grouping — now
+sticky across navigation via cookie — and account filter) — all covered by passing tests, and
+manually smoke-tested live via `scripts/seed_sample_data.py`. Phase 2.5 (categories management)
+has not started, nor has Phase 3 (bank CSV import). See `docs/implementation-plan.md` for the full
+phased plan, finalized schemas, and per-phase status checkboxes/implementation notes.
 
 **Work proceeds one phase at a time.** Each phase in `docs/implementation-plan.md` is a discrete,
 separately-reviewable unit — implement it, verify it, stop, and update docs (this file plus the

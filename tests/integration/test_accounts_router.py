@@ -87,6 +87,54 @@ def test_delete_account_removes_it(client):
     assert "No accounts yet" in response.text
 
 
+def test_account_row_links_to_its_filtered_transactions(client):
+    client.post(
+        "/accounts",
+        data={
+            "account_id": "chk",
+            "name": "Checking",
+            "number": "1234",
+            "description": "",
+            "starting_balance": "0",
+        },
+    )
+
+    response = client.get("/accounts")
+
+    assert "/transactions?account_id=chk" in response.text
+
+
+def test_accounts_table_shows_starting_balance_alongside_current_balance(client):
+    client.post(
+        "/accounts",
+        data={
+            "account_id": "chk",
+            "name": "Checking",
+            "number": "1234",
+            "description": "",
+            "starting_balance": "500.00",
+        },
+    )
+    client.post(
+        "/transactions",
+        data={
+            "account_id": "chk",
+            "date": "2026-01-01",
+            "type": "expense",
+            "category": "Groceries",
+            "subcategory": "",
+            "description": "milk",
+            "amount": "50.00",
+            "notes": "",
+        },
+    )
+
+    response = client.get("/accounts")
+
+    assert "500.00" in response.text
+    assert "450.00" in response.text
+
+
 def test_delete_account_with_transactions_is_rejected(client):
     client.post(
         "/accounts",

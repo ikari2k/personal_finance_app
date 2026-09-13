@@ -306,34 +306,68 @@ unit-testable without touching disk. `routers/` stays thin — HTTP/HTMX glue on
     against the real dev server (edit, delete-plain-row, delete-transfer-pair) as well as via
     unit/integration tests.
 
-- [ ] **Phase 2.7 — Account view improvements**: three related account/transactions-view
+- [x] **Phase 2.7 — Account view improvements**: three related account/transactions-view
   usability gaps noticed while using the app day to day. Same decimal-insertion reasoning as 2.5
   and 2.6.
-  - **Show `starting_balance` on the accounts list**, alongside the already-shown current
-    balance — currently the only place `starting_balance` is visible at all is the edit-account
-    dialog.
-  - **Clicking an account name navigates to its filtered transactions**: link to
-    `/transactions?account_id=<id>` — this is almost entirely UI wiring, not new backend work,
-    since Phase 2's account filter (`account_id` query param on `GET /transactions`) already
-    does the filtering; the accounts page just needs to link to it.
-  - **Make the month/type grouping choice persist across page navigation** — today it resets to
-    the default (both on) every time you land on `/transactions` fresh, including via the plain
-    nav link or the new account-name link above, because `hx-push-url` only updates the URL for
-    HTMX-driven requests, not a plain `<a href>` elsewhere in the app. Plan: persist
-    `by_month`/`by_type` server-side in a cookie, set whenever a grouping toggle fires, and have
-    `GET /transactions` fall back to the cookie's value when the query param is absent (never
-    when it's explicitly present, so a link that deliberately sets `by_month=false` etc. isn't
-    overridden by an old cookie). This also lets `render_table()` read the same cookie instead of
-    hardcoding "both on" for the post-create/transfer OOB refresh — resolving that "known
-    simplification" documented under Phase 2's addendum above, as a side effect rather than a
-    separate task.
-  - **`account_id` deliberately does NOT get the same cookie treatment.** It's a per-visit filter
-    (you look at one account, then probably want "all accounts" again next time you arrive fresh)
-    rather than a standing display preference like the groupings — don't conflate the two when
-    implementing this.
-  - *Verify*: starting balance visible per account; clicking an account name lands on its
-    filtered transaction list; toggling a grouping, then navigating to `/accounts` and back to
-    `/transactions` via the nav link (not the browser back button), preserves the toggle choice.
+  - **`starting_balance` now shows on the accounts list** as its own column, between
+    Description and the current Balance column — previously the only place it was visible at all
+    was the edit-account dialog.
+  - **Clicking an account row navigates to its filtered transactions** (`/transactions?
+    account_id=<id>`) — broader than the original "click the account name" plan, the whole `<tr>`
+    is clickable (`accounts/_table.html`, an `onclick` on the row rather than wrapping cell text
+    in an `<a>`), since Phase 2's account filter already did the filtering and this is pure UI
+    wiring. The row's `onclick` bails out via `event.target.closest('.row-actions')` when the
+    click landed on the Edit/Delete glyphs, so those keep working without triggering a
+    navigation.
+  - **Month/type grouping, and the account filter, now persist across page navigation** via a
+    `by_month`/`by_type`/`account_id` cookie triple (`app/routers/transactions.py`).
+    `GET /transactions` takes all three as optional (`bool | None` / `str | None`, default
+    `None`); a value of `None` (query param genuinely absent — a plain nav link) falls back to
+    the cookie, while an explicit value (including explicit `account_id=`, e.g. picking "All
+    accounts") always wins and is never overridden by a stale cookie. This is why `account_id`
+    needed `str | None` rather than defaulting to `""` — `""` is itself a meaningful explicit
+    choice, so only `None` means "fall back". Every request re-writes all three cookies to the
+    resolved value, so cookie and last-shown state can't drift apart. `render_table()` (the
+    post-create/transfer OOB refresh, shared with `app.routers.transfers`) reads the same three
+    cookies instead of hardcoding "both groupings on, no filter" — resolving the "known
+    simplification" noted under Phase 2's addendum, as a side effect rather than a separate task.
+    **Revised mid-phase**: the account filter was originally planned as deliberately *not*
+    persisted (reasoning: "you look at one account, then probably want 'all accounts' again next
+    time you arrive fresh") but was changed to persist, at explicit request, once built — don't
+    re-introduce the "per-visit, not sticky" framing without checking whether that's still
+    wanted.
+  - **Gotcha hit while wiring the cookies**: `Response.set_cookie()` called on a `Response`
+    injected via FastAPI's dependency mechanism is silently discarded if the route also returns
+    an explicit `Response` (a `TemplateResponse`, here) — FastAPI only merges that injected
+    object's cookies/headers into the final response when the endpoint returns plain data (a
+    dict/model) for FastAPI itself to wrap. Fixed by building the `TemplateResponse` into a
+    variable and calling `.set_cookie()` on *that* object before returning it, and dropping the
+    now-useless injected `Response` parameter. Apply the same pattern for any future
+    cookie-setting route that returns a `Response` directly.
+  - **Amount-column alignment across type-groups, fixed as a follow-on from this phase's live
+    testing** (not in the original plan, but the same "account/transactions view" surface): each
+    type-group (Income/Expense/Transfer) renders its own `<table>` (see CLAUDE.md), and left at
+    the default `table-layout: auto` each one sized its columns independently from its own
+    content — the Amount column landed at a different x-position per sub-table, and the
+    type-group header's subtotal didn't line up with its own rows either. Fixed with
+    `table-layout: fixed` plus a shared `<colgroup>` (`txn_colgroup` macro in
+    `transactions/_table.html`) so every table on the page uses identical column widths
+    regardless of its own content, and `text-align: right` on the last cell. Date and Amount get
+    a `calc(10ch + 2rem)` width (their content is fixed-format and fully predictable — 2rem
+    because `table-layout: fixed` subtracts a cell's own padding from its `<col>` width to get
+    the content box, and Pico's `td` padding is `1rem` each side); Account/Category get generous
+    but not unbounded percentages (24%/26%) tuned against live content so typical values fit on
+    one line, accepting that the occasional unusually long category/subcategory combination (or
+    description) still wraps — the same trade-off already accepted for free-text fields
+    elsewhere, not a regression to chase to zero.
+  - *Verified*: starting balance visible per account; clicking an account row (but not its
+    Edit/Delete icons) lands on its filtered transaction list; toggling a grouping or the account
+    filter, then navigating to `/accounts` and back to `/transactions` via the nav link (not the
+    browser back button), preserves both choices; Amount column and type-group subtotals line up
+    across Income/Expense/Transfer sub-tables and across months — all via integration tests
+    (`tests/integration/test_transactions_router.py`,
+    `tests/integration/test_accounts_router.py`) and repeated live smoke tests (including
+    pixel-level measurement of column edges) against the running app.
 
 - [ ] **Phase 3 — Bank CSV import**: upload + parse endpoint, mapping-setup UI persisted to
   `config/import_mappings/<bank>.toml`, auto-reuse on next import from the same bank,

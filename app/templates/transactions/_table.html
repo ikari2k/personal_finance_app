@@ -29,6 +29,25 @@
   </tr>
 {% endmacro %}
 
+{#
+  Date ("2026-09-10", 10ch) and Amount (budget for up to "-999999.99",
+  10ch) columns get a fixed ch+padding width, not a percentage — their
+  content length is fully predictable, and table-layout: fixed subtracts a
+  cell's own padding (2rem: Pico's td/th rule is `padding: ... var(--pico-
+  spacing)` on each side, and --pico-spacing is 1rem) from its <col> width
+  to get the actual content box, so the padding must be added back on top
+  of the character budget or the text wraps despite "fitting" on paper.
+#}
+{% macro txn_colgroup(show_account) %}
+  <colgroup>
+    <col style="width: calc(10ch + 2rem)">
+    {% if show_account %}<col style="width: 24%">{% endif %}
+    <col style="width: 26%">
+    <col>
+    <col style="width: calc(10ch + 2rem)">
+  </colgroup>
+{% endmacro %}
+
 {% macro month_body(month, by_type, accounts, show_account) %}
   {% if by_type %}
     {% for group in month.groups %}
@@ -38,6 +57,7 @@
           <span>{{ "%.2f"|format(group.subtotal) }}</span>
         </div>
         <table>
+          {{ txn_colgroup(show_account) }}
           <tbody>
             {% for txn in group.transactions %}{{ txn_row(txn, accounts, show_account) }}{% endfor %}
           </tbody>
@@ -46,6 +66,7 @@
     {% endfor %}
   {% else %}
     <table>
+      {{ txn_colgroup(show_account) }}
       <tbody>
         {% for txn in month.transactions %}{{ txn_row(txn, accounts, show_account) }}{% endfor %}
       </tbody>

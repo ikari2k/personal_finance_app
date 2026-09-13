@@ -22,6 +22,19 @@ from app.templating import templates
 
 router = APIRouter(prefix="/transactions", tags=["transactions"])
 
+STICKY_FILTER_COOKIE_MAX_AGE = 60 * 60 * 24 * 365  # 1 year
+
+
+def _grouping_from_cookies(request: Request) -> tuple[bool, bool]:
+    """Read the standing by_month/by_type grouping choice from its cookies.
+
+    Defaults to both on (the original hardcoded behavior) when no cookie has
+    been set yet — a brand new visitor, or a client that dropped cookies.
+    """
+    by_month = request.cookies.get("by_month", "true") == "true"
+    by_type = request.cookies.get("by_type", "true") == "true"
+    return by_month, by_type
+
 
 def render_table(
     request: Request,
@@ -30,19 +43,25 @@ def render_table(
     error: str | None = None,
     headers: dict[str, str] | None = None,
 ) -> HTMLResponse:
-    """Render the transaction list fragment, grouped by month and by type.
+    """Render the transaction list fragment, per the standing cookie choices.
 
-    Always uses the default view (both groupings on, no account filter):
-    this is called after creating a transaction/transfer, which has no way
-    to know what grouping/filter the page currently has selected, so it
-    deliberately resets to the default rather than guessing. ``oob=True``
-    marks the fragment as an out-of-band swap target — used by
-    ``app.routers.transfers`` to refresh this table from the transfer
-    dialog, whose own response targets the dialog's content area instead.
-    Public (no leading underscore) because it's reused across routers.
+    Uses the same by_month/by_type/account_id cookies ``GET /transactions``
+    itself falls back to: this is called after creating a
+    transaction/transfer, which has no way to know what the page's own
+    request set as query params, so it reads the same standing choice
+    rather than guessing (or hardcoding a reset). ``oob=True`` marks the
+    fragment as an out-of-band swap target — used by ``app.routers.transfers``
+    to refresh this table from the transfer dialog, whose own response
+    targets the dialog's content area instead. Public (no leading
+    underscore) because it's reused across routers.
     """
+    by_month, by_type = _grouping_from_cookies(request)
+    account_id = request.cookies.get("account_id", "")
+    ledger = read_ledger()
+    if account_id:
+        ledger = [t for t in ledger if t.account_id == account_id]
     accounts_list = read_accounts()
-    months = grouped_transaction_view(read_ledger(), by_month=True, by_type=True)
+    months = grouped_transaction_view(ledger, by_month=by_month, by_type=by_type)
     return templates.TemplateResponse(
         request,
         "transactions/_table.html",
@@ -50,9 +69,9 @@ def render_table(
             "months": months,
             "accounts": {account.id: account for account in accounts_list},
             "accounts_list": accounts_list,
-            "by_month": True,
-            "by_type": True,
-            "account_id": "",
+            "by_month": by_month,
+            "by_type": by_type,
+            "account_id": account_id,
             "oob": oob,
             "error": error,
         },
@@ -62,28 +81,56 @@ def render_table(
 
 @router.get("", response_class=HTMLResponse)
 def list_transactions(
-    request: Request, by_month: bool = True, by_type: bool = True, account_id: str = ""
+    request: Request,
+    by_month: bool | None = None,
+    by_type: bool | None = None,
+    account_id: str | None = None,
 ) -> HTMLResponse:
     """Render the transaction list.
 
     Full navigation renders the whole page; an HTMX request (from the
     grouping-toggle buttons or the account filter) renders just the table
     fragment they swap in. ``account_id`` filters to one account's rows
-    before grouping when set; an empty string (the default) means "all
-    accounts".
+    before grouping when set; an empty string means "all accounts".
+
+    All three of ``by_month``/``by_type``/``account_id`` fall back to their
+    standing cookie value when the query param is absent (a plain nav link)
+    — never when it's explicitly present (including explicitly empty, e.g.
+    picking "All accounts"), so a link that deliberately sets e.g.
+    ``account_id=`` isn't overridden by an old cookie. This is why
+    ``account_id`` needs ``str | None`` rather than defaulting to ``""``
+    directly — ``""`` is itself a meaningful explicit choice ("all
+    accounts"), so only ``None`` (the param genuinely absent from the URL)
+    means "fall back to the cookie". Every request that resolves a value
+    (from either source) re-writes all three cookies, keeping them in sync
+    with the last choice actually shown. Cookies are set on the actual
+    returned ``TemplateResponse`` rather than via an injected ``Response``
+    parameter — FastAPI only merges that parameter's cookies into the final
+    response when the endpoint returns plain data (a dict/model) for it to
+    wrap; a path operation that returns a ``Response`` itself, as this one
+    does, has that return value used completely as-is.
     """
+    cookie_by_month, cookie_by_type = _grouping_from_cookies(request)
+    resolved_by_month = by_month if by_month is not None else cookie_by_month
+    resolved_by_type = by_type if by_type is not None else cookie_by_type
+    resolved_account_id = (
+        account_id if account_id is not None else request.cookies.get("account_id", "")
+    )
+
     ledger = read_ledger()
-    if account_id:
-        ledger = [t for t in ledger if t.account_id == account_id]
+    if resolved_account_id:
+        ledger = [t for t in ledger if t.account_id == resolved_account_id]
     accounts_list = read_accounts()
-    months = grouped_transaction_view(ledger, by_month=by_month, by_type=by_type)
+    months = grouped_transaction_view(
+        ledger, by_month=resolved_by_month, by_type=resolved_by_type
+    )
     context = {
         "months": months,
         "accounts": {account.id: account for account in accounts_list},
         "accounts_list": accounts_list,
-        "by_month": by_month,
-        "by_type": by_type,
-        "account_id": account_id,
+        "by_month": resolved_by_month,
+        "by_type": resolved_by_type,
+        "account_id": resolved_account_id,
         "error": None,
     }
     template = (
@@ -91,7 +138,21 @@ def list_transactions(
         if request.headers.get("HX-Request") == "true"
         else "transactions/list.html"
     )
-    return templates.TemplateResponse(request, template, context)
+    response = templates.TemplateResponse(request, template, context)
+    response.set_cookie(
+        "by_month",
+        "true" if resolved_by_month else "false",
+        max_age=STICKY_FILTER_COOKIE_MAX_AGE,
+    )
+    response.set_cookie(
+        "by_type",
+        "true" if resolved_by_type else "false",
+        max_age=STICKY_FILTER_COOKIE_MAX_AGE,
+    )
+    response.set_cookie(
+        "account_id", resolved_account_id, max_age=STICKY_FILTER_COOKIE_MAX_AGE
+    )
+    return response
 
 
 def _render_form(

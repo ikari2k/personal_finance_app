@@ -65,6 +65,45 @@
   padding-bottom: 0.6rem;
 }
 
+/*
+ * Each type-group (Income/Expense/Transfer) renders its own separate
+ * <table>, so left to its default table-layout: auto, every table sizes
+ * its columns independently from its own content's widest cell — the
+ * Amount column (and every other column) then lands at a different
+ * x-position per sub-table, since e.g. Expense's longest description is
+ * nothing like Income's. table-layout: fixed plus a shared <colgroup>
+ * (txn_colgroup in transactions/_table.html) forces every table on the
+ * page to use the exact same column widths regardless of its own
+ * content, so columns line up across type-groups and months alike.
+ */
+#transactions-table-wrapper table {
+  table-layout: fixed;
+  width: 100%;
+}
+
+#transactions-table-wrapper td:last-child {
+  text-align: right;
+}
+
+/* Date and Amount are both short, predictable-width content (a fixed-
+ * format date, a signed decimal) — never let table-layout: fixed wrap
+ * them mid-value just because a neighboring column (Account/Category)
+ * needed more room at a given viewport width. */
+#transactions-table-wrapper td:first-child,
+#transactions-table-wrapper td:last-child {
+  white-space: nowrap;
+}
+
+/* Clicking an account row navigates to its filtered transaction list (the
+ * edit/delete icons stop this via a target check in the row's onclick). */
+#accounts-table-wrapper tbody tr.account-row {
+  cursor: pointer;
+}
+
+#accounts-table-wrapper tbody tr.account-row:hover {
+  background-color: rgba(127, 127, 127, 0.08);
+}
+
 .row-actions {
   position: absolute;
   left: -4.25rem;
