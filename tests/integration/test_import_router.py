@@ -256,3 +256,51 @@ def test_fixing_the_error_after_a_failed_save_still_works(client):
 
     assert "2 new transaction" in response.text
     assert read_mapping("Test Bank", config.IMPORT_MAPPINGS_DIR) is not None
+
+
+def test_reparse_shows_a_live_hint_for_a_column_blank_in_some_rows(client):
+    _create_account(client, account_id="chk", number="1234")
+    csv_with_gap = (
+        "date,description,amount,account\n"
+        "2026-09-01,Coffee Shop,-3.50,1234\n"
+        "2026-09-02,Paycheck,,1234\n"
+    )
+    setup_response = _upload(client, content=csv_with_gap)
+    file_content_b64 = _extract_hidden_value(setup_response.text, "file_content_b64")
+
+    response = client.post(
+        "/import/mapping-setup/reparse",
+        data={
+            "bank": "Test Bank",
+            "account_id": "chk",
+            "file_content_b64": file_content_b64,
+            "delimiter": ",",
+            "encoding": "utf-8",
+            "date_format": "%Y-%m-%d",
+            "decimal_separator": ".",
+            "date_column": "0",
+            "amount_column": "2",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "blank in 1 of 2 rows" in response.text
+
+
+def test_preview_warns_about_rows_skipped_for_missing_amount(client):
+    _create_account(client, account_id="chk", number="1234")
+    csv_with_gap = (
+        "date,description,amount,account\n"
+        "2026-09-01,Coffee Shop,-3.50,1234\n"
+        "2026-09-02,Paycheck,,1234\n"
+    )
+    setup_response = _upload(client, content=csv_with_gap)
+    file_content_b64 = _extract_hidden_value(setup_response.text, "file_content_b64")
+
+    response = _save_mapping(
+        client, bank="Test Bank", account_id="chk", file_content_b64=file_content_b64
+    )
+
+    assert response.status_code == 200
+    assert "1 new transaction" in response.text
+    assert "1 of 2 rows had no amount" in response.text

@@ -12,6 +12,7 @@ from app.services.importer import (
     DEFAULT_CATEGORY,
     ParsedRow,
     build_transactions,
+    count_blank_column_values,
     filter_by_account_number,
     find_duplicates,
     parse_amount,
@@ -137,6 +138,31 @@ def test_parse_rows_still_raises_when_a_non_blank_date_is_unparseable():
 
     with pytest.raises(ValueError):
         parse_rows(csv_text, CA_MAPPING)
+
+
+def test_count_blank_column_values_counts_blanks_in_one_column():
+    csv_text = (
+        "account;amount;description;date\n"
+        "45 1940 0000;-1,00 PLN;a;11.09.2026\n"
+        "45 1940 0000;-2,00 PLN;b;\n"
+        "45 1940 0000;-3,00 PLN;c;\n"
+    )
+
+    blank, total = count_blank_column_values(csv_text, ";", 3)
+
+    assert (blank, total) == (2, 3)
+
+
+def test_count_blank_column_values_ignores_fully_blank_rows():
+    csv_text = "account;amount;description;date\n;;;\n45 1940 0000;-1,00 PLN;a;\n"
+
+    blank, total = count_blank_column_values(csv_text, ";", 3)
+
+    assert (blank, total) == (1, 1)
+
+
+def test_count_blank_column_values_no_data_rows():
+    assert count_blank_column_values("account;amount", ";", 0) == (0, 0)
 
 
 def test_parse_rows_without_account_number_column_leaves_it_blank():

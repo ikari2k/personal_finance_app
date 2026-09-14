@@ -56,11 +56,16 @@
 
     <div class="form-grid-2">
       <label>Date column
-        <select name="date_column" required>
+        <select name="date_column" required
+                hx-post="/import/mapping-setup/reparse" hx-trigger="change"
+                hx-target="#import-wizard" hx-swap="innerHTML show:top" hx-include="closest form">
           {% for col in columns %}
             <option value="{{ col.index }}" {{ 'selected' if col.index == selected_date_column }}>{{ col.index }}: {{ col.header }} ({{ col.sample }})</option>
           {% endfor %}
         </select>
+        {% if date_preview %}
+          <small class="field-hint {{ 'field-hint-bad' if '✗' in date_preview or '⚠' in date_preview else 'field-hint-ok' }}">{{ date_preview }}</small>
+        {% endif %}
       </label>
       <label>Description column
         <select name="description_column" required>
@@ -72,11 +77,16 @@
     </div>
     <div class="form-grid-2">
       <label>Amount column
-        <select name="amount_column" required>
+        <select name="amount_column" required
+                hx-post="/import/mapping-setup/reparse" hx-trigger="change"
+                hx-target="#import-wizard" hx-swap="innerHTML show:top" hx-include="closest form">
           {% for col in columns %}
             <option value="{{ col.index }}" {{ 'selected' if col.index == selected_amount_column }}>{{ col.index }}: {{ col.header }} ({{ col.sample }})</option>
           {% endfor %}
         </select>
+        {% if amount_preview %}
+          <small class="field-hint {{ 'field-hint-bad' if '✗' in amount_preview or '⚠' in amount_preview else 'field-hint-ok' }}">{{ amount_preview }}</small>
+        {% endif %}
       </label>
       <label>Account number column (optional)
         <select name="account_number_column">

@@ -5,6 +5,15 @@
   {{ duplicate_count }} duplicate{{ '' if duplicate_count == 1 else 's' }} skipped{% if filtered_count %},
   {{ filtered_count }} row{{ '' if filtered_count == 1 else 's' }} filtered out (different account){% endif %}.
 </p>
+{% if blank_date_count or blank_amount_count %}
+  <p class="field-hint field-hint-bad">
+    ⚠
+    {%- if blank_date_count %} {{ blank_date_count }} of {{ total_rows }} rows had no date{% endif -%}
+    {%- if blank_date_count and blank_amount_count %} and{% endif -%}
+    {%- if blank_amount_count %} {{ blank_amount_count }} of {{ total_rows }} rows had no amount{% endif -%}
+    — those rows were skipped, not imported. Check the date/amount column choices if this looks wrong.
+  </p>
+{% endif %}
 
 {% if transactions %}
   <div class="table-scroll">

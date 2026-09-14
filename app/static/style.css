@@ -796,3 +796,20 @@ fieldset legend {
   color: var(--pico-muted-color);
   font-size: 0.85rem;
 }
+
+/* Live parse-preview hints in the import mapping-setup form (does the
+ * currently-selected date/amount column actually parse with the current
+ * settings, and is it blank for a suspicious number of rows). */
+.field-hint {
+  display: block;
+  font-size: 0.8rem;
+  margin-top: 0.25rem;
+}
+
+.field-hint-ok {
+  color: var(--pico-ins-color);
+}
+
+.field-hint-bad {
+  color: var(--pico-del-color);
+}

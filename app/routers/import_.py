@@ -29,8 +29,11 @@ from app.models.transaction import Transaction, TransactionType
 from app.routers.htmx_events import toast
 from app.services.importer import (
     build_transactions,
+    count_blank_column_values,
     filter_by_account_number,
     find_duplicates,
+    parse_amount,
+    parse_date,
     parse_rows,
 )
 from app.services.transactions import ensure_category
@@ -137,12 +140,13 @@ def _render_mapping_setup(
 
     Re-parses the file with whatever settings were submitted so the
     preview reflects the current delimiter/encoding/date format/decimal
-    separator. Column-index selections aren't preserved across a
-    *settings* change (a different delimiter can change the column count
-    entirely, so keeping a stale index would be actively wrong) — but
-    they *are* passed through and preserved when re-rendering after a
-    failed ``/mapping-setup/save`` (see there), where the column count
-    hasn't changed and the user likely only got one field wrong.
+    separator. Column selections are threaded through and preserved on
+    every re-render, including a settings change — a wrong delimiter fix
+    rarely changes which columns exist, and losing every column choice
+    each time one setting gets tweaked was worse than the rare case
+    where a selection no longer matches a real column after a settings
+    change (the `<select>` just falls back to its default in that case,
+    no error).
 
     Columns that are blank in *every* data row are left out of the
     picker entirely — a real bank export can have dozens of columns
@@ -151,10 +155,18 @@ def _render_mapping_setup(
     given row), and none of them can ever be a usable mapping target.
     Scans the whole file, not just the preview sample, since a column
     could easily be blank in the first few rows but populated later.
+
+    The currently-selected date/amount columns are also live-parsed
+    against the current date_format/decimal_separator and shown as a
+    ✓/✗ hint — the wrong column (a date-only column that's blank for
+    some transaction types, e.g., or a foreign-currency amount column
+    that's blank for domestic ones) or the wrong format string is by far
+    the most common way this step fails, and this catches it before the
+    user ever clicks "Save mapping" instead of after.
     """
     content = base64.b64decode(file_content_b64)
     text = _decode(content, encoding)
-    columns: list[dict[str, object]] = []
+    columns: list[dict[str, int | str]] = []
     if text is None:
         error = (
             error or f"Could not decode the file as {encoding}. Try another encoding."
@@ -174,6 +186,38 @@ def _render_mapping_setup(
                     columns.append({"index": i, "header": name, "sample": sample})
             if not columns:
                 error = error or "No non-empty columns found — check the delimiter."
+
+    sample_by_index: dict[int, str] = {
+        int(c["index"]): str(c["sample"]) for c in columns
+    }
+
+    def _blank_warning(column_index: int) -> str:
+        blank, total = count_blank_column_values(text or "", delimiter, column_index)
+        if not blank:
+            return ""
+        return f"⚠ blank in {blank} of {total} rows (those rows are skipped). "
+
+    date_preview: str | None = None
+    if selected_date_column in sample_by_index:
+        sample = sample_by_index[selected_date_column]
+        try:
+            parsed_date = parse_date(sample, date_format)
+        except ValueError:
+            date_preview = f"✗ “{sample}” doesn't match this format"
+        else:
+            date_preview = f"✓ parses as {parsed_date.isoformat()}"
+        date_preview = _blank_warning(selected_date_column) + date_preview
+    amount_preview: str | None = None
+    if selected_amount_column in sample_by_index:
+        sample = sample_by_index[selected_amount_column]
+        try:
+            parsed_amount = parse_amount(sample, decimal_separator)
+        except ValueError:
+            amount_preview = f"✗ “{sample}” doesn't parse as an amount"
+        else:
+            amount_preview = f"✓ parses as {parsed_amount}"
+        amount_preview = _blank_warning(selected_amount_column) + amount_preview
+
     return templates.TemplateResponse(
         request,
         "import/_mapping_setup.html",
@@ -191,9 +235,16 @@ def _render_mapping_setup(
             "selected_description_column": selected_description_column,
             "selected_amount_column": selected_amount_column,
             "selected_account_number_column": selected_account_number_column,
+            "date_preview": date_preview,
+            "amount_preview": amount_preview,
             "error": error,
         },
     )
+
+
+def _to_column_index(value: str) -> int | None:
+    """Parse a submitted column-select value; blank/missing means "none"."""
+    return int(value) if value.strip().isdigit() else None
 
 
 @router.post("/mapping-setup/reparse", response_class=HTMLResponse)
@@ -206,8 +257,12 @@ def reparse_mapping_setup(
     encoding: str = Form("utf-8"),
     date_format: str = Form("%Y-%m-%d"),
     decimal_separator: str = Form("."),
+    date_column: str = Form(""),
+    description_column: str = Form(""),
+    amount_column: str = Form(""),
+    account_number_column: str = Form(""),
 ) -> HTMLResponse:
-    """Re-render step 2 after the user changes a parsing setting."""
+    """Re-render step 2 after the user changes a parsing setting or column pick."""
     return _render_mapping_setup(
         request,
         bank=bank,
@@ -218,6 +273,10 @@ def reparse_mapping_setup(
         date_format=date_format,
         decimal_separator=decimal_separator,
         error=None,
+        selected_date_column=_to_column_index(date_column),
+        selected_description_column=_to_column_index(description_column),
+        selected_amount_column=_to_column_index(amount_column),
+        selected_account_number_column=_to_column_index(account_number_column),
     )
 
 
@@ -305,6 +364,13 @@ def _render_preview(
     rules = read_rules()
     transactions = build_transactions(new_rows, account_id, rules)
 
+    blank_date, total_rows = count_blank_column_values(
+        text, mapping.delimiter, mapping.columns["date"]
+    )
+    blank_amount, _ = count_blank_column_values(
+        text, mapping.delimiter, mapping.columns["amount"]
+    )
+
     rows_payload = json.dumps(
         [
             {
@@ -327,6 +393,9 @@ def _render_preview(
             "new_count": len(new_rows),
             "duplicate_count": len(duplicate_rows),
             "filtered_count": filtered_count,
+            "blank_date_count": blank_date,
+            "blank_amount_count": blank_amount,
+            "total_rows": total_rows,
             "rows_payload": rows_payload,
         },
     )

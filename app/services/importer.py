@@ -124,6 +124,32 @@ def parse_rows(csv_text: str, mapping: ImportMapping) -> list[ParsedRow]:
     return parsed
 
 
+def count_blank_column_values(
+    csv_text: str, delimiter: str, column_index: int
+) -> tuple[int, int]:
+    """Return ``(blank_count, total_data_rows)`` for one column across the file.
+
+    Fully-blank rows aren't counted as data rows (matching ``parse_rows``,
+    which ignores them too). Used to warn when a candidate date/amount
+    column is blank for a large fraction of rows — those rows get
+    silently skipped by ``parse_rows``, which is worth surfacing
+    explicitly rather than just producing a suspiciously small "N new
+    transactions" count with no explanation (a wrong column choice, e.g.
+    a foreign-currency amount column that's empty for every domestic
+    transaction, is the most common cause).
+    """
+    rows = list(csv.reader(io.StringIO(csv_text), delimiter=delimiter))
+    if not rows:
+        return (0, 0)
+    data_rows = [row for row in rows[1:] if any(cell.strip() for cell in row)]
+    blank = sum(
+        1
+        for row in data_rows
+        if column_index >= len(row) or not row[column_index].strip()
+    )
+    return (blank, len(data_rows))
+
+
 def filter_by_account_number(
     rows: list[ParsedRow], account_number: str
 ) -> tuple[list[ParsedRow], int]:
