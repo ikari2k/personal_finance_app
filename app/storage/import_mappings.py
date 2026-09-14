@@ -65,18 +65,40 @@ def write_mapping(mapping: ImportMapping, dir_path: Path | None = None) -> None:
         tmp_path.replace(path)
 
 
-def list_banks(dir_path: Path | None = None) -> list[str]:
-    """Return the display name of every bank with a saved mapping.
+def list_all_mappings(dir_path: Path | None = None) -> list[ImportMapping]:
+    """Return every saved mapping, sorted by bank name.
 
-    Sorted for a stable order in the import UI's bank picker. Returns an
-    empty list if the directory doesn't exist yet (no bank imported yet).
+    Returns an empty list if the directory doesn't exist yet (no bank
+    imported yet).
     """
     dir_path = dir_path if dir_path is not None else config.IMPORT_MAPPINGS_DIR
     if not dir_path.exists():
         return []
-    banks = []
+    mappings = []
     for path in dir_path.glob("*.toml"):
         with path.open("rb") as mapping_file:
             data = tomllib.load(mapping_file)
-        banks.append(data["bank"])
-    return sorted(banks)
+        mappings.append(ImportMapping(**data))
+    return sorted(mappings, key=lambda mapping: mapping.bank)
+
+
+def list_banks(dir_path: Path | None = None) -> list[str]:
+    """Return the display name of every bank with a saved mapping.
+
+    Sorted for a stable order in the import UI's bank picker.
+    """
+    return [mapping.bank for mapping in list_all_mappings(dir_path)]
+
+
+def delete_mapping(bank: str, dir_path: Path | None = None) -> None:
+    """Delete the saved mapping for ``bank``, if one exists.
+
+    A no-op (not an error) if ``bank`` has no saved mapping — deleting
+    something that's already gone is a fine outcome, not a failure.
+    Import history entries referencing this bank are untouched (see
+    ``app.models.import_history``'s module docstring): they're
+    independent snapshots, not live references to the mapping file.
+    """
+    dir_path = dir_path if dir_path is not None else config.IMPORT_MAPPINGS_DIR
+    path = dir_path / _filename(bank)
+    path.unlink(missing_ok=True)

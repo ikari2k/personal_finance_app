@@ -19,11 +19,13 @@ import io
 import json
 import uuid
 from datetime import date as date_
+from datetime import datetime
 from decimal import Decimal
 
 from fastapi import APIRouter, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse
 
+from app.models.import_history import ImportHistoryEntry
 from app.models.import_mapping import ImportMapping
 from app.models.transaction import Transaction, TransactionType
 from app.routers.htmx_events import toast
@@ -39,7 +41,14 @@ from app.services.importer import (
 from app.services.transactions import ensure_category
 from app.storage.accounts import read_accounts
 from app.storage.categories import read_categories, write_categories
-from app.storage.import_mappings import list_banks, read_mapping, write_mapping
+from app.storage.import_history import append_history_entry, read_history
+from app.storage.import_mappings import (
+    delete_mapping,
+    list_all_mappings,
+    list_banks,
+    read_mapping,
+    write_mapping,
+)
 from app.storage.ledger import read_ledger, write_ledger
 from app.storage.rules import read_rules
 from app.templating import templates
@@ -58,12 +67,22 @@ def _decode(content: bytes, encoding: str) -> str | None:
 
 
 @router.get("", response_class=HTMLResponse)
-def import_page(request: Request) -> HTMLResponse:
-    """Render the import page with the step-1 upload form."""
+def import_page(request: Request, edit_bank: str | None = None) -> HTMLResponse:
+    """Render the import page with the step-1 upload form.
+
+    ``edit_bank`` (from the "Edit" link on ``/import/mappings``)
+    pre-fills the bank field and flags the upload as an edit — see
+    ``upload()``'s ``force_setup``.
+    """
     return templates.TemplateResponse(
         request,
         "import/page.html",
-        {"accounts": read_accounts(), "banks": list_banks(), "error": None},
+        {
+            "accounts": read_accounts(),
+            "banks": list_banks(),
+            "edit_bank": edit_bank,
+            "error": None,
+        },
     )
 
 
@@ -73,7 +92,12 @@ def upload_step(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
         "import/_upload.html",
-        {"accounts": read_accounts(), "banks": list_banks(), "error": None},
+        {
+            "accounts": read_accounts(),
+            "banks": list_banks(),
+            "edit_bank": None,
+            "error": None,
+        },
     )
 
 
@@ -83,13 +107,18 @@ async def upload(
     account_id: str = Form(...),
     bank: str = Form(...),
     file: UploadFile = File(...),
+    force_setup: bool = Form(False),
 ) -> HTMLResponse:
     """Handle the uploaded file: go to mapping setup, or straight to preview.
 
     A bank with no saved mapping yet goes to step 2 (mapping setup); a
     bank that's been imported before reuses its saved mapping and skips
     straight to step 3 (preview) — the auto-reuse behavior Phase 3 is
-    meant to demonstrate.
+    meant to demonstrate. ``force_setup`` (set by the "Edit mapping"
+    link's hidden field) always goes to step 2 even when a mapping
+    already exists, pre-filling every field from that existing mapping
+    instead of hardcoded defaults, so editing only requires changing
+    what's actually wrong rather than re-picking everything.
     """
     content = await file.read()
     bank = bank.strip()
@@ -100,22 +129,34 @@ async def upload(
             {
                 "accounts": read_accounts(),
                 "banks": list_banks(),
+                "edit_bank": None,
                 "error": "Bank name is required.",
             },
         )
     file_content_b64 = base64.b64encode(content).decode("ascii")
     mapping = read_mapping(bank)
-    if mapping is None:
+    if mapping is None or force_setup:
         return _render_mapping_setup(
             request,
             bank=bank,
             account_id=account_id,
             file_content_b64=file_content_b64,
-            delimiter=",",
-            encoding="utf-8",
-            date_format="%Y-%m-%d",
-            decimal_separator=".",
+            delimiter=mapping.delimiter if mapping else ",",
+            encoding=mapping.encoding if mapping else "utf-8",
+            date_format=mapping.date_format if mapping else "%Y-%m-%d",
+            decimal_separator=mapping.decimal_separator if mapping else ".",
             error=None,
+            selected_date_column=mapping.columns.get("date") if mapping else None,
+            selected_description_column=(
+                mapping.columns.get("description") if mapping else None
+            ),
+            selected_description_fallback_column=(
+                mapping.columns.get("description_fallback") if mapping else None
+            ),
+            selected_amount_column=(mapping.columns.get("amount") if mapping else None),
+            selected_account_number_column=(
+                mapping.columns.get("account_number") if mapping else None
+            ),
         )
     return _render_preview(request, mapping, account_id, content)
 
@@ -406,6 +447,7 @@ def _render_preview(
         {
             "account": account,
             "account_id": account_id,
+            "bank": mapping.bank,
             "transactions": transactions,
             "new_count": len(new_rows),
             "duplicate_count": len(duplicate_rows),
@@ -422,9 +464,12 @@ def _render_preview(
 def confirm(
     request: Request,
     account_id: str = Form(...),
+    bank: str = Form(...),
+    duplicate_count: int = Form(0),
+    filtered_count: int = Form(0),
     rows_payload: str = Form(...),
 ) -> HTMLResponse:
-    """Write the previewed transactions to the ledger."""
+    """Write the previewed transactions to the ledger and log the import."""
     rows = json.loads(rows_payload)
     categories = read_categories()
     new_transactions = []
@@ -450,9 +495,61 @@ def confirm(
         )
     write_categories(categories)
     write_ledger([*read_ledger(), *new_transactions])
+
+    accounts = {account.id: account for account in read_accounts()}
+    account = accounts.get(account_id)
+    append_history_entry(
+        ImportHistoryEntry(
+            timestamp=datetime.now(),
+            bank=bank,
+            account_id=account_id,
+            account_name=account.name if account else account_id,
+            new_count=len(new_transactions),
+            duplicate_count=duplicate_count,
+            filtered_count=filtered_count,
+        )
+    )
+
     return templates.TemplateResponse(
         request,
         "import/_done.html",
         {"count": len(new_transactions)},
         headers=toast(f"Imported {len(new_transactions)} transactions"),
     )
+
+
+def _render_mappings_content(
+    request: Request, *, headers: dict[str, str] | None = None
+) -> HTMLResponse:
+    """Render the saved-mappings + import-history fragment.
+
+    Shared by the full page and the delete action's refresh, matching
+    the ``_render_tree``-style pattern used for categories.
+    """
+    return templates.TemplateResponse(
+        request,
+        "import/_mappings_content.html",
+        {"mappings": list_all_mappings(), "history": read_history()},
+        headers=headers,
+    )
+
+
+@router.get("/mappings", response_class=HTMLResponse)
+def list_mappings_page(request: Request) -> HTMLResponse:
+    """Render the saved-mappings + import-history page."""
+    return templates.TemplateResponse(
+        request,
+        "import/mappings.html",
+        {"mappings": list_all_mappings(), "history": read_history()},
+    )
+
+
+@router.post("/mappings/{bank}/delete", response_class=HTMLResponse)
+def delete_mapping_route(request: Request, bank: str) -> HTMLResponse:
+    """Delete a saved mapping and refresh the list.
+
+    Import history is untouched — see ``storage.import_mappings
+    .delete_mapping``'s docstring on why that's safe.
+    """
+    delete_mapping(bank)
+    return _render_mappings_content(request, headers=toast("Mapping deleted"))

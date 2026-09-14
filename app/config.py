@@ -16,6 +16,7 @@ ACCOUNTS_PATH = CONFIG_DIR / "accounts.toml"
 CATEGORIES_PATH = CONFIG_DIR / "categories.toml"
 RULES_PATH = CONFIG_DIR / "rules.toml"
 IMPORT_MAPPINGS_DIR = CONFIG_DIR / "import_mappings"
+IMPORT_HISTORY_PATH = DATA_DIR / "import_history.toml"
 
 # The app is single-user and local-only; it must never bind beyond loopback.
 SERVER_HOST = "127.0.0.1"

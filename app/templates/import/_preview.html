@@ -36,6 +36,9 @@
 
   <form hx-post="/import/confirm" hx-target="#import-wizard" hx-swap="innerHTML">
     <input type="hidden" name="account_id" value="{{ account_id }}">
+    <input type="hidden" name="bank" value="{{ bank }}">
+    <input type="hidden" name="duplicate_count" value="{{ duplicate_count }}">
+    <input type="hidden" name="filtered_count" value="{{ filtered_count }}">
     <input type="hidden" name="rows_payload" value="{{ rows_payload }}">
     <footer class="dialog-footer">
       <a hx-get="/import/step/upload" hx-target="#import-wizard" class="btn-outline" role="button">Cancel</a>

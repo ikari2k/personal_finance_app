@@ -69,6 +69,16 @@ def _extract_hidden_value(page_html: str, name: str) -> str:
     return html.unescape(page_html[start:end])
 
 
+def _confirm(client, *, account_id: str, bank: str, rows_payload: str, **extra):
+    data = {
+        "account_id": account_id,
+        "bank": bank,
+        "rows_payload": rows_payload,
+        **extra,
+    }
+    return client.post("/import/confirm", data=data)
+
+
 def test_import_page_renders_empty_state(client):
     response = client.get("/import")
 
@@ -131,8 +141,8 @@ def test_full_flow_saves_mapping_and_imports_filtered_rows(client):
     assert read_mapping("Test Bank", config.IMPORT_MAPPINGS_DIR) is not None
 
     rows_payload = _extract_hidden_value(preview_response.text, "rows_payload")
-    confirm_response = client.post(
-        "/import/confirm", data={"account_id": "chk", "rows_payload": rows_payload}
+    confirm_response = _confirm(
+        client, account_id="chk", bank="Test Bank", rows_payload=rows_payload
     )
 
     assert confirm_response.status_code == 200
@@ -168,9 +178,7 @@ def test_reimporting_the_same_file_is_flagged_as_duplicates(client):
         client, bank="Test Bank", account_id="chk", file_content_b64=file_content_b64
     )
     rows_payload = _extract_hidden_value(preview_response.text, "rows_payload")
-    client.post(
-        "/import/confirm", data={"account_id": "chk", "rows_payload": rows_payload}
-    )
+    _confirm(client, account_id="chk", bank="Test Bank", rows_payload=rows_payload)
 
     second_preview = _upload(client)
 
@@ -335,3 +343,77 @@ def test_description_fallback_column_used_when_primary_is_blank(client):
 
     assert response.status_code == 200
     assert "Tauron Sprzedaz" in response.text
+
+
+def test_mappings_page_lists_saved_mapping_and_history(client):
+    _create_account(client, account_id="chk", number="1234")
+    setup_response = _upload(client)
+    file_content_b64 = _extract_hidden_value(setup_response.text, "file_content_b64")
+    preview_response = _save_mapping(
+        client, bank="Test Bank", account_id="chk", file_content_b64=file_content_b64
+    )
+    rows_payload = _extract_hidden_value(preview_response.text, "rows_payload")
+    _confirm(client, account_id="chk", bank="Test Bank", rows_payload=rows_payload)
+
+    response = client.get("/import/mappings")
+
+    assert response.status_code == 200
+    assert "Test Bank" in response.text
+    assert "Checking" in response.text
+    assert "2" in response.text  # new_count shown in the history row
+
+
+def test_delete_mapping_removes_it_but_keeps_history(client):
+    _create_account(client, account_id="chk", number="1234")
+    setup_response = _upload(client)
+    file_content_b64 = _extract_hidden_value(setup_response.text, "file_content_b64")
+    preview_response = _save_mapping(
+        client, bank="Test Bank", account_id="chk", file_content_b64=file_content_b64
+    )
+    rows_payload = _extract_hidden_value(preview_response.text, "rows_payload")
+    _confirm(client, account_id="chk", bank="Test Bank", rows_payload=rows_payload)
+    assert read_mapping("Test Bank", config.IMPORT_MAPPINGS_DIR) is not None
+
+    response = client.post("/import/mappings/Test%20Bank/delete")
+
+    assert response.status_code == 200
+    assert read_mapping("Test Bank", config.IMPORT_MAPPINGS_DIR) is None
+    assert "Test Bank" in response.text  # still present in history, just not mappings
+
+
+def test_edit_bank_prefills_upload_form_with_existing_mapping_settings(client):
+    _create_account(client, account_id="chk", number="1234")
+    setup_response = _upload(client)
+    file_content_b64 = _extract_hidden_value(setup_response.text, "file_content_b64")
+    _save_mapping(
+        client, bank="Test Bank", account_id="chk", file_content_b64=file_content_b64
+    )
+
+    response = client.get("/import?edit_bank=Test Bank")
+
+    assert response.status_code == 200
+    assert 'value="Test Bank"' in response.text
+    assert 'name="force_setup"' in response.text
+
+
+def test_editing_a_mapping_goes_to_setup_prefilled_with_saved_columns(client):
+    _create_account(client, account_id="chk", number="1234")
+    setup_response = _upload(client)
+    file_content_b64 = _extract_hidden_value(setup_response.text, "file_content_b64")
+    _save_mapping(
+        client, bank="Test Bank", account_id="chk", file_content_b64=file_content_b64
+    )
+
+    response = client.post(
+        "/import/upload",
+        data={
+            "account_id": "chk",
+            "bank": "Test Bank",
+            "force_setup": "true",
+        },
+        files={"file": ("statement.csv", SAMPLE_CSV, "text/csv")},
+    )
+
+    assert response.status_code == 200
+    assert "First import from" in response.text
+    assert 'value="2" selected' in response.text  # amount_column preserved

@@ -1,5 +1,12 @@
 <form hx-post="/import/upload" hx-target="#import-wizard" hx-swap="innerHTML show:top" hx-encoding="multipart/form-data">
   {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  {% if edit_bank %}
+    <p class="muted">
+      Editing the saved mapping for <strong>{{ edit_bank }}</strong> — upload a sample file to
+      review or update its column choices.
+    </p>
+    <input type="hidden" name="force_setup" value="true">
+  {% endif %}
   <div class="form-grid-2">
     <label>Account
       <select name="account_id" required>
@@ -9,10 +16,14 @@
       </select>
     </label>
     <label>Bank
-      <input type="text" name="bank" list="bank-options" placeholder="e.g. Credit Agricole" required>
-      <datalist id="bank-options">
-        {% for bank in banks %}<option value="{{ bank }}">{% endfor %}
-      </datalist>
+      {% if edit_bank %}
+        <input type="text" name="bank" value="{{ edit_bank }}" readonly>
+      {% else %}
+        <input type="text" name="bank" list="bank-options" placeholder="e.g. Credit Agricole" required>
+        <datalist id="bank-options">
+          {% for bank in banks %}<option value="{{ bank }}">{% endfor %}
+        </datalist>
+      {% endif %}
     </label>
   </div>
   <label>CSV file
