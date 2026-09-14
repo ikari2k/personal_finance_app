@@ -133,6 +133,7 @@ def _render_mapping_setup(
     error: str | None,
     selected_date_column: int | None = None,
     selected_description_column: int | None = None,
+    selected_description_fallback_column: int | None = None,
     selected_amount_column: int | None = None,
     selected_account_number_column: int | None = None,
 ) -> HTMLResponse:
@@ -233,6 +234,9 @@ def _render_mapping_setup(
             "columns": columns,
             "selected_date_column": selected_date_column,
             "selected_description_column": selected_description_column,
+            "selected_description_fallback_column": (
+                selected_description_fallback_column
+            ),
             "selected_amount_column": selected_amount_column,
             "selected_account_number_column": selected_account_number_column,
             "date_preview": date_preview,
@@ -259,6 +263,7 @@ def reparse_mapping_setup(
     decimal_separator: str = Form("."),
     date_column: str = Form(""),
     description_column: str = Form(""),
+    description_fallback_column: str = Form(""),
     amount_column: str = Form(""),
     account_number_column: str = Form(""),
 ) -> HTMLResponse:
@@ -275,6 +280,9 @@ def reparse_mapping_setup(
         error=None,
         selected_date_column=_to_column_index(date_column),
         selected_description_column=_to_column_index(description_column),
+        selected_description_fallback_column=_to_column_index(
+            description_fallback_column
+        ),
         selected_amount_column=_to_column_index(amount_column),
         selected_account_number_column=_to_column_index(account_number_column),
     )
@@ -292,6 +300,7 @@ def save_mapping_setup(
     decimal_separator: str = Form(...),
     date_column: int = Form(...),
     description_column: int = Form(...),
+    description_fallback_column: str = Form(""),
     amount_column: int = Form(...),
     account_number_column: str = Form(""),
 ) -> HTMLResponse:
@@ -316,6 +325,13 @@ def save_mapping_setup(
     )
     if account_number_idx is not None:
         columns["account_number"] = account_number_idx
+    description_fallback_idx = (
+        int(description_fallback_column)
+        if description_fallback_column.strip()
+        else None
+    )
+    if description_fallback_idx is not None:
+        columns["description_fallback"] = description_fallback_idx
     mapping = ImportMapping(
         bank=bank,
         delimiter=delimiter,
@@ -341,6 +357,7 @@ def save_mapping_setup(
             error=str(exc),
             selected_date_column=date_column,
             selected_description_column=description_column,
+            selected_description_fallback_column=description_fallback_idx,
             selected_amount_column=amount_column,
             selected_account_number_column=account_number_idx,
         )

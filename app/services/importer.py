@@ -91,6 +91,7 @@ def parse_rows(csv_text: str, mapping: ImportMapping) -> list[ParsedRow]:
     description_idx = mapping.columns["description"]
     amount_idx = mapping.columns["amount"]
     account_idx = mapping.columns.get("account_number")
+    description_fallback_idx = mapping.columns.get("description_fallback")
 
     parsed: list[ParsedRow] = []
     for row in rows[1:]:
@@ -111,10 +112,13 @@ def parse_rows(csv_text: str, mapping: ImportMapping) -> list[ParsedRow]:
         amount = parse_amount(row[amount_idx], mapping.decimal_separator)
         if amount == 0:
             continue
+        description = row[description_idx].strip()
+        if not description and description_fallback_idx is not None:
+            description = row[description_fallback_idx].strip()
         parsed.append(
             ParsedRow(
                 date=parse_date(row[date_idx], mapping.date_format),
-                description=row[description_idx].strip(),
+                description=description,
                 amount=amount,
                 account_number=row[account_idx].strip()
                 if account_idx is not None

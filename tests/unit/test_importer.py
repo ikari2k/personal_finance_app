@@ -91,6 +91,52 @@ def test_parse_rows_extracts_fields_by_index():
     ]
 
 
+def test_parse_rows_uses_fallback_when_description_is_blank():
+    mapping = ImportMapping(
+        bank="Credit Agricole",
+        delimiter=";",
+        date_format="%d.%m.%Y",
+        decimal_separator=",",
+        columns={
+            "date": 3,
+            "description": 2,
+            "amount": 1,
+            "description_fallback": 4,
+        },
+    )
+    csv_text = (
+        "account;amount;description;date;payee\n"
+        "45 1940 0000;-1,00 PLN;;11.09.2026;Tauron Sprzedaz\n"
+    )
+
+    rows = parse_rows(csv_text, mapping)
+
+    assert rows[0].description == "Tauron Sprzedaz"
+
+
+def test_parse_rows_prefers_primary_description_over_fallback():
+    mapping = ImportMapping(
+        bank="Credit Agricole",
+        delimiter=";",
+        date_format="%d.%m.%Y",
+        decimal_separator=",",
+        columns={
+            "date": 3,
+            "description": 2,
+            "amount": 1,
+            "description_fallback": 4,
+        },
+    )
+    csv_text = (
+        "account;amount;description;date;payee\n"
+        "45 1940 0000;-1,00 PLN;ZABKA Z8540;11.09.2026;Should not be used\n"
+    )
+
+    rows = parse_rows(csv_text, mapping)
+
+    assert rows[0].description == "ZABKA Z8540"
+
+
 def test_parse_rows_skips_blank_and_zero_amount_rows():
     csv_text = (
         "account;amount;description;date\n"

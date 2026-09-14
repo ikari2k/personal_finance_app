@@ -19,12 +19,20 @@ class ImportMapping(BaseModel):
     a name isn't a reliable key. The mapping-setup UI still shows each
     column's header text and a sample value to pick from; only the
     resolved index is persisted. Required keys: ``date``, ``description``,
-    ``amount``. Optional: ``account_number`` — when present, an import
-    filters the file down to rows whose value in that column matches the
-    destination account's own ``Account.number``, since a single export
-    can mix rows from more than one of the bank's own accounts (see the
-    Credit Agricole sample, which interleaves a checking account and its
-    linked credit card sub-account in one file).
+    ``amount``. Optional:
+    - ``account_number`` — when present, an import filters the file
+      down to rows whose value in that column matches the destination
+      account's own ``Account.number``, since a single export can mix
+      rows from more than one of the bank's own accounts (see the
+      Credit Agricole sample, which interleaves a checking account and
+      its linked credit card sub-account in one file).
+    - ``description_fallback`` — when the primary ``description``
+      column is blank for a row, its value is used instead (e.g. a
+      wire transfer's "Miejsce transakcji"/merchant-name column is
+      blank, but "Odbiorca"/payee or "Tytuł"/memo has the useful text).
+      Never used when the primary column has *any* value, blank or not
+      — this is a fallback for a sparse primary column, not a second
+      column to append.
 
     ``decimal_separator`` normalizes amounts like ``"-5,99 PLN"`` before
     parsing: everything except digits, ``-``, and this separator is

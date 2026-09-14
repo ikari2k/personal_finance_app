@@ -304,3 +304,34 @@ def test_preview_warns_about_rows_skipped_for_missing_amount(client):
     assert response.status_code == 200
     assert "1 new transaction" in response.text
     assert "1 of 2 rows had no amount" in response.text
+
+
+def test_description_fallback_column_used_when_primary_is_blank(client):
+    _create_account(client, account_id="chk", number="1234")
+    csv_with_payee = (
+        "date,description,amount,account,payee\n"
+        "2026-09-01,,-3.50,1234,Tauron Sprzedaz\n"
+    )
+    setup_response = _upload(client, content=csv_with_payee)
+    file_content_b64 = _extract_hidden_value(setup_response.text, "file_content_b64")
+
+    response = client.post(
+        "/import/mapping-setup/save",
+        data={
+            "bank": "Test Bank",
+            "account_id": "chk",
+            "file_content_b64": file_content_b64,
+            "delimiter": ",",
+            "encoding": "utf-8",
+            "date_format": "%Y-%m-%d",
+            "decimal_separator": ".",
+            "date_column": "0",
+            "description_column": "1",
+            "description_fallback_column": "4",
+            "amount_column": "2",
+            "account_number_column": "3",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "Tauron Sprzedaz" in response.text

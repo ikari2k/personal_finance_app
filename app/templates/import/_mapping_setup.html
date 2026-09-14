@@ -76,6 +76,15 @@
       </label>
     </div>
     <div class="form-grid-2">
+      <label title="Used when the description column above is blank for a row (e.g. a wire transfer's merchant-name column is empty, but a payee or memo column has something useful)">
+        Description fallback column (optional)
+        <select name="description_fallback_column">
+          <option value="" {{ 'selected' if selected_description_fallback_column is none }}>— none —</option>
+          {% for col in columns %}
+            <option value="{{ col.index }}" {{ 'selected' if col.index == selected_description_fallback_column }}>{{ col.index }}: {{ col.header }} ({{ col.sample }})</option>
+          {% endfor %}
+        </select>
+      </label>
       <label>Amount column
         <select name="amount_column" required
                 hx-post="/import/mapping-setup/reparse" hx-trigger="change"
@@ -88,6 +97,8 @@
           <small class="field-hint {{ 'field-hint-bad' if '✗' in amount_preview or '⚠' in amount_preview else 'field-hint-ok' }}">{{ amount_preview }}</small>
         {% endif %}
       </label>
+    </div>
+    <div class="form-grid-2">
       <label>Account number column (optional)
         <select name="account_number_column">
           <option value="" {{ 'selected' if selected_account_number_column is none }}>— none —</option>
