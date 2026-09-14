@@ -106,6 +106,19 @@
   padding-bottom: 0.6rem;
 }
 
+/* Every other row-actions table has exclusively short, single-line cell
+ * content, so a row is never taller than one line and the icons'
+ * row-height-centered position always lines up with the text. This
+ * table's Date format column can be a longer strftime string
+ * ("%d.%m.%Y %H:%M:%S") that wraps to two lines in a narrow column,
+ * making that row taller than one line — centering both the icons and
+ * the text on that taller height is still mathematically correct, but
+ * it reads as misaligned at a glance since the eye expects a name and
+ * its icons to sit on the same line. Simplest fix: don't let it wrap. */
+.mappings-table td {
+  white-space: nowrap;
+}
+
 /*
  * Each type-group (Income/Expense/Transfer) renders its own separate
  * <table>, so left to its default table-layout: auto, every table sizes
