@@ -87,6 +87,22 @@ def test_upload_for_unknown_bank_shows_mapping_setup(client):
     assert "description" in response.text  # header preview shows the CSV's own headers
 
 
+def test_mapping_setup_excludes_columns_blank_in_every_row(client):
+    """Columns blank on every row (common in wide real bank exports) aren't offered."""
+    _create_account(client)
+    csv_with_empty_column = (
+        "date,description,unused,amount\n"
+        "2026-09-01,Coffee Shop,,-3.50\n"
+        "2026-09-02,Paycheck,,3200.00\n"
+    )
+
+    response = _upload(client, content=csv_with_empty_column)
+
+    assert response.status_code == 200
+    assert ">unused<" not in response.text
+    assert ">description<" in response.text
+
+
 def test_upload_rejects_blank_bank_name(client):
     _create_account(client)
 

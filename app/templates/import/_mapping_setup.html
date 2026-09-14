@@ -35,18 +35,19 @@
     </label>
   </div>
 
-  {% if header %}
+  {% if columns %}
+    <p class="muted">Columns that are blank in every row of this file aren't shown below.</p>
     <div class="table-scroll">
       <table>
         <thead>
           <tr><th>#</th><th>Column</th><th>Sample value</th></tr>
         </thead>
         <tbody>
-          {% for i in column_indexes %}
+          {% for col in columns %}
             <tr>
-              <td>{{ i }}</td>
-              <td>{{ header[i] }}</td>
-              <td>{{ sample_row[i] if i < sample_row|length else '' }}</td>
+              <td>{{ col.index }}</td>
+              <td>{{ col.header }}</td>
+              <td>{{ col.sample }}</td>
             </tr>
           {% endfor %}
         </tbody>
@@ -56,15 +57,15 @@
     <div class="form-grid-2">
       <label>Date column
         <select name="date_column" required>
-          {% for i in column_indexes %}
-            <option value="{{ i }}" {{ 'selected' if i == selected_date_column }}>{{ i }}: {{ header[i] }} ({{ sample_row[i] if i < sample_row|length else '' }})</option>
+          {% for col in columns %}
+            <option value="{{ col.index }}" {{ 'selected' if col.index == selected_date_column }}>{{ col.index }}: {{ col.header }} ({{ col.sample }})</option>
           {% endfor %}
         </select>
       </label>
       <label>Description column
         <select name="description_column" required>
-          {% for i in column_indexes %}
-            <option value="{{ i }}" {{ 'selected' if i == selected_description_column }}>{{ i }}: {{ header[i] }} ({{ sample_row[i] if i < sample_row|length else '' }})</option>
+          {% for col in columns %}
+            <option value="{{ col.index }}" {{ 'selected' if col.index == selected_description_column }}>{{ col.index }}: {{ col.header }} ({{ col.sample }})</option>
           {% endfor %}
         </select>
       </label>
@@ -72,16 +73,16 @@
     <div class="form-grid-2">
       <label>Amount column
         <select name="amount_column" required>
-          {% for i in column_indexes %}
-            <option value="{{ i }}" {{ 'selected' if i == selected_amount_column }}>{{ i }}: {{ header[i] }} ({{ sample_row[i] if i < sample_row|length else '' }})</option>
+          {% for col in columns %}
+            <option value="{{ col.index }}" {{ 'selected' if col.index == selected_amount_column }}>{{ col.index }}: {{ col.header }} ({{ col.sample }})</option>
           {% endfor %}
         </select>
       </label>
       <label>Account number column (optional)
         <select name="account_number_column">
           <option value="" {{ 'selected' if selected_account_number_column is none }}>— none —</option>
-          {% for i in column_indexes %}
-            <option value="{{ i }}" {{ 'selected' if i == selected_account_number_column }}>{{ i }}: {{ header[i] }} ({{ sample_row[i] if i < sample_row|length else '' }})</option>
+          {% for col in columns %}
+            <option value="{{ col.index }}" {{ 'selected' if col.index == selected_account_number_column }}>{{ col.index }}: {{ col.header }} ({{ col.sample }})</option>
           {% endfor %}
         </select>
       </label>

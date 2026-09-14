@@ -143,19 +143,37 @@ def _render_mapping_setup(
     they *are* passed through and preserved when re-rendering after a
     failed ``/mapping-setup/save`` (see there), where the column count
     hasn't changed and the user likely only got one field wrong.
+
+    Columns that are blank in *every* data row are left out of the
+    picker entirely — a real bank export can have dozens of columns
+    that only apply to other transaction types (the Credit Agricole
+    sample this was designed against has 101 columns, most blank on any
+    given row), and none of them can ever be a usable mapping target.
+    Scans the whole file, not just the preview sample, since a column
+    could easily be blank in the first few rows but populated later.
     """
     content = base64.b64decode(file_content_b64)
     text = _decode(content, encoding)
-    preview_rows: list[list[str]] = []
+    columns: list[dict[str, object]] = []
     if text is None:
         error = (
             error or f"Could not decode the file as {encoding}. Try another encoding."
         )
     else:
-        reader = csv.reader(io.StringIO(text), delimiter=delimiter)
-        preview_rows = [row for row, _ in zip(reader, range(6), strict=False)]
-        if len(preview_rows) < 2:
+        rows = list(csv.reader(io.StringIO(text), delimiter=delimiter))
+        if len(rows) < 2:
             error = error or "Couldn't find any data rows with this delimiter."
+        else:
+            header_row, data_rows = rows[0], rows[1:]
+            for i, name in enumerate(header_row):
+                sample = next(
+                    (r[i].strip() for r in data_rows if i < len(r) and r[i].strip()),
+                    None,
+                )
+                if sample is not None:
+                    columns.append({"index": i, "header": name, "sample": sample})
+            if not columns:
+                error = error or "No non-empty columns found — check the delimiter."
     return templates.TemplateResponse(
         request,
         "import/_mapping_setup.html",
@@ -168,9 +186,7 @@ def _render_mapping_setup(
             "date_format": date_format,
             "decimal_separator": decimal_separator,
             "encoding_choices": ENCODING_CHOICES,
-            "header": preview_rows[0] if preview_rows else [],
-            "sample_row": preview_rows[1] if len(preview_rows) > 1 else [],
-            "column_indexes": range(len(preview_rows[0])) if preview_rows else [],
+            "columns": columns,
             "selected_date_column": selected_date_column,
             "selected_description_column": selected_description_column,
             "selected_amount_column": selected_amount_column,

@@ -791,3 +791,8 @@ fieldset legend {
 .table-scroll {
   overflow-x: auto;
 }
+
+.muted {
+  color: var(--pico-muted-color);
+  font-size: 0.85rem;
+}
