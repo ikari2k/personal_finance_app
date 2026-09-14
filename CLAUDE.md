@@ -27,9 +27,17 @@ new/duplicate/filtered-out counts before anything is written (duplicates detecte
 description; an optional account-number column filters a multi-account export down to the
 destination account), and import-time auto-categorization via `config/rules.toml` (defaulting to
 "Uncategorized" — full rule-management UI is still Phase 4). Validated end-to-end against a real,
-messy 101-column Windows-1250-encoded bank export, not just synthetic test data. Phase 4 (rule
-engine) has not started. See `docs/implementation-plan.md` for the full phased plan, finalized
-schemas, and per-phase status checkboxes/implementation notes.
+messy 101-column Windows-1250-encoded bank export, not just synthetic test data. A post-Phase-3
+addendum followed once the wizard was used against a real account: mapping-setup validation now
+runs before the mapping is persisted (a bad setting used to both crash *and* silently save a
+broken mapping); a blank date/amount cell skips just that row instead of failing the whole
+import; columns blank in every row are hidden from the picker and the current date/amount
+column gets a live parse-check plus blank-count warning as you pick it; an optional
+`description_fallback` column covers rows where the primary description is blank; and
+`/import/mappings` now lists every saved mapping (edit/delete) alongside a full import history
+log (`data/import_history.toml`). Phase 4 (rule engine) has not started. See
+`docs/implementation-plan.md` for the full phased plan, finalized schemas, and per-phase status
+checkboxes/implementation notes.
 
 **Work proceeds one phase at a time.** Each phase in `docs/implementation-plan.md` is a discrete,
 separately-reviewable unit — implement it, verify it, stop, and update docs (this file plus the
@@ -75,10 +83,10 @@ app/
   templating.py    # shared Jinja2Templates instance (avoids a circular import into main)
   config.py         # resolves data/config paths, binds 127.0.0.1 only
   models/             # pydantic domain models: Account, Transaction/TransactionType, CategoriesByType,
-    ImportMapping, Rule
+    ImportMapping, Rule, ImportHistoryEntry
   storage/              # file I/O + locking — the ONLY layer allowed to touch data/ or config/ files
-    lock.py, ledger.py, accounts.py, categories.py, rules.py, import_mappings.py  # (reports storage
-    lands in Phase 5, if needed)
+    lock.py, ledger.py, accounts.py, categories.py, rules.py, import_mappings.py,
+    import_history.py  # (reports storage lands in Phase 5, if needed)
   services/                # business logic — pure functions, no direct file I/O
     consistency.py, accounts.py, balances.py, transactions.py, categories.py, aggregation.py,
     importer.py, categorizer.py
@@ -137,8 +145,12 @@ rather than letting a router grow business logic of its own.
 ### HTTP form testing pattern
 
 Router integration tests use the `client` fixture in `tests/integration/conftest.py`, which
-monkeypatches `app.config.{LEDGER,ACCOUNTS,CATEGORIES,RULES}_PATH` and `IMPORT_MAPPINGS_DIR` to
-`tmp_path`-based locations before constructing the `TestClient`.
+monkeypatches `app.config.{LEDGER,ACCOUNTS,CATEGORIES,RULES,IMPORT_HISTORY}_PATH` and
+`IMPORT_MAPPINGS_DIR` to `tmp_path`-based locations before constructing the `TestClient`. A real
+gap here (missing `IMPORT_HISTORY_PATH` for one session) let tests write fake entries into the
+real project's `data/import_history.toml` before it was caught — add a new line to this fixture
+for every new `config.*_PATH`/`*_DIR` a future `storage` module introduces, not just the storage
+module itself.
 
 ## UI conventions
 
@@ -315,8 +327,15 @@ monkeypatches `app.config.{LEDGER,ACCOUNTS,CATEGORIES,RULES}_PATH` and `IMPORT_M
   ledger field name → **0-based column index**, not column name (real bank exports can have
   duplicate header names — see `app.models.import_mapping`'s docstring). Required keys: `date`,
   `description`, `amount`; optional: `account_number` (filters a multi-account export down to the
-  destination account, matched against `Account.number`). Captured once via the `/import` setup
-  wizard, reused automatically on every later import from that bank.
+  destination account, matched against `Account.number`) and `description_fallback` (used only
+  when the primary `description` column is blank for a row). Captured once via the `/import`
+  setup wizard, reused automatically on every later import from that bank; viewable/editable/
+  deletable via `/import/mappings`.
+- `data/import_history.toml` — `[[imports]]` tables, one per confirmed import:
+  `timestamp, bank, account_id, account_name, new_count, duplicate_count, filtered_count`.
+  Append-only activity log, not configuration (hence `data/`, not `config/`) — each entry is an
+  independent snapshot, not a live reference to the mapping or account, so deleting either
+  afterward never breaks a past entry. Viewable via `/import/mappings`.
 - `config/rules.toml` — `[[rules]]` tables: `pattern, field, category, subcategory, priority`.
   Shared between import-time auto-categorization (`services.categorizer`, Phase 3 — only
   `field="description"` is interpreted so far) and Phase 4's bulk reclassification of existing

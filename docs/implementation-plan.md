@@ -616,6 +616,48 @@ unit-testable without touching disk. `routers/` stays thin — HTTP/HTMX glue on
     confirm, and the second-import dedup — with `data/`/`config/` backed up and restored
     afterward via a throwaway test account, never touching the user's real data.
 
+- [x] **Post-Phase 3 addendum — real-usage fixes and follow-ons**: the moment the wizard was
+  used against a real bank account (not just the earlier sample-file testing), several rounds of
+  real friction and one real data-mismatch surfaced, all fixed in the same session as they came
+  up. Not part of the original phased plan.
+  - **Mapping-setup validation moved before persistence**: a bad setting (wrong `date_format`,
+    wrong column) used to 500 *and* still get written by `write_mapping`, so every later import
+    from that bank silently reused the same broken mapping with no way back into setup. Now
+    `save_mapping_setup` parses the file with the candidate mapping first; on failure it
+    re-renders the setup form with the error and every prior choice preserved, and never writes.
+  - **Scroll-to-top on every wizard step transition** (`hx-swap="innerHTML show:top"`) — an error
+    re-render was landing above the user's scroll position on the long column-picker page,
+    making it easy to miss entirely.
+  - **A blank date or amount cell skips the row instead of failing the whole import**: some
+    transaction types in a real export legitimately leave one of these blank for that row (an
+    account-fee row with no "Data operacji"; a domestic transaction leaving a foreign-currency
+    amount column empty) — `parse_rows` now treats a blank the same way it already treats a
+    fully-blank row, while a non-blank-but-malformed value still raises.
+  - **Columns blank in every row are hidden from the picker** — the real sample file has 101
+    columns, only ~30 ever populated in any row; scans the whole file, not just the preview
+    sample.
+  - **Live per-column parse-check + blank-count warning** in the setup form (date/amount
+    selects now trigger a reparse on change) and the same blank-count warning in the final
+    preview — this is what makes a wrong column choice (a sparse/foreign-currency-only amount
+    column, e.g.) visible *before* Save rather than as a mysteriously small transaction count
+    after. Column selections also stopped resetting on every settings-only change, since losing
+    every pick each time one setting was tweaked was worse than the rare stale-selection case.
+  - **Optional `description_fallback` mapping column**: used only when the primary description
+    column is blank for a row (a wire transfer's merchant-name column empty, payee/memo column
+    populated) — confirmed against a real transfer row in the sample file.
+  - **`/import/mappings` page**: lists every saved mapping (Edit/Delete) and the full import
+    history log (`data/import_history.toml`, `app.models`/`storage.import_history`, written by
+    `confirm`). Edit reuses the existing upload → setup → preview flow (a link to `/import` with
+    the bank pre-filled and a `force_setup` flag) rather than a parallel one. History entries are
+    independent snapshots (bank/account name and counts at confirm time), not live references —
+    deleting a mapping or renaming/deleting an account afterward never breaks a past entry.
+  - *Verified*: unit/integration tests for every fix above; a live root-cause diagnosis of a
+    real "0 transactions imported" report that turned out to be a stale seed-data account number
+    (`"1234"`) never updated to the real IBAN, not an importer bug; a real test-isolation gap
+    this surfaced and fixed along the way — `IMPORT_HISTORY_PATH` wasn't in the integration test
+    fixture's monkeypatched paths, so the new history tests had been writing fake entries into
+    the real project's `data/import_history.toml` until caught and fixed.
+
 - [ ] **Phase 4 — Rule engine (bulk reclassification)**: rule CRUD UI, preview endpoint (full
   before/after diff per row; regex compile-checked at save time, never silently zero-matching),
   apply endpoint (locked write). *Verify*: invalid regex rejected at save; preview output matches
