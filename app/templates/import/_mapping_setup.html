@@ -1,4 +1,4 @@
-<form id="mapping-setup-form" hx-post="/import/mapping-setup/save" hx-target="#import-wizard" hx-swap="innerHTML">
+<form id="mapping-setup-form" hx-post="/import/mapping-setup/save" hx-target="#import-wizard" hx-swap="innerHTML show:top">
   {% if error %}<p class="error">{{ error }}</p>{% endif %}
   <input type="hidden" name="bank" value="{{ bank }}">
   <input type="hidden" name="account_id" value="{{ account_id }}">
@@ -11,11 +11,11 @@
     <label>Delimiter
       <input type="text" name="delimiter" value="{{ delimiter }}" maxlength="1" required
              hx-post="/import/mapping-setup/reparse" hx-trigger="change"
-             hx-target="#import-wizard" hx-include="closest form">
+             hx-target="#import-wizard" hx-swap="innerHTML show:top" hx-include="closest form">
     </label>
     <label>Encoding
       <select name="encoding" hx-post="/import/mapping-setup/reparse" hx-trigger="change"
-              hx-target="#import-wizard" hx-include="closest form">
+              hx-target="#import-wizard" hx-swap="innerHTML show:top" hx-include="closest form">
         {% for enc in encoding_choices %}
           <option value="{{ enc }}" {{ 'selected' if enc == encoding }}>{{ enc }}</option>
         {% endfor %}
@@ -26,12 +26,12 @@
     <label>Date format
       <input type="text" name="date_format" value="{{ date_format }}" placeholder="e.g. %d.%m.%Y" required
              hx-post="/import/mapping-setup/reparse" hx-trigger="change"
-             hx-target="#import-wizard" hx-include="closest form">
+             hx-target="#import-wizard" hx-swap="innerHTML show:top" hx-include="closest form">
     </label>
     <label>Decimal separator
       <input type="text" name="decimal_separator" value="{{ decimal_separator }}" maxlength="1" required
              hx-post="/import/mapping-setup/reparse" hx-trigger="change"
-             hx-target="#import-wizard" hx-include="closest form">
+             hx-target="#import-wizard" hx-swap="innerHTML show:top" hx-include="closest form">
     </label>
   </div>
 

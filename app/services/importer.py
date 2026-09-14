@@ -96,6 +96,16 @@ def parse_rows(csv_text: str, mapping: ImportMapping) -> list[ParsedRow]:
     for row in rows[1:]:
         if not any(cell.strip() for cell in row):
             continue
+        if not row[date_idx].strip():
+            # Some transaction types in a real export legitimately leave the
+            # date column blank (e.g. an account-fee row that only
+            # populates a *different* date column) — skip the row rather
+            # than failing the whole import over one sparse field, the
+            # same treatment already given to a fully-blank row above. A
+            # non-blank value that doesn't match date_format still raises
+            # in parse_date below — that's a genuine mapping mistake, not
+            # a sparse field, and should keep failing loudly.
+            continue
         amount = parse_amount(row[amount_idx], mapping.decimal_separator)
         if amount == 0:
             continue

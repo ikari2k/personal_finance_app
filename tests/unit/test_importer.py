@@ -104,6 +104,28 @@ def test_parse_rows_skips_blank_and_zero_amount_rows():
     assert rows[0].description == "real row"
 
 
+def test_parse_rows_skips_rows_with_a_blank_date():
+    csv_text = (
+        "account;amount;description;date\n"
+        "45 1940 0000;-10,00 PLN;account fee, no operation date;\n"
+        "45 1940 0000;-1,00 PLN;real row;10.09.2026\n"
+    )
+
+    rows = parse_rows(csv_text, CA_MAPPING)
+
+    assert len(rows) == 1
+    assert rows[0].description == "real row"
+
+
+def test_parse_rows_still_raises_when_a_non_blank_date_is_unparseable():
+    csv_text = (
+        "account;amount;description;date\n45 1940 0000;-1,00 PLN;row;not-a-date\n"
+    )
+
+    with pytest.raises(ValueError):
+        parse_rows(csv_text, CA_MAPPING)
+
+
 def test_parse_rows_without_account_number_column_leaves_it_blank():
     mapping = ImportMapping(
         bank="Generic",

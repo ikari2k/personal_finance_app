@@ -1,4 +1,4 @@
-<form hx-post="/import/upload" hx-target="#import-wizard" hx-swap="innerHTML" hx-encoding="multipart/form-data">
+<form hx-post="/import/upload" hx-target="#import-wizard" hx-swap="innerHTML show:top" hx-encoding="multipart/form-data">
   {% if error %}<p class="error">{{ error }}</p>{% endif %}
   <div class="form-grid-2">
     <label>Account
