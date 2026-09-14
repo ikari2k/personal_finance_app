@@ -2,49 +2,54 @@
 <div id="mappings-page-wrapper">
   <h2>Saved bank mappings</h2>
   {% if mappings %}
-    <div class="table-scroll">
-      <table>
-        <thead>
+    <!-- Deliberately not wrapped in .table-scroll: the row-actions icons
+         float outside the table via a negative offset (see style.css),
+         which an overflow-x: auto ancestor clips entirely — confirmed
+         live, the icons were being cut off and never visible at all.
+         Same reason accounts/_table.html and transactions/_table.html
+         aren't wrapped either. This table can outgrow a narrow viewport
+         instead; accepted the same way those other tables do. -->
+    <table>
+      <thead>
+        <tr>
+          <th>Bank</th><th>Delimiter</th><th>Encoding</th><th>Date format</th>
+          <th>Decimal separator</th><th>Date col</th><th>Description col</th>
+          <th>Amount col</th><th>Account # col</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for mapping in mappings %}
           <tr>
-            <th>Bank</th><th>Delimiter</th><th>Encoding</th><th>Date format</th>
-            <th>Decimal separator</th><th>Date col</th><th>Description col</th>
-            <th>Amount col</th><th>Account # col</th>
+            <td>
+              <span class="row-actions">
+                <a class="icon-edit" aria-label="Edit mapping"
+                   href="/import?edit_bank={{ mapping.bank | urlencode }}">{{ edit_icon() }}</a>
+                <button type="button" class="icon-delete" aria-label="Delete mapping"
+                        hx-post="/import/mappings/{{ mapping.bank | urlencode }}/delete"
+                        hx-target="#mappings-page-wrapper" hx-swap="outerHTML"
+                        hx-confirm="Delete the saved mapping for &quot;{{ mapping.bank }}&quot;? Past import history isn't affected, and you can set it up again next time you import from this bank.">
+                  {{ delete_icon() }}
+                </button>
+              </span>
+              {{ mapping.bank }}
+            </td>
+            <td>{{ mapping.delimiter }}</td>
+            <td>{{ mapping.encoding }}</td>
+            <td>{{ mapping.date_format }}</td>
+            <td>{{ mapping.decimal_separator }}</td>
+            <td>{{ mapping.columns.date }}</td>
+            <td>
+              {{ mapping.columns.description }}
+              {%- if mapping.columns.description_fallback is defined %}
+                (fallback: {{ mapping.columns.description_fallback }})
+              {%- endif %}
+            </td>
+            <td>{{ mapping.columns.amount }}</td>
+            <td>{{ mapping.columns.account_number if mapping.columns.account_number is defined else '—' }}</td>
           </tr>
-        </thead>
-        <tbody>
-          {% for mapping in mappings %}
-            <tr>
-              <td>
-                <span class="row-actions">
-                  <a class="icon-edit" aria-label="Edit mapping"
-                     href="/import?edit_bank={{ mapping.bank | urlencode }}">{{ edit_icon() }}</a>
-                  <button type="button" class="icon-delete" aria-label="Delete mapping"
-                          hx-post="/import/mappings/{{ mapping.bank | urlencode }}/delete"
-                          hx-target="#mappings-page-wrapper" hx-swap="outerHTML"
-                          hx-confirm="Delete the saved mapping for &quot;{{ mapping.bank }}&quot;? Past import history isn't affected, and you can set it up again next time you import from this bank.">
-                    {{ delete_icon() }}
-                  </button>
-                </span>
-                {{ mapping.bank }}
-              </td>
-              <td>{{ mapping.delimiter }}</td>
-              <td>{{ mapping.encoding }}</td>
-              <td>{{ mapping.date_format }}</td>
-              <td>{{ mapping.decimal_separator }}</td>
-              <td>{{ mapping.columns.date }}</td>
-              <td>
-                {{ mapping.columns.description }}
-                {%- if mapping.columns.description_fallback is defined %}
-                  (fallback: {{ mapping.columns.description_fallback }})
-                {%- endif %}
-              </td>
-              <td>{{ mapping.columns.amount }}</td>
-              <td>{{ mapping.columns.account_number if mapping.columns.account_number is defined else '—' }}</td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
+        {% endfor %}
+      </tbody>
+    </table>
   {% else %}
     <p>No saved mappings yet.</p>
   {% endif %}
