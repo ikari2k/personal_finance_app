@@ -80,9 +80,9 @@ def _normalize_account_number(value: str) -> str:
 def parse_rows(csv_text: str, mapping: ImportMapping) -> list[ParsedRow]:
     """Parse ``csv_text`` into ``ParsedRow``s using ``mapping``.
 
-    The first row is always treated as a header and skipped. Blank rows
-    and rows whose amount parses to exactly zero (not a real
-    transaction) are silently skipped.
+    The first row is always treated as a header and skipped. Blank rows,
+    rows with a blank date or amount cell, and rows whose amount parses
+    to exactly zero (not a real transaction) are silently skipped.
     """
     rows = list(csv.reader(io.StringIO(csv_text), delimiter=mapping.delimiter))
     if not rows:
@@ -96,15 +96,17 @@ def parse_rows(csv_text: str, mapping: ImportMapping) -> list[ParsedRow]:
     for row in rows[1:]:
         if not any(cell.strip() for cell in row):
             continue
-        if not row[date_idx].strip():
-            # Some transaction types in a real export legitimately leave the
-            # date column blank (e.g. an account-fee row that only
-            # populates a *different* date column) — skip the row rather
-            # than failing the whole import over one sparse field, the
-            # same treatment already given to a fully-blank row above. A
-            # non-blank value that doesn't match date_format still raises
-            # in parse_date below — that's a genuine mapping mistake, not
-            # a sparse field, and should keep failing loudly.
+        if not row[date_idx].strip() or not row[amount_idx].strip():
+            # Some transaction types in a real export legitimately leave
+            # the mapped date or amount column blank for that row (e.g. an
+            # account-fee row with no operation date, or a domestic
+            # transaction leaving a foreign-currency amount column empty)
+            # — skip the row rather than failing the whole import over one
+            # sparse field, the same treatment already given to a
+            # fully-blank row above. A non-blank value that still doesn't
+            # parse (wrong date_format, an actually-malformed amount)
+            # keeps failing loudly below — that's a genuine mapping
+            # mistake, not a sparse field.
             continue
         amount = parse_amount(row[amount_idx], mapping.decimal_separator)
         if amount == 0:

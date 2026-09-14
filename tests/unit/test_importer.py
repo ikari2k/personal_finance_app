@@ -117,6 +117,19 @@ def test_parse_rows_skips_rows_with_a_blank_date():
     assert rows[0].description == "real row"
 
 
+def test_parse_rows_skips_rows_with_a_blank_amount():
+    csv_text = (
+        "account;amount;description;date\n"
+        "45 1940 0000;;domestic, no fx amount;11.09.2026\n"
+        "45 1940 0000;-1,00 PLN;real row;10.09.2026\n"
+    )
+
+    rows = parse_rows(csv_text, CA_MAPPING)
+
+    assert len(rows) == 1
+    assert rows[0].description == "real row"
+
+
 def test_parse_rows_still_raises_when_a_non_blank_date_is_unparseable():
     csv_text = (
         "account;amount;description;date\n45 1940 0000;-1,00 PLN;row;not-a-date\n"
