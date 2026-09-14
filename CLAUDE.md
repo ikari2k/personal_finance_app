@@ -8,14 +8,19 @@ Phases 0–2 and 2.5–2.7 are complete: storage/locking (Phase 1), a working HT
 (CRUD, starting balance shown, click-through to filtered transactions), manual transaction
 entry/edit/delete (with on-the-fly category/subcategory creation), transfers (create, edit-both-
 legs-together, and pair-delete), balance display, a dedicated `/categories` management page
-(add/rename/delete category and subcategory, each with an optional icon from a vendored 42-icon
-set — shown inline in the transactions list, colored by transaction type), and a redesigned
-transactions list (month/type grouping and account filter — both now sticky across navigation via
-cookies) — all covered by passing tests, and manually smoke-tested live via
-`scripts/seed_sample_data.py`. Every add/edit/delete dialog form shares the same compact
-2-column layout and fires an app-wide success toast on completion. Phase 3 (bank CSV import) has
-not started. See `docs/implementation-plan.md` for the full phased plan, finalized schemas, and
-per-phase status checkboxes/implementation notes.
+(add/rename/delete category and subcategory, each with an optional icon from a vendored 44-icon
+set — shown inline in the transactions list, colored by transaction type, uniformly sized via
+shared CSS custom properties, with a per-icon tooltip hint), and a redesigned transactions list
+(month/type grouping and account filter — both now sticky across navigation via cookies) — all
+covered by passing tests, and manually smoke-tested live via `scripts/seed_sample_data.py`. Every
+add/edit/delete dialog form shares the same compact 2-column layout and fires an app-wide success
+toast on completion. Three out-of-sequence addenda have also landed since 2.7: transfer editing
+plus a dialog-form redesign; further icon-set polish (uniform sizing, tooltips, redraws,
+fuel/parking icons); and per-category/subcategory monthly budgets (independent thresholds, no
+cross-validation, with a non-blocking warning pill when a category's subcategory budgets exceed
+its own — the actual spend-vs-budget report is still a future Monthly Budgets page). Phase 3
+(bank CSV import) has not started. See `docs/implementation-plan.md` for the full phased plan,
+finalized schemas, and per-phase status checkboxes/implementation notes.
 
 **Work proceeds one phase at a time.** Each phase in `docs/implementation-plan.md` is a discrete,
 separately-reviewable unit — implement it, verify it, stop, and update docs (this file plus the
@@ -274,13 +279,20 @@ constructing the `TestClient`. Add a matching `_PATH` attribute + monkeypatch li
   starting_balance`. `id` is a stable short code that **never changes** even if name/description
   does — transactions reference `id`, never the account name.
 - `config/categories.toml` — **two separate trees**, under top-level `[income]` and `[expense]`
-  tables, each mapping category name → list of subcategory names (`app.models.category.
-  CategoriesByType`, keyed by `TransactionType.value`). Income and expense never share
+  tables, each mapping category name → `{icon, budget, subcategories}`, where `subcategories`
+  maps subcategory name → `{icon, budget}` (`app.models.category.CategoriesByType`/
+  `CategoryEntry`/`SubcategoryEntry`, keyed by `TransactionType.value`). `icon` is a key into the
+  vendored icon set (`""` = unset). `budget` is a quoted non-negative decimal string (`""` =
+  unset) — income categories/subcategories can never have one (rejected in
+  `services.categories`); a category's budget and its subcategories' budgets are independent
+  thresholds, never validated against each other (see `services.categories
+  .subcategories_exceed_category_budget` for the non-blocking display-only warning when a
+  category's subcategory budgets add up to more than its own). Income and expense never share
   categories — "Salary" has no business appearing on the expense side. Transfers don't use this
   tree at all; they get a fixed `category="Transfer"` (see `services.transactions
   .new_transfer_pair`). Editable by hand, via settings UI, or on the fly during transaction
-  entry/import (`services.transactions.ensure_category` adds to the correct bucket by type). No
-  automatic dedup — the app does not tidy this up.
+  entry/import (`services.transactions.ensure_category` adds to the correct bucket by type,
+  starting with no icon/budget). No automatic dedup — the app does not tidy this up.
 - `data/ledger.csv` — single flat file, one row per transaction, columns (finalized order):
   `id, date, account_id, category, subcategory, description, amount, type, transfer_id, notes`.
   `amount` is a signed decimal string; `type` ∈ `income|expense|transfer`. This is the one file

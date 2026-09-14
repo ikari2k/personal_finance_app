@@ -17,7 +17,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.models.account import Account  # noqa: E402
-from app.models.category import CategoriesByType  # noqa: E402
+from app.models.category import (  # noqa: E402
+    CategoriesByType,
+    CategoryEntry,
+    SubcategoryEntry,
+)
 from app.models.transaction import Transaction, TransactionType  # noqa: E402
 from app.services.transactions import new_transaction, new_transfer_pair  # noqa: E402
 from app.storage.accounts import write_accounts  # noqa: E402
@@ -52,20 +56,81 @@ def build_sample_accounts() -> list[Account]:
     ]
 
 
+def _sub(name: str, icon: str = "", budget: str = "") -> tuple[str, str, str]:
+    """One subcategory spec for ``_category`` — bare name, icon, and/or budget."""
+    return (name, icon, budget)
+
+
+def _category(
+    icon: str, budget: str, *subcategories: tuple[str, str, str]
+) -> CategoryEntry:
+    """Build one ``CategoryEntry`` from an icon, a budget, and ``_sub(...)`` specs."""
+    subs: dict[str, SubcategoryEntry] = {
+        name: {"icon": sub_icon, "budget": sub_budget}
+        for name, sub_icon, sub_budget in subcategories
+    }
+    return {"icon": icon, "budget": budget, "subcategories": subs}
+
+
 def build_sample_categories() -> CategoriesByType:
-    """Return small fake income and expense category trees."""
+    """Return small fake income and expense category trees.
+
+    Uses the current icon-and-budget-bearing schema (``app.models.category
+    .CategoryEntry``/``SubcategoryEntry``) directly, rather than the old
+    bare-list shape — this is sample/demo data, not a migration fixture,
+    so it should look like something a real user would end up with
+    through the UI, icons and budgets included. The budgets are chosen to
+    demonstrate every case discussed for how a category's budget relates
+    to its subcategories' (see ``services.categories
+    .subcategories_exceed_category_budget``), not just picked at random:
+    - **Housing**, **Entertainment**: every subcategory budgeted, and
+      their sum comfortably fits under the category's own budget.
+    - **Groceries**, **Shopping**: only some subcategories budgeted
+      (Farmers Market/Clothing deliberately left unset) — a category
+      budget doesn't require every subcategory to have one.
+    - **Health**: a category budget with no subcategory budgets at all.
+    - **Transportation**: a *deliberate* exception — Fuel (60) + Public
+      Transit (80) add up to more than the category's own budget (100).
+      Realistic (most months use one or the other, not both at once) and
+      exercises the non-blocking "exceeds" warning on the categories page.
+    """
     return {
         "income": {
-            "Salary": [],
-            "Freelance": [],
+            "Salary": _category("banknote", ""),
+            "Freelance": _category("laptop", ""),
         },
         "expense": {
-            "Groceries": ["Supermarket", "Farmers Market"],
-            "Housing": ["Rent", "Utilities"],
-            "Transportation": ["Fuel", "Public Transit"],
-            "Entertainment": ["Dining Out", "Streaming"],
-            "Shopping": ["Clothing", "Electronics"],
-            "Health": ["Pharmacy"],
+            "Groceries": _category(
+                "cart",
+                "300",
+                _sub("Supermarket", "store", "280"),
+                _sub("Farmers Market"),
+            ),
+            "Housing": _category(
+                "home",
+                "1700",
+                _sub("Rent", budget="1500"),
+                _sub("Utilities", "bulb", "150"),
+            ),
+            "Transportation": _category(
+                "car",
+                "100",
+                _sub("Fuel", "fuel", "60"),
+                _sub("Public Transit", "ticket", "80"),
+            ),
+            "Entertainment": _category(
+                "film",
+                "100",
+                _sub("Dining Out", "utensils", "70"),
+                _sub("Streaming", "tv", "20"),
+            ),
+            "Shopping": _category(
+                "store",
+                "150",
+                _sub("Clothing", "shirt"),
+                _sub("Electronics", "laptop", "100"),
+            ),
+            "Health": _category("heart", "50", _sub("Pharmacy")),
         },
     }
 

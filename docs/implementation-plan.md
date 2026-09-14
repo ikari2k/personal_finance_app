@@ -4,8 +4,9 @@ This elaborates `finance-app-prd.md` into concrete technical decisions and a pha
 Phases are implemented one at a time, each its own reviewable unit of work with its own commit(s).
 `CLAUDE.md` is updated after each phase lands to reflect what became concrete during that phase.
 
-**Status**: Phases 0–2 and 2.6 (Edit/delete transactions) complete. Phase 2.5 (Categories
-management) and 2.7 (Account view improvements) not yet started. Phase 3 not yet started.
+**Status**: Phases 0–2 and 2.5–2.7 complete, plus three out-of-sequence addenda (transfer
+editing/dialog redesign, icon-set polish, and per-category/subcategory monthly budgets — see
+their entries below). Phase 3 (bank CSV import) not yet started.
 
 **Environment note**: `uv` is installed under pyenv's Python 3.13.7, not globally on PATH — the
 `uv` shim only resolves once a directory is pinned to that pyenv version. This repo has a
@@ -31,7 +32,10 @@ in the repo root and that `.python-version` is present.
 - **TOML schemas** (finalized):
   - `config/accounts.toml`: `[[accounts]]` tables — `id, name, number, description,
     starting_balance`.
-  - `config/categories.toml`: mapping of category name → list of subcategory names.
+  - `config/categories.toml`: two top-level `[income]`/`[expense]` tables, each mapping category
+    name → `{icon, budget, subcategories}`, where `subcategories` maps subcategory name →
+    `{icon, budget}`. `icon` is a key into the vendored icon set (`""` = unset); `budget` is a
+    quoted decimal string (`""` = unset), income-only categories never carry one.
   - `config/rules.toml`: `[[rules]]` tables — `pattern, field, category, subcategory, priority`.
   - `config/import_mappings/<bank>.toml`: `delimiter, date_format, columns` (bank column →
     ledger field map) plus an optional bank-scoped `[[rules]]` list.
@@ -449,6 +453,107 @@ unit-testable without touching disk. `routers/` stays thin — HTTP/HTMX glue on
     the update route (including that a rejected edit leaves the ledger unchanged) in
     `tests/integration/test_transfers_router.py`; live smoke test confirming the dialog title,
     "Save changes" label, dialog close, toast, and updated row all behave correctly end to end.
+
+- [x] **Post-2.7 addendum — Icon-set polish**: several rounds of feedback against the live Phase
+  2.5 icon feature, not part of the original phased plan.
+  - **Uniform sizing via shared CSS custom properties**: `--category-icon-size` (22px) and
+    `--subcategory-icon-size` (18px), defined once in `app/static/style.css`'s `:root` and
+    referenced by every place a glyph renders (categories-page category/subcategory rows, the
+    icon-picker grid, the transactions-list inline icon) — previously each of these rendered at
+    its own independently-tuned size, which read as inconsistent once compared side by side.
+  - **Colored by transaction type** in the transactions list (`.cat-cell-icon-{income,expense,
+    transfer}`, green/red/amber) rather than a single neutral color everywhere.
+  - **Per-icon tooltip hints**: `app.models.category.ICON_HINTS` (a short "what's this for" string
+    per icon key), rendered as each icon-picker choice's `title` attribute; kept in sync with
+    `VALID_ICONS` via a dedicated test asserting the two sets match exactly
+    (`tests/unit/test_categories_icon_data.py`).
+  - **Subcategory-count pill** on each category row (`.sub-count-pill`) — always rendered, even at
+    zero, and hidden via `visibility: hidden` rather than not rendered at all, so the expand
+    chevron (Pico's auto-appended `summary::after`) stays at the same x-position across every row
+    regardless of whether a given row's pill is visible. Reused the same
+    always-render-hide-when-empty technique later for the budget pill (see below).
+  - **Icon set grew from 42 to 44 keys**: added `fuel`/`parking` (`app/templates
+    /_category_icons.html`) for car-related subcategories, alongside redraws of `plane` (a
+    proper paper-plane/send silhouette, replacing a plain triangle dart), `bank`, `car`, and
+    `gamepad` for more visual detail, all against reference screenshots of a native app's category
+    icons.
+  - **Categories-list Category column no longer wraps unnecessarily** in the filtered
+    single-account transactions view: `txn_colgroup(show_account)`
+    (`transactions/_table.html`) previously hardcoded Category's width to 26% regardless of
+    whether the Account column was shown; when Account is hidden, that freed-up width was going
+    entirely to the flexible Description column instead of also benefiting Category. Fixed by
+    making Category's width conditional (26% with Account shown, 42% without).
+  - *Verified*: full test suite green throughout; live smoke-tested via headless Playwright
+    against the running dev server (icon grid, uniform sizing, tooltips, pill visibility, column
+    widths), with `data/`/`config/` backed up and restored around every mutating test so the
+    user's own concurrent live session was never disturbed.
+
+- [x] **Post-2.7 addendum — Per-category/subcategory monthly budgets, and related fixes**: the
+  first slice of budget tracking (Phase 5 will add the actual monthly spend-vs-budget report;
+  this is just the data model and its entry UI), plus a few small UI fixes noticed alongside it.
+  Not part of the original phased plan.
+  - **Icon picker's "no icon" option is now a dedicated "Clear icon" button** above the grid
+    (`categories/_form.html`), not a `–` tile living inside the grid itself — the tile read as
+    "an icon called dash", which was the actual complaint. The button just unchecks every
+    `input[name=icon]` radio via a small inline `onclick` (native radio groups can't be
+    deselected without JS); the router already defaulted `icon: str = Form("")` for "no radio
+    checked", so no backend change was needed.
+  - **Schema**: `CategoryEntry` gained a `budget: str` field, and subcategories moved from a bare
+    icon string to their own `SubcategoryEntry` TypedDict (`{icon, budget}`) — a second schema
+    migration on top of Phase 2.5's, with the same shape of backward-compat shim
+    (`app.storage.categories._normalize_subcategory` upgrades a bare icon string in memory on
+    read; `_normalize_entry` extended to fill in a missing `budget` key). `""` means "unset",
+    same convention as `icon`. **Income categories/subcategories can never have a budget** —
+    rejected in `services.categories` (`_budget_str` raises if `txn_type is
+    TransactionType.INCOME` and a budget is given) and the form field is hidden client-side for
+    income (`show_budget` flag threaded through `_render_form`) — a budget exists to flag
+    overspending, which isn't a meaningful concept for income.
+  - **Category and subcategory budgets are independent thresholds, not a hierarchy** — a
+    category's budget is checked against total spend across *all* its transactions (every
+    subcategory plus any transaction with no subcategory); each subcategory's budget is checked
+    only against its own spend. Deliberately **not** validated against each other at save time
+    (a subcategory's budgets summing to more than the category's own is a legitimate,
+    "optimistic" setup, not an error) — instead, `services.categories
+    .subcategories_exceed_category_budget` flags this combination for **display only**, surfaced
+    on the categories list as an amber pill plus an explicit warning-triangle glyph
+    (`_icons.html`'s `warning_icon()`) — color alone (an amber pill next to other pills) didn't
+    read as "alert" clearly enough on its own.
+  - **Configured budgets show inline on the categories list** as a pill next to the name
+    (`.budget-pill`, always rendered for category rows and hidden via `visibility: hidden` when
+    unset, for the same chevron-alignment reason as the subcategory-count pill; conditionally
+    rendered for subcategory rows, which aren't a shared grid). This is just the configured
+    amount, not a spend-vs-actual comparison — that's still a future Monthly Budgets page.
+  - **Categories-page row-actions overlap, fixed**: the shared hover-reveal `.row-actions` pattern
+    (Phase 2.6) floats left into the page's own ambient margin, which works for a single table but
+    broke down for the Income/Expense side-by-side layout — the Expense column's rows floated
+    left *past* the 3rem gap between columns (smaller than `.row-actions`' 4.25rem offset) and
+    into Income's own content. Fixed by mirroring the Expense column's offset to the right
+    (`right: -4.25rem`) instead, into the page's own right margin; reset back to `left` under the
+    existing `max-width: 700px` breakpoint where the two columns stack into one.
+  - **Transactions list shows only the subcategory, not "Category / Subcategory", when a
+    subcategory is set** (`transactions/_table.html`'s `txn_row` macro) — confirmed the entry
+    form still supports both category-only and category+subcategory expenses end to end
+    (`subcategory` was already an optional form field; unaffected by this display change).
+  - **`scripts/seed_sample_data.py` updated** to the current icon-and-budget-bearing schema
+    (previously still built the old bare-list shape, relying on the read-side upgrade shim to
+    paper over it), given realistic per-category/subcategory icons from the current 44-icon set,
+    and given realistic monthly budgets chosen specifically to demonstrate every
+    category/subcategory-budget combination discussed for this feature side by side: some
+    categories with every subcategory budgeted and comfortably under the category total
+    (Housing, Entertainment), some with only a few subcategories budgeted (Groceries, Shopping),
+    one with a category budget and no subcategory budgets at all (Health), and one deliberate
+    exception — Transportation's Fuel (60) + Public Transit (80) budgets add up to more than its
+    own (100) — to exercise the "exceeds" warning pill on a fresh seed without any manual setup.
+  - *Verified*: unit tests for every new/changed `services.categories` function (budget
+    acceptance/rejection per type, negative-budget rejection, the exceeds-budget flag in all four
+    independent/dependent combinations) and the storage-layer upgrade shim
+    (`tests/unit/test_categories.py`, `tests/unit/test_service_categories.py`); integration tests
+    for the income-budget rejection, the show/hide budget field per type, and the warning pill
+    appearing/not-appearing (`tests/integration/test_categories_router.py`); live smoke test
+    confirming the warning pill+icon against the user's own real category data (which, by
+    coincidence, already had a category over its subcategory-budget sum) and again after
+    re-running the updated seed script; `data/`/`config/` backed up and restored around every
+    mutating live test (except the final seed-script run, which intentionally resets them).
 
 - [ ] **Phase 3 — Bank CSV import**: upload + parse endpoint, mapping-setup UI persisted to
   `config/import_mappings/<bank>.toml`, auto-reuse on next import from the same bank,
