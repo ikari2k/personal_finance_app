@@ -1,0 +1,77 @@
+<form id="edit-mapping-form" hx-encoding="multipart/form-data">
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <h2>Edit mapping: {{ mapping.bank }}</h2>
+  <p class="muted">No file needed here — these are the saved settings. Save persists them as-is;
+     dry run tests them (even before saving) against an uploaded file without writing anything.</p>
+
+  <div class="form-grid-2">
+    <label>Delimiter
+      <input type="text" name="delimiter" value="{{ mapping.delimiter }}" maxlength="1" required>
+    </label>
+    <label>Encoding
+      <select name="encoding">
+        {% for enc in encoding_choices %}
+          <option value="{{ enc }}" {{ 'selected' if enc == mapping.encoding }}>{{ enc }}</option>
+        {% endfor %}
+      </select>
+    </label>
+  </div>
+  <div class="form-grid-2">
+    <label>Date format
+      <input type="text" name="date_format" value="{{ mapping.date_format }}" placeholder="e.g. %d.%m.%Y" required>
+    </label>
+    <label>Decimal separator
+      <input type="text" name="decimal_separator" value="{{ mapping.decimal_separator }}" maxlength="1" required>
+    </label>
+  </div>
+  <div class="form-grid-2">
+    <label>Date column (index)
+      <input type="number" name="date_column" value="{{ mapping.columns.date }}" min="0" required>
+    </label>
+    <label>Description column (index)
+      <input type="number" name="description_column" value="{{ mapping.columns.description }}" min="0" required>
+    </label>
+  </div>
+  <div class="form-grid-2">
+    <label title="Used when the description column above is blank for a row">
+      Description fallback column (optional)
+      <input type="number" name="description_fallback_column" min="0"
+             value="{{ mapping.columns.description_fallback if mapping.columns.description_fallback is defined else '' }}">
+    </label>
+    <label>Amount column (index)
+      <input type="number" name="amount_column" value="{{ mapping.columns.amount }}" min="0" required>
+    </label>
+  </div>
+  <div class="form-grid-2">
+    <label>Account number column (optional)
+      <input type="number" name="account_number_column" min="0"
+             value="{{ mapping.columns.account_number if mapping.columns.account_number is defined else '' }}">
+    </label>
+  </div>
+
+  <hr>
+  <p class="muted">To dry-run against a file, pick the account it would import into and a sample file.</p>
+  <div class="form-grid-2">
+    <label>Account (for dry run)
+      <select name="account_id">
+        {% for account in accounts %}
+          <option value="{{ account.id }}">{{ account.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>CSV file (for dry run)
+      <input type="file" name="file" accept=".csv">
+    </label>
+  </div>
+
+  <footer class="dialog-footer">
+    <button type="button" class="btn-outline" hx-post="/import/mappings/{{ mapping.bank | urlencode }}/dry-run"
+            hx-target="#import-wizard" hx-swap="innerHTML show:top" hx-include="closest form">
+      Dry run
+    </button>
+    <button type="button" hx-post="/import/mappings/{{ mapping.bank | urlencode }}/edit"
+            hx-target="#import-wizard" hx-swap="innerHTML show:top" hx-include="closest form">
+      Save
+    </button>
+  </footer>
+</form>

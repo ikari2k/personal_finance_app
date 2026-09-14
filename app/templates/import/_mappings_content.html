@@ -1,4 +1,4 @@
-{% from "_icons.html" import edit_icon, delete_icon %}
+{% from "_icons.html" import edit_icon, delete_icon, run_icon %}
 <div id="mappings-page-wrapper">
   <h2>Saved bank mappings</h2>
   {% if mappings %}
@@ -22,8 +22,10 @@
           <tr>
             <td>
               <span class="row-actions">
+                <a class="icon-run" aria-label="Run mapping"
+                   href="/import/mappings/{{ mapping.bank | urlencode }}/run">{{ run_icon() }}</a>
                 <a class="icon-edit" aria-label="Edit mapping"
-                   href="/import?edit_bank={{ mapping.bank | urlencode }}">{{ edit_icon() }}</a>
+                   href="/import/mappings/{{ mapping.bank | urlencode }}/edit">{{ edit_icon() }}</a>
                 <button type="button" class="icon-delete" aria-label="Delete mapping"
                         hx-post="/import/mappings/{{ mapping.bank | urlencode }}/delete"
                         hx-target="#mappings-page-wrapper" hx-swap="outerHTML"

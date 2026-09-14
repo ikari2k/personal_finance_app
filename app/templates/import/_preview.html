@@ -15,6 +15,10 @@
   </p>
 {% endif %}
 
+{% if dry_run %}
+  <p class="muted">Dry run — read-only, nothing is written. Use "Run" from the mapping list to actually import.</p>
+{% endif %}
+
 {% if transactions %}
   <div class="table-scroll">
     <table>
@@ -34,18 +38,27 @@
     </table>
   </div>
 
-  <form hx-post="/import/confirm" hx-target="#import-wizard" hx-swap="innerHTML">
-    <input type="hidden" name="account_id" value="{{ account_id }}">
-    <input type="hidden" name="bank" value="{{ bank }}">
-    <input type="hidden" name="duplicate_count" value="{{ duplicate_count }}">
-    <input type="hidden" name="filtered_count" value="{{ filtered_count }}">
-    <input type="hidden" name="rows_payload" value="{{ rows_payload }}">
+  {% if dry_run %}
     <footer class="dialog-footer">
-      <a hx-get="/import/step/upload" hx-target="#import-wizard" class="btn-outline" role="button">Cancel</a>
-      <button type="submit">Confirm import</button>
+      <a hx-get="{{ restart_url }}" hx-target="#import-wizard" class="btn-outline" role="button">Back to edit</a>
     </footer>
-  </form>
+  {% else %}
+    <form hx-post="/import/confirm" hx-target="#import-wizard" hx-swap="innerHTML">
+      <input type="hidden" name="account_id" value="{{ account_id }}">
+      <input type="hidden" name="bank" value="{{ bank }}">
+      <input type="hidden" name="duplicate_count" value="{{ duplicate_count }}">
+      <input type="hidden" name="filtered_count" value="{{ filtered_count }}">
+      <input type="hidden" name="rows_payload" value="{{ rows_payload }}">
+      <input type="hidden" name="restart_url" value="{{ restart_url }}">
+      <footer class="dialog-footer">
+        <a hx-get="{{ restart_url }}" hx-target="#import-wizard" class="btn-outline" role="button">Cancel</a>
+        <button type="submit">Confirm import</button>
+      </footer>
+    </form>
+  {% endif %}
 {% else %}
   <p>Nothing new to import.</p>
-  <a hx-get="/import/step/upload" hx-target="#import-wizard" class="btn-outline" role="button">Start over</a>
+  <a hx-get="{{ restart_url }}" hx-target="#import-wizard" class="btn-outline" role="button">
+    {{ 'Back to edit' if dry_run else 'Start over' }}
+  </a>
 {% endif %}

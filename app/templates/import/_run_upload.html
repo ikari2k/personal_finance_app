@@ -1,0 +1,20 @@
+<form hx-post="/import/mappings/{{ bank | urlencode }}/run" hx-target="#import-wizard"
+      hx-swap="innerHTML show:top" hx-encoding="multipart/form-data">
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <h2>Run: {{ bank }}</h2>
+  <div class="form-grid-2">
+    <label>Account
+      <select name="account_id" required>
+        {% for account in accounts %}
+          <option value="{{ account.id }}">{{ account.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+  </div>
+  <label>CSV file
+    <input type="file" name="file" accept=".csv" required>
+  </label>
+  <footer class="dialog-footer">
+    <button type="submit">Import</button>
+  </footer>
+</form>

@@ -1,4 +1,7 @@
-"""Integration tests for the bank CSV import wizard router."""
+"""Integration tests for the bank CSV import dashboard and its three flows:
+create (``/import/new``), edit (``/import/mappings/{bank}/edit``), and run
+(``/import/mappings/{bank}/run``).
+"""
 
 import html
 
@@ -28,15 +31,16 @@ def _create_account(client, account_id: str = "chk", number: str = "1234") -> No
     )
 
 
-def _upload(
+def _upload_new(
     client,
     *,
     account_id: str = "chk",
     bank: str = "Test Bank",
     content: str = SAMPLE_CSV,
 ):
+    """Start the create flow: upload a file + account + a (hopefully new) bank name."""
     return client.post(
-        "/import/upload",
+        "/import/new",
         data={"account_id": account_id, "bank": bank},
         files={"file": ("statement.csv", content, "text/csv")},
     )
@@ -61,6 +65,15 @@ def _save_mapping(client, *, bank: str, account_id: str, file_content_b64: str):
     )
 
 
+def _create_mapping(client, *, account_id: str = "chk", bank: str = "Test Bank"):
+    """Full create flow: upload, mapping setup, save. Returns the preview response."""
+    setup_response = _upload_new(client, account_id=account_id, bank=bank)
+    file_content_b64 = _extract_hidden_value(setup_response.text, "file_content_b64")
+    return _save_mapping(
+        client, bank=bank, account_id=account_id, file_content_b64=file_content_b64
+    )
+
+
 def _extract_hidden_value(page_html: str, name: str) -> str:
     """Extract a hidden input's value, HTML-unescaped as a browser would."""
     marker = f'name="{name}" value="'
@@ -79,22 +92,43 @@ def _confirm(client, *, account_id: str, bank: str, rows_payload: str, **extra):
     return client.post("/import/confirm", data=data)
 
 
-def test_import_page_renders_empty_state(client):
+def test_import_page_renders_dashboard(client):
     response = client.get("/import")
 
     assert response.status_code == 200
-    assert "Import transactions" in response.text
+    assert "Create new mapping" in response.text
+    assert "No saved mappings yet" in response.text
 
 
-def test_upload_for_unknown_bank_shows_mapping_setup(client):
-    _create_account(client)
-
-    response = _upload(client)
+def test_new_mapping_page_renders_upload_form(client):
+    response = client.get("/import/new")
 
     assert response.status_code == 200
-    assert "First import from" in response.text
+    assert 'name="bank"' in response.text
+    assert 'name="file"' in response.text
+
+
+def test_upload_for_new_bank_shows_mapping_setup(client):
+    _create_account(client)
+
+    response = _upload_new(client)
+
+    assert response.status_code == 200
     assert "Test Bank" in response.text
     assert "description" in response.text  # header preview shows the CSV's own headers
+
+
+def test_creating_a_mapping_with_a_duplicate_name_is_rejected(client):
+    """The create flow only ever makes a *new* mapping — reuse is via Run instead."""
+    _create_account(client)
+    _create_mapping(client, bank="Test Bank")
+
+    response = _upload_new(client, bank="Test Bank")
+
+    assert response.status_code == 200
+    assert "already exists" in response.text
+    # rejected before reaching mapping setup at all
+    assert "date_column" not in response.text
 
 
 def test_mapping_setup_excludes_columns_blank_in_every_row(client):
@@ -106,7 +140,7 @@ def test_mapping_setup_excludes_columns_blank_in_every_row(client):
         "2026-09-02,Paycheck,,3200.00\n"
     )
 
-    response = _upload(client, content=csv_with_empty_column)
+    response = _upload_new(client, content=csv_with_empty_column)
 
     assert response.status_code == 200
     assert ">unused<" not in response.text
@@ -116,7 +150,7 @@ def test_mapping_setup_excludes_columns_blank_in_every_row(client):
 def test_upload_rejects_blank_bank_name(client):
     _create_account(client)
 
-    response = _upload(client, bank="   ")
+    response = _upload_new(client, bank="   ")
 
     assert response.status_code == 200
     assert "Bank name is required" in response.text
@@ -125,12 +159,7 @@ def test_upload_rejects_blank_bank_name(client):
 def test_full_flow_saves_mapping_and_imports_filtered_rows(client):
     _create_account(client, account_id="chk", number="1234")
 
-    setup_response = _upload(client)
-    file_content_b64 = _extract_hidden_value(setup_response.text, "file_content_b64")
-
-    preview_response = _save_mapping(
-        client, bank="Test Bank", account_id="chk", file_content_b64=file_content_b64
-    )
+    preview_response = _create_mapping(client)
 
     assert preview_response.status_code == 200
     assert "2 new transaction" in preview_response.text
@@ -155,38 +184,6 @@ def test_full_flow_saves_mapping_and_imports_filtered_rows(client):
     assert "Uncategorized" in categories["income"]
 
 
-def test_second_import_from_same_bank_skips_mapping_setup(client):
-    _create_account(client, account_id="chk", number="1234")
-    setup_response = _upload(client)
-    file_content_b64 = _extract_hidden_value(setup_response.text, "file_content_b64")
-    _save_mapping(
-        client, bank="Test Bank", account_id="chk", file_content_b64=file_content_b64
-    )
-
-    response = _upload(client)
-
-    assert response.status_code == 200
-    assert "First import from" not in response.text
-    assert "2 new transaction" in response.text
-
-
-def test_reimporting_the_same_file_is_flagged_as_duplicates(client):
-    _create_account(client, account_id="chk", number="1234")
-    setup_response = _upload(client)
-    file_content_b64 = _extract_hidden_value(setup_response.text, "file_content_b64")
-    preview_response = _save_mapping(
-        client, bank="Test Bank", account_id="chk", file_content_b64=file_content_b64
-    )
-    rows_payload = _extract_hidden_value(preview_response.text, "rows_payload")
-    _confirm(client, account_id="chk", bank="Test Bank", rows_payload=rows_payload)
-
-    second_preview = _upload(client)
-
-    assert "0 new transaction" in second_preview.text
-    assert "2 duplicates skipped" in second_preview.text
-    assert len(read_ledger(config.LEDGER_PATH)) == 2
-
-
 def test_import_applies_matching_rule(client):
     from app.models.rule import Rule
     from app.storage.rules import write_rules
@@ -197,11 +194,7 @@ def test_import_applies_matching_rule(client):
         config.RULES_PATH,
     )
 
-    setup_response = _upload(client)
-    file_content_b64 = _extract_hidden_value(setup_response.text, "file_content_b64")
-    preview_response = _save_mapping(
-        client, bank="Test Bank", account_id="chk", file_content_b64=file_content_b64
-    )
+    preview_response = _create_mapping(client)
 
     assert "Dining / Cafes" in preview_response.text
 
@@ -209,7 +202,7 @@ def test_import_applies_matching_rule(client):
 def test_save_mapping_with_wrong_date_format_shows_error_not_a_crash(client):
     """Regression test: a bad setting must never 500 or persist a broken mapping."""
     _create_account(client, account_id="chk", number="1234")
-    setup_response = _upload(client)
+    setup_response = _upload_new(client)
     file_content_b64 = _extract_hidden_value(setup_response.text, "file_content_b64")
 
     response = client.post(
@@ -239,7 +232,7 @@ def test_save_mapping_with_wrong_date_format_shows_error_not_a_crash(client):
 
 def test_fixing_the_error_after_a_failed_save_still_works(client):
     _create_account(client, account_id="chk", number="1234")
-    setup_response = _upload(client)
+    setup_response = _upload_new(client)
     file_content_b64 = _extract_hidden_value(setup_response.text, "file_content_b64")
     client.post(
         "/import/mapping-setup/save",
@@ -273,7 +266,7 @@ def test_reparse_shows_a_live_hint_for_a_column_blank_in_some_rows(client):
         "2026-09-01,Coffee Shop,-3.50,1234\n"
         "2026-09-02,Paycheck,,1234\n"
     )
-    setup_response = _upload(client, content=csv_with_gap)
+    setup_response = _upload_new(client, content=csv_with_gap)
     file_content_b64 = _extract_hidden_value(setup_response.text, "file_content_b64")
 
     response = client.post(
@@ -302,7 +295,7 @@ def test_preview_warns_about_rows_skipped_for_missing_amount(client):
         "2026-09-01,Coffee Shop,-3.50,1234\n"
         "2026-09-02,Paycheck,,1234\n"
     )
-    setup_response = _upload(client, content=csv_with_gap)
+    setup_response = _upload_new(client, content=csv_with_gap)
     file_content_b64 = _extract_hidden_value(setup_response.text, "file_content_b64")
 
     response = _save_mapping(
@@ -320,7 +313,7 @@ def test_description_fallback_column_used_when_primary_is_blank(client):
         "date,description,amount,account,payee\n"
         "2026-09-01,,-3.50,1234,Tauron Sprzedaz\n"
     )
-    setup_response = _upload(client, content=csv_with_payee)
+    setup_response = _upload_new(client, content=csv_with_payee)
     file_content_b64 = _extract_hidden_value(setup_response.text, "file_content_b64")
 
     response = client.post(
@@ -345,17 +338,13 @@ def test_description_fallback_column_used_when_primary_is_blank(client):
     assert "Tauron Sprzedaz" in response.text
 
 
-def test_mappings_page_lists_saved_mapping_and_history(client):
+def test_dashboard_lists_saved_mapping_and_history(client):
     _create_account(client, account_id="chk", number="1234")
-    setup_response = _upload(client)
-    file_content_b64 = _extract_hidden_value(setup_response.text, "file_content_b64")
-    preview_response = _save_mapping(
-        client, bank="Test Bank", account_id="chk", file_content_b64=file_content_b64
-    )
+    preview_response = _create_mapping(client)
     rows_payload = _extract_hidden_value(preview_response.text, "rows_payload")
     _confirm(client, account_id="chk", bank="Test Bank", rows_payload=rows_payload)
 
-    response = client.get("/import/mappings")
+    response = client.get("/import")
 
     assert response.status_code == 200
     assert "Test Bank" in response.text
@@ -365,11 +354,7 @@ def test_mappings_page_lists_saved_mapping_and_history(client):
 
 def test_delete_mapping_removes_it_but_keeps_history(client):
     _create_account(client, account_id="chk", number="1234")
-    setup_response = _upload(client)
-    file_content_b64 = _extract_hidden_value(setup_response.text, "file_content_b64")
-    preview_response = _save_mapping(
-        client, bank="Test Bank", account_id="chk", file_content_b64=file_content_b64
-    )
+    preview_response = _create_mapping(client)
     rows_payload = _extract_hidden_value(preview_response.text, "rows_payload")
     _confirm(client, account_id="chk", bank="Test Bank", rows_payload=rows_payload)
     assert read_mapping("Test Bank", config.IMPORT_MAPPINGS_DIR) is not None
@@ -381,39 +366,162 @@ def test_delete_mapping_removes_it_but_keeps_history(client):
     assert "Test Bank" in response.text  # still present in history, just not mappings
 
 
-def test_edit_bank_prefills_upload_form_with_existing_mapping_settings(client):
-    _create_account(client, account_id="chk", number="1234")
-    setup_response = _upload(client)
-    file_content_b64 = _extract_hidden_value(setup_response.text, "file_content_b64")
-    _save_mapping(
-        client, bank="Test Bank", account_id="chk", file_content_b64=file_content_b64
-    )
+# ---------------------------------------------------------------------------
+# Edit flow: no file needed, Save persists unconditionally, Dry run is read-only
+# ---------------------------------------------------------------------------
 
-    response = client.get("/import?edit_bank=Test Bank")
+
+def test_edit_page_shows_saved_settings_without_asking_for_file(client):
+    _create_account(client, account_id="chk", number="1234")
+    _create_mapping(client)
+
+    response = client.get("/import/mappings/Test%20Bank/edit")
 
     assert response.status_code == 200
-    assert 'value="Test Bank"' in response.text
-    assert 'name="force_setup"' in response.text
+    assert "Test Bank" in response.text
+    assert 'value="0"' in response.text  # saved date_column
+    assert "First import from" not in response.text  # no file-upload step 1 text
 
 
-def test_editing_a_mapping_goes_to_setup_prefilled_with_saved_columns(client):
+def test_edit_for_unknown_bank_404s(client):
+    response = client.get("/import/mappings/Nope/edit")
+
+    assert response.status_code == 404
+
+
+def test_saving_edited_mapping_persists_unconditionally(client):
+    """Save just persists whatever's typed — no file, no parse-check required."""
     _create_account(client, account_id="chk", number="1234")
-    setup_response = _upload(client)
-    file_content_b64 = _extract_hidden_value(setup_response.text, "file_content_b64")
-    _save_mapping(
-        client, bank="Test Bank", account_id="chk", file_content_b64=file_content_b64
-    )
+    _create_mapping(client)
 
     response = client.post(
-        "/import/upload",
+        "/import/mappings/Test%20Bank/edit",
+        data={
+            "delimiter": ";",
+            "encoding": "utf-8",
+            "date_format": "%d/%m/%Y",
+            "decimal_separator": ",",
+            "date_column": "5",
+            "description_column": "6",
+            "amount_column": "7",
+        },
+    )
+
+    assert response.status_code == 200
+    mapping = read_mapping("Test Bank", config.IMPORT_MAPPINGS_DIR)
+    assert mapping.delimiter == ";"
+    assert mapping.date_format == "%d/%m/%Y"
+    assert mapping.columns == {"date": 5, "description": 6, "amount": 7}
+
+
+def test_dry_run_edited_mapping_is_read_only(client):
+    """Dry run against edited-but-unsaved settings never writes to the ledger."""
+    _create_account(client, account_id="chk", number="1234")
+    _create_mapping(client)
+
+    response = client.post(
+        "/import/mappings/Test%20Bank/dry-run",
         data={
             "account_id": "chk",
-            "bank": "Test Bank",
-            "force_setup": "true",
+            "delimiter": ",",
+            "encoding": "utf-8",
+            "date_format": "%Y-%m-%d",
+            "decimal_separator": ".",
+            "date_column": "0",
+            "description_column": "1",
+            "amount_column": "2",
+            "account_number_column": "3",
         },
         files={"file": ("statement.csv", SAMPLE_CSV, "text/csv")},
     )
 
     assert response.status_code == 200
-    assert "First import from" in response.text
-    assert 'value="2" selected' in response.text  # amount_column preserved
+    assert "Dry run" in response.text
+    assert "Coffee Shop" in response.text
+    assert "Confirm import" not in response.text
+    # the settings sent to dry-run were never saved
+    saved = read_mapping("Test Bank", config.IMPORT_MAPPINGS_DIR)
+    assert saved.columns["account_number"] == 3
+    assert len(read_ledger(config.LEDGER_PATH)) == 0
+
+
+def test_dry_run_without_a_file_reprompts_with_an_error(client):
+    _create_account(client, account_id="chk", number="1234")
+    _create_mapping(client)
+
+    response = client.post(
+        "/import/mappings/Test%20Bank/dry-run",
+        data={
+            "account_id": "chk",
+            "delimiter": ",",
+            "encoding": "utf-8",
+            "date_format": "%Y-%m-%d",
+            "decimal_separator": ".",
+            "date_column": "0",
+            "description_column": "1",
+            "amount_column": "2",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "Choose a CSV file" in response.text
+
+
+# ---------------------------------------------------------------------------
+# Run flow: reuse a saved mapping against a newly uploaded file
+# ---------------------------------------------------------------------------
+
+
+def test_run_page_prompts_for_account_and_file(client):
+    _create_account(client, account_id="chk", number="1234")
+    _create_mapping(client)
+
+    response = client.get("/import/mappings/Test%20Bank/run")
+
+    assert response.status_code == 200
+    assert 'name="account_id"' in response.text
+    assert 'name="file"' in response.text
+
+
+def test_run_for_unknown_bank_404s(client):
+    response = client.get("/import/mappings/Nope/run")
+
+    assert response.status_code == 404
+
+
+def test_running_a_saved_mapping_imports_against_it(client):
+    _create_account(client, account_id="chk", number="1234")
+    _create_mapping(client)
+
+    response = client.post(
+        "/import/mappings/Test%20Bank/run",
+        data={"account_id": "chk"},
+        files={"file": ("statement.csv", SAMPLE_CSV, "text/csv")},
+    )
+
+    assert response.status_code == 200
+    assert "2 new transaction" in response.text
+    rows_payload = _extract_hidden_value(response.text, "rows_payload")
+    confirm_response = _confirm(
+        client, account_id="chk", bank="Test Bank", rows_payload=rows_payload
+    )
+
+    assert "Imported 2 transactions" in confirm_response.text
+    assert len(read_ledger(config.LEDGER_PATH)) == 2
+
+
+def test_reimporting_the_same_file_via_run_is_flagged_as_duplicates(client):
+    _create_account(client, account_id="chk", number="1234")
+    preview_response = _create_mapping(client)
+    rows_payload = _extract_hidden_value(preview_response.text, "rows_payload")
+    _confirm(client, account_id="chk", bank="Test Bank", rows_payload=rows_payload)
+
+    second_preview = client.post(
+        "/import/mappings/Test%20Bank/run",
+        data={"account_id": "chk"},
+        files={"file": ("statement.csv", SAMPLE_CSV, "text/csv")},
+    )
+
+    assert "0 new transaction" in second_preview.text
+    assert "2 duplicates skipped" in second_preview.text
+    assert len(read_ledger(config.LEDGER_PATH)) == 2

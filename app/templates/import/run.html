@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Run {{ bank }} — Finance Tracker{% endblock %}
+{% block content %}
+  <h1>Run import</h1>
+  <p><a href="/import">&larr; Back to import</a></p>
+  <div id="import-wizard">
+    {% include "import/_run_upload.html" %}
+  </div>
+{% endblock %}

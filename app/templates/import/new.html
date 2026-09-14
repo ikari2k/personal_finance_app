@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}New Import Mapping — Finance Tracker{% endblock %}
+{% block content %}
+  <h1>Create new mapping</h1>
+  <p><a href="/import">&larr; Back to import</a></p>
+  <div id="import-wizard">
+    {% include "import/_new_upload.html" %}
+  </div>
+{% endblock %}

@@ -2,8 +2,6 @@
 {% block title %}Import — Finance Tracker{% endblock %}
 {% block content %}
   <h1>Import transactions</h1>
-  <p><a href="/import/mappings">Saved mappings &amp; import history</a></p>
-  <div id="import-wizard">
-    {% include "import/_upload.html" %}
-  </div>
+  <p><a href="/import/new" role="button">+ Create new mapping</a></p>
+  {% include "import/_mappings_content.html" %}
 {% endblock %}

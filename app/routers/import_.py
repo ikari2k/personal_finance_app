@@ -1,16 +1,30 @@
-"""Routes for the bank CSV import wizard.
+"""Routes for bank CSV import: mapping creation, editing, and running.
 
 Named ``import_`` (trailing underscore) to avoid shadowing the ``import``
 keyword — see ``app.main``'s ``include_router`` call.
 
-A single page (``/import``) whose ``#import-wizard`` content is swapped
-step to step via htmx, rather than separate pages per step — there's no
-server-side session state anywhere else in this app, so the uploaded
-file's bytes are threaded forward as a base64 hidden field across steps
-instead of a server-side temp file. Three steps: upload (pick an account,
-a bank, and a file) → mapping setup (only the first time a bank is used;
-skipped once ``config/import_mappings/<bank>.toml`` exists) → preview
-(new/duplicate/filtered-out counts, confirm writes to the ledger).
+``GET /import`` is a dashboard, not a wizard: a "Create new mapping"
+entry point, the list of saved mappings (each with Edit/Delete/Run row
+actions), and the import history log. Three separate flows branch off
+it, each its own full page hosting a ``#import-wizard`` div that swaps
+through its steps via htmx (no server-side session state, matching the
+rest of the app — an uploaded file's bytes are threaded forward as a
+base64 hidden field rather than a temp file):
+
+- **Create** (`/import/new`): upload a file + pick an account + name a
+  *new* bank → mapping setup (column picker) → preview → confirm. The
+  bank name must be unique — this flow only ever creates a mapping, it
+  never reuses or edits an existing one.
+- **Edit** (`/import/mappings/{bank}/edit`): no file needed — shows the
+  saved settings as plain editable fields. "Save" persists them
+  directly, no validation beyond the field types. "Dry run" parses an
+  uploaded file against the (possibly unsaved-edited) settings and
+  shows a read-only preview — never a path to actually writing the
+  ledger; that's what Run is for.
+- **Run** (`/import/mappings/{bank}/run`): upload a file + pick an
+  account, parse it against the *saved* mapping straight to a normal
+  (write-capable) preview → confirm. This is how a mapping gets reused
+  for a later import, now that creation no longer doubles as reuse.
 """
 
 import base64
@@ -21,6 +35,7 @@ import uuid
 from datetime import date as date_
 from datetime import datetime
 from decimal import Decimal
+from urllib.parse import quote
 
 from fastapi import APIRouter, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse
@@ -45,7 +60,6 @@ from app.storage.import_history import append_history_entry, read_history
 from app.storage.import_mappings import (
     delete_mapping,
     list_all_mappings,
-    list_banks,
     read_mapping,
     write_mapping,
 )
@@ -58,6 +72,10 @@ router = APIRouter(prefix="/import", tags=["import"])
 ENCODING_CHOICES = ["utf-8", "cp1250", "cp1252", "latin-1"]
 
 
+def _is_htmx(request: Request) -> bool:
+    return request.headers.get("HX-Request") == "true"
+
+
 def _decode(content: bytes, encoding: str) -> str | None:
     """Decode ``content`` with ``encoding``, or ``None`` if it doesn't fit."""
     try:
@@ -66,99 +84,116 @@ def _decode(content: bytes, encoding: str) -> str | None:
         return None
 
 
-@router.get("", response_class=HTMLResponse)
-def import_page(request: Request, edit_bank: str | None = None) -> HTMLResponse:
-    """Render the import page with the step-1 upload form.
+def _to_column_index(value: str) -> int | None:
+    """Parse a submitted column-index form value; blank/missing means "none"."""
+    return int(value) if value.strip().isdigit() else None
 
-    ``edit_bank`` (from the "Edit" link on ``/import/mappings``)
-    pre-fills the bank field and flags the upload as an edit — see
-    ``upload()``'s ``force_setup``.
-    """
+
+# ---------------------------------------------------------------------------
+# Dashboard
+# ---------------------------------------------------------------------------
+
+
+def _render_dashboard_content(
+    request: Request, *, headers: dict[str, str] | None = None
+) -> HTMLResponse:
+    """Render the mappings-list + history fragment, shared with delete's refresh."""
+    return templates.TemplateResponse(
+        request,
+        "import/_mappings_content.html",
+        {"mappings": list_all_mappings(), "history": read_history()},
+        headers=headers,
+    )
+
+
+@router.get("", response_class=HTMLResponse)
+def dashboard(request: Request) -> HTMLResponse:
+    """Render the import dashboard: create button, mappings list, history."""
     return templates.TemplateResponse(
         request,
         "import/page.html",
-        {
-            "accounts": read_accounts(),
-            "banks": list_banks(),
-            "edit_bank": edit_bank,
-            "error": None,
-        },
+        {"mappings": list_all_mappings(), "history": read_history()},
     )
 
 
-@router.get("/step/upload", response_class=HTMLResponse)
-def upload_step(request: Request) -> HTMLResponse:
-    """Re-render just the step-1 upload form (used by the "start over" link)."""
+@router.post("/mappings/{bank}/delete", response_class=HTMLResponse)
+def delete_mapping_route(request: Request, bank: str) -> HTMLResponse:
+    """Delete a saved mapping and refresh the list.
+
+    Import history is untouched — see ``storage.import_mappings
+    .delete_mapping``'s docstring on why that's safe.
+    """
+    delete_mapping(bank)
+    return _render_dashboard_content(request, headers=toast("Mapping deleted"))
+
+
+# ---------------------------------------------------------------------------
+# Create flow: /import/new -> mapping-setup -> preview -> confirm
+# ---------------------------------------------------------------------------
+
+
+@router.get("/new", response_class=HTMLResponse)
+def new_mapping_page(request: Request) -> HTMLResponse:
+    """Render the "create a new mapping" page (step 1: file/account/name)."""
     return templates.TemplateResponse(
         request,
-        "import/_upload.html",
-        {
-            "accounts": read_accounts(),
-            "banks": list_banks(),
-            "edit_bank": None,
-            "error": None,
-        },
+        "import/new.html",
+        {"accounts": read_accounts(), "error": None},
     )
 
 
-@router.post("/upload", response_class=HTMLResponse)
-async def upload(
+@router.get("/new/restart", response_class=HTMLResponse)
+def restart_new_mapping(request: Request) -> HTMLResponse:
+    """Re-render just the step-1 form (the create flow's "start over" link)."""
+    return templates.TemplateResponse(
+        request,
+        "import/_new_upload.html",
+        {"accounts": read_accounts(), "error": None},
+    )
+
+
+@router.post("/new", response_class=HTMLResponse)
+async def create_mapping_upload(
     request: Request,
     account_id: str = Form(...),
     bank: str = Form(...),
     file: UploadFile = File(...),
-    force_setup: bool = Form(False),
 ) -> HTMLResponse:
-    """Handle the uploaded file: go to mapping setup, or straight to preview.
+    """Handle the create flow's upload: reject a duplicate name, else go to setup.
 
-    A bank with no saved mapping yet goes to step 2 (mapping setup); a
-    bank that's been imported before reuses its saved mapping and skips
-    straight to step 3 (preview) — the auto-reuse behavior Phase 3 is
-    meant to demonstrate. ``force_setup`` (set by the "Edit mapping"
-    link's hidden field) always goes to step 2 even when a mapping
-    already exists, pre-filling every field from that existing mapping
-    instead of hardcoded defaults, so editing only requires changing
-    what's actually wrong rather than re-picking everything.
+    This flow only ever creates a *new* mapping — reusing an existing
+    one is what the mapping list's Run icon is for instead, so a name
+    collision here is an error, not a silent reuse.
     """
-    content = await file.read()
     bank = bank.strip()
+    error = None
     if not bank:
+        error = "Bank name is required."
+    elif read_mapping(bank) is not None:
+        error = (
+            f'A mapping named "{bank}" already exists. '
+            "Edit or run it from the list below instead."
+        )
+    if error:
         return templates.TemplateResponse(
             request,
-            "import/_upload.html",
-            {
-                "accounts": read_accounts(),
-                "banks": list_banks(),
-                "edit_bank": None,
-                "error": "Bank name is required.",
-            },
+            "import/_new_upload.html",
+            {"accounts": read_accounts(), "error": error},
         )
+    content = await file.read()
     file_content_b64 = base64.b64encode(content).decode("ascii")
-    mapping = read_mapping(bank)
-    if mapping is None or force_setup:
-        return _render_mapping_setup(
-            request,
-            bank=bank,
-            account_id=account_id,
-            file_content_b64=file_content_b64,
-            delimiter=mapping.delimiter if mapping else ",",
-            encoding=mapping.encoding if mapping else "utf-8",
-            date_format=mapping.date_format if mapping else "%Y-%m-%d",
-            decimal_separator=mapping.decimal_separator if mapping else ".",
-            error=None,
-            selected_date_column=mapping.columns.get("date") if mapping else None,
-            selected_description_column=(
-                mapping.columns.get("description") if mapping else None
-            ),
-            selected_description_fallback_column=(
-                mapping.columns.get("description_fallback") if mapping else None
-            ),
-            selected_amount_column=(mapping.columns.get("amount") if mapping else None),
-            selected_account_number_column=(
-                mapping.columns.get("account_number") if mapping else None
-            ),
-        )
-    return _render_preview(request, mapping, account_id, content)
+    return _render_mapping_setup(
+        request,
+        bank=bank,
+        account_id=account_id,
+        file_content_b64=file_content_b64,
+        delimiter=",",
+        encoding="utf-8",
+        date_format="%Y-%m-%d",
+        decimal_separator=".",
+        error=None,
+        restart_url="/import/new/restart",
+    )
 
 
 def _render_mapping_setup(
@@ -172,13 +207,14 @@ def _render_mapping_setup(
     date_format: str,
     decimal_separator: str,
     error: str | None,
+    restart_url: str,
     selected_date_column: int | None = None,
     selected_description_column: int | None = None,
     selected_description_fallback_column: int | None = None,
     selected_amount_column: int | None = None,
     selected_account_number_column: int | None = None,
 ) -> HTMLResponse:
-    """Render step 2: mapping settings plus a column-picker preview.
+    """Render the mapping-setup fragment: settings plus a column-picker preview.
 
     Re-parses the file with whatever settings were submitted so the
     preview reflects the current delimiter/encoding/date format/decimal
@@ -192,19 +228,16 @@ def _render_mapping_setup(
 
     Columns that are blank in *every* data row are left out of the
     picker entirely — a real bank export can have dozens of columns
-    that only apply to other transaction types (the Credit Agricole
-    sample this was designed against has 101 columns, most blank on any
-    given row), and none of them can ever be a usable mapping target.
-    Scans the whole file, not just the preview sample, since a column
-    could easily be blank in the first few rows but populated later.
+    that only apply to other transaction types, and none of them can
+    ever be a usable mapping target. Scans the whole file, not just the
+    preview sample, since a column could easily be blank in the first
+    few rows but populated later.
 
     The currently-selected date/amount columns are also live-parsed
     against the current date_format/decimal_separator and shown as a
-    ✓/✗ hint — the wrong column (a date-only column that's blank for
-    some transaction types, e.g., or a foreign-currency amount column
-    that's blank for domestic ones) or the wrong format string is by far
-    the most common way this step fails, and this catches it before the
-    user ever clicks "Save mapping" instead of after.
+    ✓/✗ hint plus a blank-count warning — the wrong column or the wrong
+    format string is by far the most common way this step fails, and
+    this catches it before "Save mapping" instead of after.
     """
     content = base64.b64decode(file_content_b64)
     text = _decode(content, encoding)
@@ -273,6 +306,7 @@ def _render_mapping_setup(
             "decimal_separator": decimal_separator,
             "encoding_choices": ENCODING_CHOICES,
             "columns": columns,
+            "restart_url": restart_url,
             "selected_date_column": selected_date_column,
             "selected_description_column": selected_description_column,
             "selected_description_fallback_column": (
@@ -287,17 +321,13 @@ def _render_mapping_setup(
     )
 
 
-def _to_column_index(value: str) -> int | None:
-    """Parse a submitted column-select value; blank/missing means "none"."""
-    return int(value) if value.strip().isdigit() else None
-
-
 @router.post("/mapping-setup/reparse", response_class=HTMLResponse)
 def reparse_mapping_setup(
     request: Request,
     bank: str = Form(...),
     account_id: str = Form(...),
     file_content_b64: str = Form(...),
+    restart_url: str = Form("/import/new/restart"),
     delimiter: str = Form(","),
     encoding: str = Form("utf-8"),
     date_format: str = Form("%Y-%m-%d"),
@@ -308,7 +338,7 @@ def reparse_mapping_setup(
     amount_column: str = Form(""),
     account_number_column: str = Form(""),
 ) -> HTMLResponse:
-    """Re-render step 2 after the user changes a parsing setting or column pick."""
+    """Re-render mapping setup after the user changes a setting or column pick."""
     return _render_mapping_setup(
         request,
         bank=bank,
@@ -319,6 +349,7 @@ def reparse_mapping_setup(
         date_format=date_format,
         decimal_separator=decimal_separator,
         error=None,
+        restart_url=restart_url,
         selected_date_column=_to_column_index(date_column),
         selected_description_column=_to_column_index(description_column),
         selected_description_fallback_column=_to_column_index(
@@ -335,6 +366,7 @@ def save_mapping_setup(
     bank: str = Form(...),
     account_id: str = Form(...),
     file_content_b64: str = Form(...),
+    restart_url: str = Form("/import/new/restart"),
     delimiter: str = Form(...),
     encoding: str = Form(...),
     date_format: str = Form(...),
@@ -349,12 +381,10 @@ def save_mapping_setup(
 
     Parsing is attempted *before* ``write_mapping`` — persisting a
     mapping that doesn't actually parse (wrong date format, wrong
-    column, ...) would be worse than just failing here: every later
-    import from this bank reuses a saved mapping automatically and skips
-    setup entirely, so a bad mapping would fail the same way with no
-    obvious way back into the setup form to fix it. On failure, every
-    already-made choice (settings and column selections) is preserved
-    in the re-rendered form, so only the one wrong setting needs fixing.
+    column, ...) would be worse than just failing here. On failure,
+    every already-made choice (settings and column selections) is
+    preserved in the re-rendered form, so only the one wrong setting
+    needs fixing.
     """
     columns = {
         "date": date_column,
@@ -396,6 +426,7 @@ def save_mapping_setup(
             date_format=date_format,
             decimal_separator=decimal_separator,
             error=str(exc),
+            restart_url=restart_url,
             selected_date_column=date_column,
             selected_description_column=description_column,
             selected_description_fallback_column=description_fallback_idx,
@@ -403,13 +434,32 @@ def save_mapping_setup(
             selected_account_number_column=account_number_idx,
         )
     write_mapping(mapping)
-    return _render_preview(request, mapping, account_id, content)
+    return _render_preview(
+        request, mapping, account_id, content, restart_url=restart_url
+    )
+
+
+# ---------------------------------------------------------------------------
+# Preview + confirm (shared by the create and run flows)
+# ---------------------------------------------------------------------------
 
 
 def _render_preview(
-    request: Request, mapping: ImportMapping, account_id: str, content: bytes
+    request: Request,
+    mapping: ImportMapping,
+    account_id: str,
+    content: bytes,
+    *,
+    restart_url: str,
+    dry_run: bool = False,
 ) -> HTMLResponse:
-    """Parse, filter, dedup, and categorize ``content``; render step 3."""
+    """Parse, filter, dedup, and categorize ``content``; render the preview.
+
+    ``dry_run=True`` (used by the edit flow) omits the confirm form
+    entirely — it's a read-only "what would happen" view, never a path
+    to actually writing the ledger. The Run flow's normal preview keeps
+    the confirm form, same as the create flow's.
+    """
     text = content.decode(mapping.encoding)
     accounts = {account.id: account for account in read_accounts()}
     account = accounts.get(account_id)
@@ -456,6 +506,8 @@ def _render_preview(
             "blank_amount_count": blank_amount,
             "total_rows": total_rows,
             "rows_payload": rows_payload,
+            "restart_url": restart_url,
+            "dry_run": dry_run,
         },
     )
 
@@ -468,6 +520,7 @@ def confirm(
     duplicate_count: int = Form(0),
     filtered_count: int = Form(0),
     rows_payload: str = Form(...),
+    restart_url: str = Form("/import/new/restart"),
 ) -> HTMLResponse:
     """Write the previewed transactions to the ledger and log the import."""
     rows = json.loads(rows_payload)
@@ -513,43 +566,211 @@ def confirm(
     return templates.TemplateResponse(
         request,
         "import/_done.html",
-        {"count": len(new_transactions)},
+        {"count": len(new_transactions), "restart_url": restart_url},
         headers=toast(f"Imported {len(new_transactions)} transactions"),
     )
 
 
-def _render_mappings_content(
-    request: Request, *, headers: dict[str, str] | None = None
-) -> HTMLResponse:
-    """Render the saved-mappings + import-history fragment.
+# ---------------------------------------------------------------------------
+# Run flow: reuse a saved mapping against a new file
+# ---------------------------------------------------------------------------
 
-    Shared by the full page and the delete action's refresh, matching
-    the ``_render_tree``-style pattern used for categories.
+
+@router.get("/mappings/{bank}/run", response_class=HTMLResponse)
+def run_mapping_page(request: Request, bank: str) -> HTMLResponse:
+    """Render the Run flow's upload prompt (account + file for a known bank).
+
+    Full page on a plain navigation (from the mapping list's Run icon);
+    just the form fragment when re-fetched via htmx (the preview's
+    "start over" link, within the same page).
     """
+    mapping = read_mapping(bank)
+    if mapping is None:
+        return HTMLResponse(f'No saved mapping named "{bank}".', status_code=404)
+    context = {"bank": mapping.bank, "accounts": read_accounts(), "error": None}
+    template = "import/_run_upload.html" if _is_htmx(request) else "import/run.html"
+    return templates.TemplateResponse(request, template, context)
+
+
+@router.post("/mappings/{bank}/run", response_class=HTMLResponse)
+async def run_mapping(
+    request: Request,
+    bank: str,
+    account_id: str = Form(...),
+    file: UploadFile = File(...),
+) -> HTMLResponse:
+    """Parse an uploaded file against ``bank``'s saved mapping and preview it."""
+    mapping = read_mapping(bank)
+    if mapping is None:
+        return HTMLResponse(f'No saved mapping named "{bank}".', status_code=404)
+    content = await file.read()
+    return _render_preview(
+        request,
+        mapping,
+        account_id,
+        content,
+        restart_url=f"/import/mappings/{quote(bank, safe='')}/run",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Edit flow: change a saved mapping's settings, with an optional dry run
+# ---------------------------------------------------------------------------
+
+
+def _render_edit_form(
+    request: Request,
+    mapping: ImportMapping,
+    *,
+    error: str | None = None,
+    headers: dict[str, str] | None = None,
+) -> HTMLResponse:
+    """Render the file-less edit-settings fragment for ``mapping``."""
     return templates.TemplateResponse(
         request,
-        "import/_mappings_content.html",
-        {"mappings": list_all_mappings(), "history": read_history()},
+        "import/_edit_form.html",
+        {
+            "mapping": mapping,
+            "accounts": read_accounts(),
+            "encoding_choices": ENCODING_CHOICES,
+            "error": error,
+        },
         headers=headers,
     )
 
 
-@router.get("/mappings", response_class=HTMLResponse)
-def list_mappings_page(request: Request) -> HTMLResponse:
-    """Render the saved-mappings + import-history page."""
+@router.get("/mappings/{bank}/edit", response_class=HTMLResponse)
+def edit_mapping_page(request: Request, bank: str) -> HTMLResponse:
+    """Render the edit-mapping page (full page or fragment, see run_mapping_page)."""
+    mapping = read_mapping(bank)
+    if mapping is None:
+        return HTMLResponse(f'No saved mapping named "{bank}".', status_code=404)
+    if _is_htmx(request):
+        return _render_edit_form(request, mapping)
     return templates.TemplateResponse(
         request,
-        "import/mappings.html",
-        {"mappings": list_all_mappings(), "history": read_history()},
+        "import/edit_mapping.html",
+        {
+            "mapping": mapping,
+            "accounts": read_accounts(),
+            "encoding_choices": ENCODING_CHOICES,
+            "error": None,
+        },
     )
 
 
-@router.post("/mappings/{bank}/delete", response_class=HTMLResponse)
-def delete_mapping_route(request: Request, bank: str) -> HTMLResponse:
-    """Delete a saved mapping and refresh the list.
+def _mapping_from_edit_form(
+    bank: str,
+    *,
+    delimiter: str,
+    encoding: str,
+    date_format: str,
+    decimal_separator: str,
+    date_column: int,
+    description_column: int,
+    description_fallback_column: str,
+    amount_column: int,
+    account_number_column: str,
+) -> ImportMapping:
+    columns = {
+        "date": date_column,
+        "description": description_column,
+        "amount": amount_column,
+    }
+    if account_number_column.strip():
+        columns["account_number"] = int(account_number_column)
+    if description_fallback_column.strip():
+        columns["description_fallback"] = int(description_fallback_column)
+    return ImportMapping(
+        bank=bank,
+        delimiter=delimiter,
+        encoding=encoding,
+        date_format=date_format,
+        decimal_separator=decimal_separator,
+        columns=columns,
+    )
 
-    Import history is untouched — see ``storage.import_mappings
-    .delete_mapping``'s docstring on why that's safe.
+
+@router.post("/mappings/{bank}/edit", response_class=HTMLResponse)
+def save_edited_mapping(
+    request: Request,
+    bank: str,
+    delimiter: str = Form(...),
+    encoding: str = Form(...),
+    date_format: str = Form(...),
+    decimal_separator: str = Form(...),
+    date_column: int = Form(...),
+    description_column: int = Form(...),
+    description_fallback_column: str = Form(""),
+    amount_column: int = Form(...),
+    account_number_column: str = Form(""),
+) -> HTMLResponse:
+    """Save the edited settings directly — no file, no parse validation.
+
+    Dry run (below) is the tool for validating a change before
+    committing it; Save just persists whatever's currently typed.
     """
-    delete_mapping(bank)
-    return _render_mappings_content(request, headers=toast("Mapping deleted"))
+    mapping = _mapping_from_edit_form(
+        bank,
+        delimiter=delimiter,
+        encoding=encoding,
+        date_format=date_format,
+        decimal_separator=decimal_separator,
+        date_column=date_column,
+        description_column=description_column,
+        description_fallback_column=description_fallback_column,
+        amount_column=amount_column,
+        account_number_column=account_number_column,
+    )
+    write_mapping(mapping)
+    return _render_edit_form(request, mapping, headers=toast("Mapping saved"))
+
+
+@router.post("/mappings/{bank}/dry-run", response_class=HTMLResponse)
+async def dry_run_mapping(
+    request: Request,
+    bank: str,
+    account_id: str = Form(...),
+    file: UploadFile | None = File(None),
+    delimiter: str = Form(...),
+    encoding: str = Form(...),
+    date_format: str = Form(...),
+    decimal_separator: str = Form(...),
+    date_column: int = Form(...),
+    description_column: int = Form(...),
+    description_fallback_column: str = Form(""),
+    amount_column: int = Form(...),
+    account_number_column: str = Form(""),
+) -> HTMLResponse:
+    """Parse a file against the (possibly unsaved) edited settings, read-only.
+
+    Never writes anything — the preview it renders has no confirm form
+    (see ``_render_preview``'s ``dry_run``). Tests the form's *current*
+    values, not necessarily what's saved on disk, so a change can be
+    validated before committing it via Save.
+    """
+    mapping = _mapping_from_edit_form(
+        bank,
+        delimiter=delimiter,
+        encoding=encoding,
+        date_format=date_format,
+        decimal_separator=decimal_separator,
+        date_column=date_column,
+        description_column=description_column,
+        description_fallback_column=description_fallback_column,
+        amount_column=amount_column,
+        account_number_column=account_number_column,
+    )
+    if file is None or not file.filename:
+        return _render_edit_form(
+            request, mapping, error="Choose a CSV file to dry-run against."
+        )
+    content = await file.read()
+    return _render_preview(
+        request,
+        mapping,
+        account_id,
+        content,
+        restart_url=f"/import/mappings/{quote(bank, safe='')}/edit",
+        dry_run=True,
+    )

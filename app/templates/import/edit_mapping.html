@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Edit {{ mapping.bank }} — Finance Tracker{% endblock %}
+{% block content %}
+  <h1>Edit mapping</h1>
+  <p><a href="/import">&larr; Back to import</a></p>
+  <div id="import-wizard">
+    {% include "import/_edit_form.html" %}
+  </div>
+{% endblock %}

@@ -3,6 +3,7 @@
   <input type="hidden" name="bank" value="{{ bank }}">
   <input type="hidden" name="account_id" value="{{ account_id }}">
   <input type="hidden" name="file_content_b64" value="{{ file_content_b64 }}">
+  <input type="hidden" name="restart_url" value="{{ restart_url }}">
 
   <p>First import from <strong>{{ bank }}</strong> — set up how to read its file once;
      it's saved and reused automatically next time.</p>
@@ -110,7 +111,7 @@
     </div>
 
     <footer class="dialog-footer">
-      <a hx-get="/import/step/upload" hx-target="#import-wizard" class="btn-outline" role="button">Start over</a>
+      <a hx-get="{{ restart_url }}" hx-target="#import-wizard" class="btn-outline" role="button">Start over</a>
       <button type="submit">Save mapping &amp; continue</button>
     </footer>
   {% endif %}
