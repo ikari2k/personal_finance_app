@@ -92,14 +92,16 @@
  * edited/deleted — see CLAUDE.md.
  */
 #accounts-table-wrapper tr,
-#transactions-table-wrapper tr {
+#transactions-table-wrapper tr,
+#mappings-page-wrapper tr {
   position: relative;
 }
 
 /* Rows need to be at least as tall as the floating buttons (2rem) or the
  * buttons spill vertically into the row above/below when revealed. */
 #accounts-table-wrapper td,
-#transactions-table-wrapper td {
+#transactions-table-wrapper td,
+#mappings-page-wrapper td {
   padding-top: 0.6rem;
   padding-bottom: 0.6rem;
 }
@@ -164,7 +166,8 @@ tr:focus-within .row-actions,
   opacity: 1;
 }
 
-.row-actions button {
+.row-actions button,
+.row-actions a {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -176,21 +179,22 @@ tr:focus-within .row-actions,
   border-radius: var(--pico-border-radius);
   background: transparent;
   cursor: pointer;
+  text-decoration: none;
 }
 
-.row-actions button.icon-edit {
+.row-actions .icon-edit {
   color: #2563eb;
 }
 
-.row-actions button.icon-delete {
+.row-actions .icon-delete {
   color: #b91c1c;
 }
 
-.row-actions button.icon-edit:hover {
+.row-actions .icon-edit:hover {
   background: rgba(37, 99, 235, 0.12);
 }
 
-.row-actions button.icon-delete:hover {
+.row-actions .icon-delete:hover {
   background: rgba(185, 28, 28, 0.12);
 }
 

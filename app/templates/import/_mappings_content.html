@@ -1,3 +1,4 @@
+{% from "_icons.html" import edit_icon, delete_icon %}
 <div id="mappings-page-wrapper">
   <h2>Saved bank mappings</h2>
   {% if mappings %}
@@ -7,13 +8,25 @@
           <tr>
             <th>Bank</th><th>Delimiter</th><th>Encoding</th><th>Date format</th>
             <th>Decimal separator</th><th>Date col</th><th>Description col</th>
-            <th>Amount col</th><th>Account # col</th><th></th>
+            <th>Amount col</th><th>Account # col</th>
           </tr>
         </thead>
         <tbody>
           {% for mapping in mappings %}
             <tr>
-              <td>{{ mapping.bank }}</td>
+              <td>
+                <span class="row-actions">
+                  <a class="icon-edit" aria-label="Edit mapping"
+                     href="/import?edit_bank={{ mapping.bank | urlencode }}">{{ edit_icon() }}</a>
+                  <button type="button" class="icon-delete" aria-label="Delete mapping"
+                          hx-post="/import/mappings/{{ mapping.bank | urlencode }}/delete"
+                          hx-target="#mappings-page-wrapper" hx-swap="outerHTML"
+                          hx-confirm="Delete the saved mapping for &quot;{{ mapping.bank }}&quot;? Past import history isn't affected, and you can set it up again next time you import from this bank.">
+                    {{ delete_icon() }}
+                  </button>
+                </span>
+                {{ mapping.bank }}
+              </td>
               <td>{{ mapping.delimiter }}</td>
               <td>{{ mapping.encoding }}</td>
               <td>{{ mapping.date_format }}</td>
@@ -27,15 +40,6 @@
               </td>
               <td>{{ mapping.columns.amount }}</td>
               <td>{{ mapping.columns.account_number if mapping.columns.account_number is defined else '—' }}</td>
-              <td>
-                <a href="/import?edit_bank={{ mapping.bank | urlencode }}">Edit</a>
-                <button type="button" class="btn-danger"
-                        hx-post="/import/mappings/{{ mapping.bank | urlencode }}/delete"
-                        hx-target="#mappings-page-wrapper" hx-swap="outerHTML"
-                        hx-confirm="Delete the saved mapping for &quot;{{ mapping.bank }}&quot;? Past import history isn't affected, and you can set it up again next time you import from this bank.">
-                  Delete
-                </button>
-              </td>
             </tr>
           {% endfor %}
         </tbody>
