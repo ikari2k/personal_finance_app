@@ -1,0 +1,39 @@
+<h2>Preview</h2>
+<p>
+  {{ new_count }} new transaction{{ '' if new_count == 1 else 's' }} for
+  <strong>{{ account.name if account else account_id }}</strong>,
+  {{ duplicate_count }} duplicate{{ '' if duplicate_count == 1 else 's' }} skipped{% if filtered_count %},
+  {{ filtered_count }} row{{ '' if filtered_count == 1 else 's' }} filtered out (different account){% endif %}.
+</p>
+
+{% if transactions %}
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Date</th><th>Description</th><th>Category</th><th>Amount</th></tr></thead>
+      <tbody>
+        {% for txn in transactions %}
+          <tr>
+            <td>{{ txn.date }}</td>
+            <td>{{ txn.description }}</td>
+            <td>{{ txn.category }}{% if txn.subcategory %} / {{ txn.subcategory }}{% endif %}</td>
+            <td class="{{ 'amount-negative' if txn.amount < 0 else 'amount-positive' }}">
+              {{ "%.2f"|format(txn.amount) }}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <form hx-post="/import/confirm" hx-target="#import-wizard" hx-swap="innerHTML">
+    <input type="hidden" name="account_id" value="{{ account_id }}">
+    <input type="hidden" name="rows_payload" value="{{ rows_payload }}">
+    <footer class="dialog-footer">
+      <a hx-get="/import/step/upload" hx-target="#import-wizard" class="btn-outline" role="button">Cancel</a>
+      <button type="submit">Confirm import</button>
+    </footer>
+  </form>
+{% else %}
+  <p>Nothing new to import.</p>
+  <a hx-get="/import/step/upload" hx-target="#import-wizard" class="btn-outline" role="button">Start over</a>
+{% endif %}

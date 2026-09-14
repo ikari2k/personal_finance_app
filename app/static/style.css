@@ -785,3 +785,9 @@ fieldset legend {
     right: auto;
   }
 }
+
+/* Wide tables (e.g. the import preview/column-picker) scroll within their
+ * own box rather than the page body scrolling horizontally. */
+.table-scroll {
+  overflow-x: auto;
+}

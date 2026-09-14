@@ -4,9 +4,9 @@ This elaborates `finance-app-prd.md` into concrete technical decisions and a pha
 Phases are implemented one at a time, each its own reviewable unit of work with its own commit(s).
 `CLAUDE.md` is updated after each phase lands to reflect what became concrete during that phase.
 
-**Status**: Phases 0–2 and 2.5–2.7 complete, plus three out-of-sequence addenda (transfer
+**Status**: Phases 0–3 complete, plus three out-of-sequence addenda inserted after 2.7 (transfer
 editing/dialog redesign, icon-set polish, and per-category/subcategory monthly budgets — see
-their entries below). Phase 3 (bank CSV import) not yet started.
+their entries below). Phase 4 (rule engine) not yet started.
 
 **Environment note**: `uv` is installed under pyenv's Python 3.13.7, not globally on PATH — the
 `uv` shim only resolves once a directory is pinned to that pyenv version. This repo has a
@@ -37,8 +37,14 @@ in the repo root and that `.python-version` is present.
     `{icon, budget}`. `icon` is a key into the vendored icon set (`""` = unset); `budget` is a
     quoted decimal string (`""` = unset), income-only categories never carry one.
   - `config/rules.toml`: `[[rules]]` tables — `pattern, field, category, subcategory, priority`.
-  - `config/import_mappings/<bank>.toml`: `delimiter, date_format, columns` (bank column →
-    ledger field map) plus an optional bank-scoped `[[rules]]` list.
+    Only `field="description"` is interpreted yet (Phase 3's `services.categorizer`); rule
+    management (CRUD, save-time regex validation) is Phase 4.
+  - `config/import_mappings/<bank_slug>.toml` (one file per bank, **revised in Phase 3**): `bank,
+    delimiter, encoding, date_format, decimal_separator`, plus `columns` — ledger field name →
+    **0-based column index** (not name — real bank exports can have duplicate header names) for
+    `date`/`description`/`amount` (required) and `account_number` (optional, filters a
+    multi-account export to the destination account). No longer has a bank-scoped `[[rules]]`
+    list — rules live only in the single shared `config/rules.toml`.
 
 ## Project layout
 
@@ -555,11 +561,60 @@ unit-testable without touching disk. `routers/` stays thin — HTTP/HTMX glue on
     re-running the updated seed script; `data/`/`config/` backed up and restored around every
     mutating live test (except the final seed-script run, which intentionally resets them).
 
-- [ ] **Phase 3 — Bank CSV import**: upload + parse endpoint, mapping-setup UI persisted to
-  `config/import_mappings/<bank>.toml`, auto-reuse on next import from the same bank,
-  `services/importer.py` applying import-time regex rules via `services/categorizer.py`.
-  *Verify*: importing a sample CSV twice — second import reuses the saved mapping without
-  re-prompting.
+- [x] **Phase 3 — Bank CSV import**: a three-step `/import` wizard (upload → one-time mapping
+  setup for a new bank → preview/confirm), designed directly against a real, messy sample export
+  (a 101-column Credit Agricole CSV) rather than a synthetic format, which surfaced several real
+  requirements the original plan wording didn't anticipate.
+  - **Mapping keyed by column index, not name**: the sample file has duplicate header names
+    (two columns both called "Kwota") — a name can't reliably identify a column, so
+    `app.models.import_mapping.ImportMapping.columns` maps a ledger field to a 0-based index
+    instead. The mapping-setup UI still shows each column's header text and a sample value in a
+    picker, so the index a user ends up choosing is still made from readable information.
+  - **`ImportMapping` also carries `encoding` and `decimal_separator`**, beyond the originally
+    planned `delimiter`/`date_format`/`columns`: the sample file is Windows-1250, not UTF-8 (a
+    decode failure is caught and shown as an inline error, not a crash), and amounts are
+    European-formatted with a currency suffix (`"-5,99 PLN"`). `services.importer.parse_amount`
+    strips everything except digits/`-`/the configured separator before parsing, which handles
+    the currency suffix and any thousands-separator character generically without a dedicated
+    "strip currency symbol" setting.
+  - **An optional `account_number` mapping column filters a multi-account export**: the sample
+    file interleaves two of the bank's own accounts (a checking account and its linked credit
+    card) in one export. When mapped, `services.importer.filter_by_account_number` keeps only
+    rows whose value there matches the destination `Account.number` (whitespace/case-insensitive),
+    and the preview shows a "N rows filtered out (different account)" count rather than silently
+    misattributing them.
+  - **Duplicate detection before writing**: `services.importer.find_duplicates` matches a parsed
+    row against existing ledger rows on the same account by date + amount + description
+    (case/whitespace-insensitive) — the closest a CSV row (no natural id) has to a stable
+    identity — so re-importing the same or an overlapping statement shows "N duplicates skipped"
+    instead of doubling every transaction. Verified live: importing the same real file twice
+    showed 132 new/0 duplicates the first time, 0 new/132 duplicates the second.
+  - **Imported rows are always income or expense, never a transfer**, and amount sign maps
+    directly to expense/income with no flipping (unlike manual entry, which takes an unsigned
+    magnitude plus an explicit type) — see `services.importer`'s module docstring for why
+    transfer-pairing isn't attempted from a CSV.
+  - **Import-time auto-categorization, minimally**: `services/categorizer.py` matches a row's
+    description against `config/rules.toml` (`field="description"` only, for now), defaulting to
+    a "Uncategorized" category (auto-created via the existing `ensure_category`, same mechanism
+    manual entry already uses) when nothing matches or no rules exist yet — full rule
+    CRUD/management is Phase 4; Phase 3 only needed to *apply* whatever's already in the file. A
+    bad regex raises loudly (`services.categorizer._compile`), per CLAUDE.md's invariant.
+  - **No server-side session state**: the uploaded file's bytes are threaded across the wizard's
+    steps as a base64 hidden form field, matching the rest of the app's stateless-per-request
+    design, rather than a server-side temp file — the whole page (`#import-wizard`) is swapped
+    step to step via htmx.
+  - *Verified*: unit tests for every `services.importer`/`services.categorizer` function
+    (amount/date parsing including the European format, account-number filtering, duplicate
+    detection, rule matching and priority ordering, invalid-regex rejection) and the
+    one-file-per-bank storage layer (`tests/unit/test_importer.py`,
+    `tests/unit/test_categorizer.py`, `tests/unit/test_import_mappings_storage.py`,
+    `tests/unit/test_rules_storage.py`); integration tests for the full wizard flow, mapping
+    reuse on a second upload, duplicate flagging, and rule application
+    (`tests/integration/test_import_router.py`); and a full live run through the actual browser
+    against the real 134-row Credit Agricole export — decode-error handling, delimiter/encoding
+    correction, the column picker, the multi-account filter (132 kept / 2 filtered), the preview,
+    confirm, and the second-import dedup — with `data/`/`config/` backed up and restored
+    afterward via a throwaway test account, never touching the user's real data.
 
 - [ ] **Phase 4 — Rule engine (bulk reclassification)**: rule CRUD UI, preview endpoint (full
   before/after diff per row; regex compile-checked at save time, never silently zero-matching),

@@ -1,0 +1,95 @@
+<form id="mapping-setup-form" hx-post="/import/mapping-setup/save" hx-target="#import-wizard" hx-swap="innerHTML">
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <input type="hidden" name="bank" value="{{ bank }}">
+  <input type="hidden" name="account_id" value="{{ account_id }}">
+  <input type="hidden" name="file_content_b64" value="{{ file_content_b64 }}">
+
+  <p>First import from <strong>{{ bank }}</strong> — set up how to read its file once;
+     it's saved and reused automatically next time.</p>
+
+  <div class="form-grid-2">
+    <label>Delimiter
+      <input type="text" name="delimiter" value="{{ delimiter }}" maxlength="1" required
+             hx-post="/import/mapping-setup/reparse" hx-trigger="change"
+             hx-target="#import-wizard" hx-include="closest form">
+    </label>
+    <label>Encoding
+      <select name="encoding" hx-post="/import/mapping-setup/reparse" hx-trigger="change"
+              hx-target="#import-wizard" hx-include="closest form">
+        {% for enc in encoding_choices %}
+          <option value="{{ enc }}" {{ 'selected' if enc == encoding }}>{{ enc }}</option>
+        {% endfor %}
+      </select>
+    </label>
+  </div>
+  <div class="form-grid-2">
+    <label>Date format
+      <input type="text" name="date_format" value="{{ date_format }}" placeholder="e.g. %d.%m.%Y" required
+             hx-post="/import/mapping-setup/reparse" hx-trigger="change"
+             hx-target="#import-wizard" hx-include="closest form">
+    </label>
+    <label>Decimal separator
+      <input type="text" name="decimal_separator" value="{{ decimal_separator }}" maxlength="1" required
+             hx-post="/import/mapping-setup/reparse" hx-trigger="change"
+             hx-target="#import-wizard" hx-include="closest form">
+    </label>
+  </div>
+
+  {% if header %}
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>#</th><th>Column</th><th>Sample value</th></tr>
+        </thead>
+        <tbody>
+          {% for i in column_indexes %}
+            <tr>
+              <td>{{ i }}</td>
+              <td>{{ header[i] }}</td>
+              <td>{{ sample_row[i] if i < sample_row|length else '' }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="form-grid-2">
+      <label>Date column
+        <select name="date_column" required>
+          {% for i in column_indexes %}
+            <option value="{{ i }}">{{ i }}: {{ header[i] }} ({{ sample_row[i] if i < sample_row|length else '' }})</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Description column
+        <select name="description_column" required>
+          {% for i in column_indexes %}
+            <option value="{{ i }}">{{ i }}: {{ header[i] }} ({{ sample_row[i] if i < sample_row|length else '' }})</option>
+          {% endfor %}
+        </select>
+      </label>
+    </div>
+    <div class="form-grid-2">
+      <label>Amount column
+        <select name="amount_column" required>
+          {% for i in column_indexes %}
+            <option value="{{ i }}">{{ i }}: {{ header[i] }} ({{ sample_row[i] if i < sample_row|length else '' }})</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Account number column (optional)
+        <select name="account_number_column">
+          <option value="">— none —</option>
+          {% for i in column_indexes %}
+            <option value="{{ i }}">{{ i }}: {{ header[i] }} ({{ sample_row[i] if i < sample_row|length else '' }})</option>
+          {% endfor %}
+        </select>
+      </label>
+    </div>
+
+    <footer class="dialog-footer">
+      <a hx-get="/import/step/upload" hx-target="#import-wizard" class="btn-outline" role="button">Start over</a>
+      <button type="submit">Save mapping &amp; continue</button>
+    </footer>
+  {% endif %}
+</form>

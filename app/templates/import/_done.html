@@ -1,0 +1,6 @@
+<h2>Import complete</h2>
+<p>Imported {{ count }} transaction{{ '' if count == 1 else 's' }}.</p>
+<footer class="dialog-footer">
+  <a href="/transactions" role="button">View transactions</a>
+  <a hx-get="/import/step/upload" hx-target="#import-wizard" class="btn-outline" role="button">Import another file</a>
+</footer>

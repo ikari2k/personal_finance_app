@@ -19,5 +19,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "LEDGER_PATH", tmp_path / "ledger.csv")
     monkeypatch.setattr(config, "ACCOUNTS_PATH", tmp_path / "accounts.toml")
     monkeypatch.setattr(config, "CATEGORIES_PATH", tmp_path / "categories.toml")
+    monkeypatch.setattr(config, "RULES_PATH", tmp_path / "rules.toml")
+    monkeypatch.setattr(config, "IMPORT_MAPPINGS_DIR", tmp_path / "import_mappings")
     with TestClient(app) as test_client:
         yield test_client

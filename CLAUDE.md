@@ -19,8 +19,17 @@ plus a dialog-form redesign; further icon-set polish (uniform sizing, tooltips, 
 fuel/parking icons); and per-category/subcategory monthly budgets (independent thresholds, no
 cross-validation, with a non-blocking warning pill when a category's subcategory budgets exceed
 its own — the actual spend-vs-budget report is still a future Monthly Budgets page). Phase 3
-(bank CSV import) has not started. See `docs/implementation-plan.md` for the full phased plan,
-finalized schemas, and per-phase status checkboxes/implementation notes.
+(bank CSV import) is also complete: an index-based per-bank mapping (`config/import_mappings/
+<bank>.toml` — column indices, not names, since real bank exports can have duplicate header
+names; delimiter/encoding/date-format/decimal-separator all configurable) captured once via a
+setup wizard and auto-reused on every later import from that bank, a preview step showing
+new/duplicate/filtered-out counts before anything is written (duplicates detected by date+amount+
+description; an optional account-number column filters a multi-account export down to the
+destination account), and import-time auto-categorization via `config/rules.toml` (defaulting to
+"Uncategorized" — full rule-management UI is still Phase 4). Validated end-to-end against a real,
+messy 101-column Windows-1250-encoded bank export, not just synthetic test data. Phase 4 (rule
+engine) has not started. See `docs/implementation-plan.md` for the full phased plan, finalized
+schemas, and per-phase status checkboxes/implementation notes.
 
 **Work proceeds one phase at a time.** Each phase in `docs/implementation-plan.md` is a discrete,
 separately-reviewable unit — implement it, verify it, stop, and update docs (this file plus the
@@ -65,14 +74,17 @@ app/
   main.py         # FastAPI app factory, startup consistency check, router mounting
   templating.py    # shared Jinja2Templates instance (avoids a circular import into main)
   config.py         # resolves data/config paths, binds 127.0.0.1 only
-  models/             # pydantic domain models: Account, Transaction/TransactionType, CategoriesByType
+  models/             # pydantic domain models: Account, Transaction/TransactionType, CategoriesByType,
+    ImportMapping, Rule
   storage/              # file I/O + locking — the ONLY layer allowed to touch data/ or config/ files
-    lock.py, ledger.py, accounts.py, categories.py  # (rules.py, import_mappings.py land in Phase 3-4)
+    lock.py, ledger.py, accounts.py, categories.py, rules.py, import_mappings.py  # (reports storage
+    lands in Phase 5, if needed)
   services/                # business logic — pure functions, no direct file I/O
-    consistency.py, accounts.py, balances.py, transactions.py, categories.py, aggregation.py
+    consistency.py, accounts.py, balances.py, transactions.py, categories.py, aggregation.py,
+    importer.py, categorizer.py
   routers/                  # FastAPI routers, one per feature area — thin HTTP/HTMX glue only
-    accounts.py, transactions.py, transfers.py, categories.py, htmx_events.py (shared helper,
-    not a router)  # (import_, rules.py, reports.py land in Phase 3-5)
+    accounts.py, transactions.py, transfers.py, categories.py, import_.py, htmx_events.py (shared
+    helper, not a router)  # (rules.py, reports.py land in Phase 4-5)
   templates/                 # Jinja2 pages + HTMX partials, one subdir per feature area
   static/                     # pico.min.css, style.css, htmx.min.js, fonts/ (all vendored)
 data/ledger.csv                # created on first run if absent
@@ -88,8 +100,9 @@ unit-testable without touching disk (inject paths/tmp_path in tests). `routers/`
 
 ### Storage module pattern (established in `app/storage/{lock,ledger,accounts,categories}.py`)
 
-Every `storage/*.py` read/write module follows the same shape — reuse it rather than inventing a
-new one for `rules.py` / `import_mappings.py` in later phases:
+Every `storage/*.py` read/write module follows the same shape (also used by `rules.py` and
+`import_mappings.py`, added in Phase 3 — the latter is the one exception with a directory instead
+of a single fixed path, since there's one mapping file per bank; see its own module docstring):
 
 - `read_x(path: Path | None = None) -> ...`: returns an empty list/dict if `path` doesn't exist
   yet (files are created lazily on first write, never at startup). If `path` is omitted, resolves
@@ -116,16 +129,16 @@ input — no reads or writes of `data/`/`config/` files, ever. Routers do the I/
 `storage`, call a service function to validate/build/transform, write the result back via
 `storage`. This keeps business rules (unique account IDs, transfer pairing, on-the-fly category
 creation, sign normalization, referential-integrity guards on delete) unit-testable without
-`tmp_path`/disk at all — reuse this split for `services/importer.py` / `services/categorizer.py`
-in later phases (`services/aggregation.py` already exists, see below) rather than letting a
-router grow business logic of its own.
+`tmp_path`/disk at all — this split now also covers `services/importer.py` (CSV parsing/
+filtering/dedup) and `services/categorizer.py` (rule matching), both pure, added in Phase 3
+(`services/aggregation.py` already existed, see below) — reuse it again for Phase 4's rule engine
+rather than letting a router grow business logic of its own.
 
 ### HTTP form testing pattern
 
 Router integration tests use the `client` fixture in `tests/integration/conftest.py`, which
-monkeypatches `app.config.{LEDGER,ACCOUNTS,CATEGORIES}_PATH` to `tmp_path`-based files before
-constructing the `TestClient`. Add a matching `_PATH` attribute + monkeypatch line there once
-`rules.toml` / `import_mappings/` need the same treatment in Phase 3-4.
+monkeypatches `app.config.{LEDGER,ACCOUNTS,CATEGORIES,RULES}_PATH` and `IMPORT_MAPPINGS_DIR` to
+`tmp_path`-based locations before constructing the `TestClient`.
 
 ## UI conventions
 
@@ -297,11 +310,17 @@ constructing the `TestClient`. Add a matching `_PATH` attribute + monkeypatch li
   `id, date, account_id, category, subcategory, description, amount, type, transfer_id, notes`.
   `amount` is a signed decimal string; `type` ∈ `income|expense|transfer`. This is the one file
   the whole app revolves around.
-- `config/import_mappings/<bank_name>.toml` — `delimiter, date_format, columns` (bank column →
-  ledger field map) plus an optional bank-scoped `[[rules]]` list. Captured on first import,
-  reused automatically on subsequent imports from that bank.
+- `config/import_mappings/<bank_slug>.toml` (one file per bank, filename slugified from the
+  `bank` field) — `bank, delimiter, encoding, date_format, decimal_separator`, plus `columns`:
+  ledger field name → **0-based column index**, not column name (real bank exports can have
+  duplicate header names — see `app.models.import_mapping`'s docstring). Required keys: `date`,
+  `description`, `amount`; optional: `account_number` (filters a multi-account export down to the
+  destination account, matched against `Account.number`). Captured once via the `/import` setup
+  wizard, reused automatically on every later import from that bank.
 - `config/rules.toml` — `[[rules]]` tables: `pattern, field, category, subcategory, priority`.
-  Shared between import-time auto-categorization and bulk reclassification of existing rows.
+  Shared between import-time auto-categorization (`services.categorizer`, Phase 3 — only
+  `field="description"` is interpreted so far) and Phase 4's bulk reclassification of existing
+  rows (not built yet — the rule *file format* exists, but there's no CRUD UI for it).
 
 ### Key invariants to preserve when touching ledger/account code
 
@@ -320,8 +339,16 @@ constructing the `TestClient`. Add a matching `_PATH` attribute + monkeypatch li
   automatically (non-blocking, warnings-only) on every startup. The on-demand "Check consistency"
   action still needs a router + UI — add it once a settings/reports router exists. Any change to
   transfer or account-reference logic should keep this check in mind.
+- **Imported CSV rows are always income or expense, never a transfer** — a bank export has no
+  reliable signal for "this outflow and that inflow are the same transfer" beyond amount/date
+  proximity, too fragile to guess automatically (`services.importer`'s module docstring). A
+  transfer between the user's own accounts simply imports as two independent rows. Amount sign
+  (negative/positive) maps directly to expense/income with no flipping — unlike manual entry,
+  which takes an unsigned magnitude plus an explicit type.
 - **Regex rules must fail loudly** on invalid patterns — compile-check at save time, never
-  silently match zero rows at apply time.
+  silently match zero rows at apply time. Implemented so far in `services.categorizer._compile`
+  (raises on an invalid pattern when applying rules at import time); the save-time check belongs
+  to Phase 4's rule-management UI, not built yet.
 - **Bulk reclassification always previews first**: a rule run against the ledger must show a full
   before/after diff per affected row (old category/subcategory → new, plus any other changed
   fields), never just a count. Preview output must match apply output exactly.

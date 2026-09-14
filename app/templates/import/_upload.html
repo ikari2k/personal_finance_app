@@ -1,0 +1,24 @@
+<form hx-post="/import/upload" hx-target="#import-wizard" hx-swap="innerHTML" hx-encoding="multipart/form-data">
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <div class="form-grid-2">
+    <label>Account
+      <select name="account_id" required>
+        {% for account in accounts %}
+          <option value="{{ account.id }}">{{ account.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Bank
+      <input type="text" name="bank" list="bank-options" placeholder="e.g. Credit Agricole" required>
+      <datalist id="bank-options">
+        {% for bank in banks %}<option value="{{ bank }}">{% endfor %}
+      </datalist>
+    </label>
+  </div>
+  <label>CSV file
+    <input type="file" name="file" accept=".csv" required>
+  </label>
+  <footer class="dialog-footer">
+    <button type="submit">Upload</button>
+  </footer>
+</form>
