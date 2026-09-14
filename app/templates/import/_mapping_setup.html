@@ -57,14 +57,14 @@
       <label>Date column
         <select name="date_column" required>
           {% for i in column_indexes %}
-            <option value="{{ i }}">{{ i }}: {{ header[i] }} ({{ sample_row[i] if i < sample_row|length else '' }})</option>
+            <option value="{{ i }}" {{ 'selected' if i == selected_date_column }}>{{ i }}: {{ header[i] }} ({{ sample_row[i] if i < sample_row|length else '' }})</option>
           {% endfor %}
         </select>
       </label>
       <label>Description column
         <select name="description_column" required>
           {% for i in column_indexes %}
-            <option value="{{ i }}">{{ i }}: {{ header[i] }} ({{ sample_row[i] if i < sample_row|length else '' }})</option>
+            <option value="{{ i }}" {{ 'selected' if i == selected_description_column }}>{{ i }}: {{ header[i] }} ({{ sample_row[i] if i < sample_row|length else '' }})</option>
           {% endfor %}
         </select>
       </label>
@@ -73,15 +73,15 @@
       <label>Amount column
         <select name="amount_column" required>
           {% for i in column_indexes %}
-            <option value="{{ i }}">{{ i }}: {{ header[i] }} ({{ sample_row[i] if i < sample_row|length else '' }})</option>
+            <option value="{{ i }}" {{ 'selected' if i == selected_amount_column }}>{{ i }}: {{ header[i] }} ({{ sample_row[i] if i < sample_row|length else '' }})</option>
           {% endfor %}
         </select>
       </label>
       <label>Account number column (optional)
         <select name="account_number_column">
-          <option value="">— none —</option>
+          <option value="" {{ 'selected' if selected_account_number_column is none }}>— none —</option>
           {% for i in column_indexes %}
-            <option value="{{ i }}">{{ i }}: {{ header[i] }} ({{ sample_row[i] if i < sample_row|length else '' }})</option>
+            <option value="{{ i }}" {{ 'selected' if i == selected_account_number_column }}>{{ i }}: {{ header[i] }} ({{ sample_row[i] if i < sample_row|length else '' }})</option>
           {% endfor %}
         </select>
       </label>

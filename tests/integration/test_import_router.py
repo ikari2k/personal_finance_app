@@ -180,3 +180,63 @@ def test_import_applies_matching_rule(client):
     )
 
     assert "Dining / Cafes" in preview_response.text
+
+
+def test_save_mapping_with_wrong_date_format_shows_error_not_a_crash(client):
+    """Regression test: a bad setting must never 500 or persist a broken mapping."""
+    _create_account(client, account_id="chk", number="1234")
+    setup_response = _upload(client)
+    file_content_b64 = _extract_hidden_value(setup_response.text, "file_content_b64")
+
+    response = client.post(
+        "/import/mapping-setup/save",
+        data={
+            "bank": "Test Bank",
+            "account_id": "chk",
+            "file_content_b64": file_content_b64,
+            "delimiter": ",",
+            "encoding": "utf-8",
+            "date_format": "%d.%m.%Y",  # wrong: the sample CSV uses %Y-%m-%d
+            "decimal_separator": ".",
+            "date_column": "0",
+            "description_column": "1",
+            "amount_column": "2",
+            "account_number_column": "3",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "invalid date" in response.text
+    # every prior choice is preserved so only the wrong field needs fixing
+    assert 'value="%d.%m.%Y"' in response.text
+    assert 'value="0" selected' in response.text  # date_column
+    assert read_mapping("Test Bank", config.IMPORT_MAPPINGS_DIR) is None
+
+
+def test_fixing_the_error_after_a_failed_save_still_works(client):
+    _create_account(client, account_id="chk", number="1234")
+    setup_response = _upload(client)
+    file_content_b64 = _extract_hidden_value(setup_response.text, "file_content_b64")
+    client.post(
+        "/import/mapping-setup/save",
+        data={
+            "bank": "Test Bank",
+            "account_id": "chk",
+            "file_content_b64": file_content_b64,
+            "delimiter": ",",
+            "encoding": "utf-8",
+            "date_format": "%d.%m.%Y",
+            "decimal_separator": ".",
+            "date_column": "0",
+            "description_column": "1",
+            "amount_column": "2",
+            "account_number_column": "3",
+        },
+    )
+
+    response = _save_mapping(
+        client, bank="Test Bank", account_id="chk", file_content_b64=file_content_b64
+    )
+
+    assert "2 new transaction" in response.text
+    assert read_mapping("Test Bank", config.IMPORT_MAPPINGS_DIR) is not None

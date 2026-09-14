@@ -128,14 +128,21 @@ def _render_mapping_setup(
     date_format: str,
     decimal_separator: str,
     error: str | None,
+    selected_date_column: int | None = None,
+    selected_description_column: int | None = None,
+    selected_amount_column: int | None = None,
+    selected_account_number_column: int | None = None,
 ) -> HTMLResponse:
     """Render step 2: mapping settings plus a column-picker preview.
 
     Re-parses the file with whatever settings were submitted so the
     preview reflects the current delimiter/encoding/date format/decimal
-    separator; column-index selections aren't preserved across a
-    settings change (a different delimiter can change the column count
-    entirely, so keeping a stale index would be actively wrong).
+    separator. Column-index selections aren't preserved across a
+    *settings* change (a different delimiter can change the column count
+    entirely, so keeping a stale index would be actively wrong) — but
+    they *are* passed through and preserved when re-rendering after a
+    failed ``/mapping-setup/save`` (see there), where the column count
+    hasn't changed and the user likely only got one field wrong.
     """
     content = base64.b64decode(file_content_b64)
     text = _decode(content, encoding)
@@ -164,6 +171,10 @@ def _render_mapping_setup(
             "header": preview_rows[0] if preview_rows else [],
             "sample_row": preview_rows[1] if len(preview_rows) > 1 else [],
             "column_indexes": range(len(preview_rows[0])) if preview_rows else [],
+            "selected_date_column": selected_date_column,
+            "selected_description_column": selected_description_column,
+            "selected_amount_column": selected_amount_column,
+            "selected_account_number_column": selected_account_number_column,
             "error": error,
         },
     )
@@ -209,14 +220,27 @@ def save_mapping_setup(
     amount_column: int = Form(...),
     account_number_column: str = Form(""),
 ) -> HTMLResponse:
-    """Save the mapping for ``bank`` and proceed straight to the preview step."""
+    """Validate the mapping against the file, then save it and show the preview.
+
+    Parsing is attempted *before* ``write_mapping`` — persisting a
+    mapping that doesn't actually parse (wrong date format, wrong
+    column, ...) would be worse than just failing here: every later
+    import from this bank reuses a saved mapping automatically and skips
+    setup entirely, so a bad mapping would fail the same way with no
+    obvious way back into the setup form to fix it. On failure, every
+    already-made choice (settings and column selections) is preserved
+    in the re-rendered form, so only the one wrong setting needs fixing.
+    """
     columns = {
         "date": date_column,
         "description": description_column,
         "amount": amount_column,
     }
-    if account_number_column.strip():
-        columns["account_number"] = int(account_number_column)
+    account_number_idx = (
+        int(account_number_column) if account_number_column.strip() else None
+    )
+    if account_number_idx is not None:
+        columns["account_number"] = account_number_idx
     mapping = ImportMapping(
         bank=bank,
         delimiter=delimiter,
@@ -225,8 +249,27 @@ def save_mapping_setup(
         decimal_separator=decimal_separator,
         columns=columns,
     )
-    write_mapping(mapping)
     content = base64.b64decode(file_content_b64)
+    try:
+        text = content.decode(encoding)
+        parse_rows(text, mapping)
+    except (ValueError, LookupError) as exc:
+        return _render_mapping_setup(
+            request,
+            bank=bank,
+            account_id=account_id,
+            file_content_b64=file_content_b64,
+            delimiter=delimiter,
+            encoding=encoding,
+            date_format=date_format,
+            decimal_separator=decimal_separator,
+            error=str(exc),
+            selected_date_column=date_column,
+            selected_description_column=description_column,
+            selected_amount_column=amount_column,
+            selected_account_number_column=account_number_idx,
+        )
+    write_mapping(mapping)
     return _render_preview(request, mapping, account_id, content)
 
 
