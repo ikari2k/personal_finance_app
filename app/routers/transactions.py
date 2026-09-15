@@ -6,6 +6,7 @@ from decimal import Decimal, InvalidOperation
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 
+from app.models.category import CategoriesByType
 from app.models.transaction import TransactionType
 from app.routers.htmx_events import toast
 from app.services.aggregation import grouped_transaction_view
@@ -36,6 +37,38 @@ def _grouping_from_cookies(request: Request) -> tuple[bool, bool]:
     return by_month, by_type
 
 
+def _all_category_names(categories: CategoriesByType) -> list[str]:
+    """Every category name across both income and expense trees, sorted.
+
+    The transactions list mixes both types in one flat table (unless
+    type grouping happens to be on), so the category filter's dropdown
+    merges both trees rather than needing its own type selector.
+    """
+    names: set[str] = set()
+    for tree in categories.values():
+        names.update(tree.keys())
+    return sorted(names)
+
+
+def _subcategory_names_for(categories: CategoriesByType, category: str) -> list[str]:
+    """Subcategory names under ``category`` (checked in both trees), sorted.
+
+    Falls back to every subcategory across every category when
+    ``category`` is blank ("all categories" still selected) — there's no
+    one category's subcategories to narrow the picker down to yet.
+    """
+    names: set[str] = set()
+    for tree in categories.values():
+        if category:
+            entry = tree.get(category)
+            if entry is not None:
+                names.update(entry["subcategories"].keys())
+        else:
+            for entry in tree.values():
+                names.update(entry["subcategories"].keys())
+    return sorted(names)
+
+
 def render_table(
     request: Request,
     *,
@@ -57,10 +90,17 @@ def render_table(
     """
     by_month, by_type = _grouping_from_cookies(request)
     account_id = request.cookies.get("account_id", "")
+    category = request.cookies.get("category", "")
+    subcategory = request.cookies.get("subcategory", "")
     ledger = read_ledger()
     if account_id:
         ledger = [t for t in ledger if t.account_id == account_id]
+    if category:
+        ledger = [t for t in ledger if t.category == category]
+    if subcategory:
+        ledger = [t for t in ledger if t.subcategory == subcategory]
     accounts_list = read_accounts()
+    categories_tree = read_categories()
     months = grouped_transaction_view(ledger, by_month=by_month, by_type=by_type)
     return templates.TemplateResponse(
         request,
@@ -69,10 +109,14 @@ def render_table(
             "months": months,
             "accounts": {account.id: account for account in accounts_list},
             "accounts_list": accounts_list,
-            "categories": read_categories(),
+            "categories": categories_tree,
+            "category_names": _all_category_names(categories_tree),
+            "subcategory_names": _subcategory_names_for(categories_tree, category),
             "by_month": by_month,
             "by_type": by_type,
             "account_id": account_id,
+            "category": category,
+            "subcategory": subcategory,
             "oob": oob,
             "error": error,
         },
@@ -86,30 +130,33 @@ def list_transactions(
     by_month: bool | None = None,
     by_type: bool | None = None,
     account_id: str | None = None,
+    category: str | None = None,
+    subcategory: str | None = None,
 ) -> HTMLResponse:
     """Render the transaction list.
 
     Full navigation renders the whole page; an HTMX request (from the
-    grouping-toggle buttons or the account filter) renders just the table
-    fragment they swap in. ``account_id`` filters to one account's rows
-    before grouping when set; an empty string means "all accounts".
+    grouping-toggle buttons or the account/category/subcategory filters)
+    renders just the table fragment they swap in. ``account_id``/
+    ``category``/``subcategory`` each filter the ledger (as an AND) before
+    grouping when set; an empty string means "no filter on this field".
 
-    All three of ``by_month``/``by_type``/``account_id`` fall back to their
-    standing cookie value when the query param is absent (a plain nav link)
-    — never when it's explicitly present (including explicitly empty, e.g.
-    picking "All accounts"), so a link that deliberately sets e.g.
-    ``account_id=`` isn't overridden by an old cookie. This is why
-    ``account_id`` needs ``str | None`` rather than defaulting to ``""``
-    directly — ``""`` is itself a meaningful explicit choice ("all
-    accounts"), so only ``None`` (the param genuinely absent from the URL)
-    means "fall back to the cookie". Every request that resolves a value
-    (from either source) re-writes all three cookies, keeping them in sync
-    with the last choice actually shown. Cookies are set on the actual
-    returned ``TemplateResponse`` rather than via an injected ``Response``
-    parameter — FastAPI only merges that parameter's cookies into the final
-    response when the endpoint returns plain data (a dict/model) for it to
-    wrap; a path operation that returns a ``Response`` itself, as this one
-    does, has that return value used completely as-is.
+    All five params fall back to their standing cookie value when the query
+    param is absent (a plain nav link) — never when it's explicitly present
+    (including explicitly empty, e.g. picking "All accounts"), so a link
+    that deliberately sets e.g. ``account_id=`` isn't overridden by an old
+    cookie. This is why each needs ``str | None``/``bool | None`` rather
+    than a concrete default — the concrete falsy value is itself a
+    meaningful explicit choice, so only ``None`` (the param genuinely
+    absent from the URL) means "fall back to the cookie". Every request
+    that resolves a value (from either source) re-writes all five cookies,
+    keeping them in sync with the last choice actually shown. Cookies are
+    set on the actual returned ``TemplateResponse`` rather than via an
+    injected ``Response`` parameter — FastAPI only merges that parameter's
+    cookies into the final response when the endpoint returns plain data
+    (a dict/model) for it to wrap; a path operation that returns a
+    ``Response`` itself, as this one does, has that return value used
+    completely as-is.
     """
     cookie_by_month, cookie_by_type = _grouping_from_cookies(request)
     resolved_by_month = by_month if by_month is not None else cookie_by_month
@@ -117,11 +164,24 @@ def list_transactions(
     resolved_account_id = (
         account_id if account_id is not None else request.cookies.get("account_id", "")
     )
+    resolved_category = (
+        category if category is not None else request.cookies.get("category", "")
+    )
+    resolved_subcategory = (
+        subcategory
+        if subcategory is not None
+        else request.cookies.get("subcategory", "")
+    )
 
     ledger = read_ledger()
     if resolved_account_id:
         ledger = [t for t in ledger if t.account_id == resolved_account_id]
+    if resolved_category:
+        ledger = [t for t in ledger if t.category == resolved_category]
+    if resolved_subcategory:
+        ledger = [t for t in ledger if t.subcategory == resolved_subcategory]
     accounts_list = read_accounts()
+    categories_tree = read_categories()
     months = grouped_transaction_view(
         ledger, by_month=resolved_by_month, by_type=resolved_by_type
     )
@@ -129,10 +189,14 @@ def list_transactions(
         "months": months,
         "accounts": {account.id: account for account in accounts_list},
         "accounts_list": accounts_list,
-        "categories": read_categories(),
+        "categories": categories_tree,
+        "category_names": _all_category_names(categories_tree),
+        "subcategory_names": _subcategory_names_for(categories_tree, resolved_category),
         "by_month": resolved_by_month,
         "by_type": resolved_by_type,
         "account_id": resolved_account_id,
+        "category": resolved_category,
+        "subcategory": resolved_subcategory,
         "error": None,
     }
     template = (
@@ -153,6 +217,12 @@ def list_transactions(
     )
     response.set_cookie(
         "account_id", resolved_account_id, max_age=STICKY_FILTER_COOKIE_MAX_AGE
+    )
+    response.set_cookie(
+        "category", resolved_category, max_age=STICKY_FILTER_COOKIE_MAX_AGE
+    )
+    response.set_cookie(
+        "subcategory", resolved_subcategory, max_age=STICKY_FILTER_COOKIE_MAX_AGE
     )
     return response
 

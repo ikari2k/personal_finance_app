@@ -221,6 +221,135 @@ def test_account_filter_all_accounts_shows_everything(client):
     assert "savings interest" in unfiltered.text
 
 
+def test_category_filter_shows_only_matching_category(client):
+    _create_account(client)
+    client.post(
+        "/transactions",
+        data={
+            "account_id": "chk",
+            "date": "2026-01-15",
+            "type": "expense",
+            "category": "Groceries",
+            "subcategory": "Supermarket",
+            "description": "grocery run",
+            "amount": "40.00",
+            "notes": "",
+        },
+    )
+    client.post(
+        "/transactions",
+        data={
+            "account_id": "chk",
+            "date": "2026-01-16",
+            "type": "expense",
+            "category": "Transportation",
+            "subcategory": "",
+            "description": "gas station",
+            "amount": "30.00",
+            "notes": "",
+        },
+    )
+
+    filtered = client.get("/transactions?category=Groceries")
+
+    assert "grocery run" in filtered.text
+    assert "gas station" not in filtered.text
+
+
+def test_subcategory_filter_shows_only_matching_subcategory(client):
+    _create_account(client)
+    client.post(
+        "/transactions",
+        data={
+            "account_id": "chk",
+            "date": "2026-01-15",
+            "type": "expense",
+            "category": "Groceries",
+            "subcategory": "Supermarket",
+            "description": "grocery run",
+            "amount": "40.00",
+            "notes": "",
+        },
+    )
+    client.post(
+        "/transactions",
+        data={
+            "account_id": "chk",
+            "date": "2026-01-16",
+            "type": "expense",
+            "category": "Groceries",
+            "subcategory": "Farmers Market",
+            "description": "farmers market trip",
+            "amount": "20.00",
+            "notes": "",
+        },
+    )
+
+    filtered = client.get("/transactions?subcategory=Supermarket")
+
+    assert "grocery run" in filtered.text
+    assert "farmers market trip" not in filtered.text
+
+
+def test_category_and_subcategory_filters_combine_as_and(client):
+    _create_account(client)
+    client.post(
+        "/transactions",
+        data={
+            "account_id": "chk",
+            "date": "2026-01-15",
+            "type": "expense",
+            "category": "Groceries",
+            "subcategory": "Supermarket",
+            "description": "grocery run",
+            "amount": "40.00",
+            "notes": "",
+        },
+    )
+    client.post(
+        "/transactions",
+        data={
+            "account_id": "chk",
+            "date": "2026-01-16",
+            "type": "expense",
+            "category": "Shopping",
+            "subcategory": "Supermarket",
+            "description": "mislabeled row",
+            "amount": "15.00",
+            "notes": "",
+        },
+    )
+
+    filtered = client.get("/transactions?category=Groceries&subcategory=Supermarket")
+
+    assert "grocery run" in filtered.text
+    assert "mislabeled row" not in filtered.text
+
+
+def test_category_and_subcategory_filters_are_sticky_via_cookies(client):
+    _create_account(client)
+    client.post(
+        "/transactions",
+        data={
+            "account_id": "chk",
+            "date": "2026-01-15",
+            "type": "expense",
+            "category": "Groceries",
+            "subcategory": "Supermarket",
+            "description": "grocery run",
+            "amount": "40.00",
+            "notes": "",
+        },
+    )
+
+    filtered = client.get("/transactions?category=Groceries&subcategory=Supermarket")
+    assert filtered.cookies.get("category") == "Groceries"
+    assert filtered.cookies.get("subcategory") == "Supermarket"
+
+    remembered = client.get("/transactions")
+    assert "grocery run" in remembered.text
+
+
 def test_edit_transaction_updates_fields(client):
     _create_account(client)
     client.post(

@@ -283,18 +283,26 @@ module itself.
   - Expand-all/collapse-all stays a pure client-side `onclick` (no round-trip — it doesn't change
     what data is shown, just whether an already-rendered `<details>` is open) and is only shown
     in the toolbar when `by_month` is on, since there's nothing to expand/collapse otherwise.
-- **Account filter** (`account_id` query param, alongside `by_month`/`by_type`) filters the
-  ledger to one account *before* aggregating — so subtotals/net-totals reflect only that
-  account's activity, not the whole ledger with irrelevant rows hidden. Empty string means "all
-  accounts" (the default), not `None` — every control always sends all three params explicitly,
-  so there's one consistent "unset" representation rather than sometimes omitting the param.
-  - The account `<select>` fires via `hx-trigger="change"` and carries its own `account_id`
-    value automatically (it has `name="account_id"`), plus a static, server-rendered `hx-vals`
-    JSON blob carrying the *current* `by_month`/`by_type` so switching the account filter doesn't
-    reset grouping — and conversely, the grouping-toggle buttons' own hrefs always interpolate
-    the current `account_id` so switching grouping doesn't reset the filter. All three controls
-    must keep round-tripping all three params like this; dropping one from any single control's
-    URL/vals silently resets it for that action.
+- **Account/category/subcategory filters** (`account_id`/`category`/`subcategory` query params,
+  alongside `by_month`/`by_type`) filter the ledger *before* aggregating — so subtotals/net-totals
+  reflect only the filtered rows, not the whole ledger with irrelevant rows hidden. Empty string
+  means "no filter on this field" (the default), not `None` — every control always sends all five
+  params explicitly, so there's one consistent "unset" representation rather than sometimes
+  omitting a param. All three filters AND together (e.g. category + subcategory narrows to rows
+  matching both, not either).
+  - Each `<select>` fires via `hx-trigger="change"` and carries its own value automatically (its
+    own `name=`), plus a static, server-rendered `hx-vals` JSON blob carrying every *other*
+    current param so changing one filter doesn't reset the rest — and conversely, the
+    grouping-toggle buttons' own hrefs always interpolate all three filter values so switching
+    grouping doesn't reset any of them. All controls must keep round-tripping every param like
+    this; dropping one from any single control's URL/vals silently resets it for that action. The
+    one deliberate exception: changing the **category** select's `hx-vals` explicitly resets
+    `subcategory` to `""` rather than preserving it — an old subcategory selection may not belong
+    to the newly-picked category, so keeping it would silently filter to zero rows instead of
+    "narrow to the new category, no subcategory picked yet". The subcategory `<select>`'s own
+    options (`app.routers.transactions._subcategory_names_for`) narrow to just the selected
+    category's subcategories once one is picked, falling back to every subcategory across every
+    category when none is.
   - When filtered to one account, the row-level Account column disappears (`txn_row(txn,
     accounts, show_account)` in `_table.html` — `show_account` is `not account_id`) since every
     row would show the same, now-redundant, name.
