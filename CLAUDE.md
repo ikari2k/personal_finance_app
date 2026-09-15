@@ -8,7 +8,7 @@ Phases 0–2 and 2.5–2.7 are complete: storage/locking (Phase 1), a working HT
 (CRUD, starting balance shown, click-through to filtered transactions), manual transaction
 entry/edit/delete (with on-the-fly category/subcategory creation), transfers (create, edit-both-
 legs-together, and pair-delete), balance display, a dedicated `/categories` management page
-(add/rename/delete category and subcategory, each with an optional icon from a vendored 45-icon
+(add/rename/delete category and subcategory, each with an optional icon from a vendored 47-icon
 set — shown inline in the transactions list, colored by transaction type, uniformly sized via
 shared CSS custom properties, with a per-icon tooltip hint), and a redesigned transactions list
 (month/type grouping and account filter — both now sticky across navigation via cookies) — all

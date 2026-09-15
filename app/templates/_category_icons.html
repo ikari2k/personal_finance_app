@@ -51,6 +51,8 @@
 {% macro gamepad_icon() %}<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="1.3" y="5.3" width="13.4" height="7.4" rx="3.5"/><path d="M4.3 7.3v3M2.8 8.8h3"/><circle cx="10.2" cy="7.7" r="0.65" fill="currentColor" stroke="none"/><circle cx="12.2" cy="9.7" r="0.65" fill="currentColor" stroke="none"/></svg>{% endmacro %}
 {% macro dice_icon() %}<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="2.5" width="11" height="11" rx="2"/><circle cx="5.5" cy="5.5" r="0.7" fill="currentColor" stroke="none"/><circle cx="10.5" cy="5.5" r="0.7" fill="currentColor" stroke="none"/><circle cx="8" cy="8" r="0.7" fill="currentColor" stroke="none"/><circle cx="5.5" cy="10.5" r="0.7" fill="currentColor" stroke="none"/><circle cx="10.5" cy="10.5" r="0.7" fill="currentColor" stroke="none"/></svg>{% endmacro %}
 {% macro dog_icon() %}<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4Q1 4.5 2 9.2Q3.4 8.7 4.4 6.2Z"/><path d="M11 4Q15 4.5 14 9.2Q12.6 8.7 11.6 6.2Z"/><path d="M4.3 7a3.7 3.7 0 0 1 7.4 0v1.8a3.7 3.2 0 0 1-7.4 0z"/><circle cx="8" cy="10" r="0.55" fill="currentColor" stroke="none"/></svg>{% endmacro %}
+{% macro disc_icon() %}<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.3"/><circle cx="8" cy="8" r="4"/><circle cx="8" cy="8" r="1.3" fill="currentColor" stroke="none"/><path d="M4 4.5a6 6 0 0 1 2.8-1.7" stroke-width="1.1"/></svg>{% endmacro %}
+{% macro comic_icon() %}<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="8" cy="6.3" rx="6" ry="4"/><path d="M6.3 10 4.5 13.5 8.7 10.1"/></svg>{% endmacro %}
 
 {% set _icon_registry = {
   'cart': cart_icon, 'home': home_icon, 'car': car_icon, 'film': film_icon,
@@ -67,7 +69,7 @@
   'megaphone': megaphone_icon, 'headphones': headphones_icon,
   'camera': camera_icon, 'ticket': ticket_icon, 'mask': mask_icon,
   'gamepad': gamepad_icon, 'dice': dice_icon, 'fuel': fuel_icon,
-  'parking': parking_icon, 'dog': dog_icon,
+  'parking': parking_icon, 'dog': dog_icon, 'disc': disc_icon, 'comic': comic_icon,
 } %}
 
 {% macro category_icon(key) %}{% if key and key in _icon_registry %}{{ _icon_registry[key]() }}{% endif %}{% endmacro %}
