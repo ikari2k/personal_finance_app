@@ -13,7 +13,15 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.routers import accounts, categories, import_, rules, transactions, transfers
+from app.routers import (
+    accounts,
+    categories,
+    import_,
+    reports,
+    rules,
+    transactions,
+    transfers,
+)
 from app.services.consistency import check_consistency
 from app.storage.accounts import read_accounts
 from app.storage.ledger import read_ledger
@@ -51,6 +59,7 @@ app.include_router(transactions.router)
 app.include_router(transfers.router)
 app.include_router(import_.router)
 app.include_router(rules.router)
+app.include_router(reports.router)
 
 
 @app.get("/", include_in_schema=False)

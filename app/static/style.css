@@ -851,3 +851,48 @@ fieldset legend {
 .field-hint-bad {
   color: var(--pico-del-color);
 }
+
+/* Reports: net worth line chart, rendered as plain inline SVG (see
+ * app/routers/reports.py's module docstring for why — no vendored JS
+ * charting library). Colors come from Pico's own variables so the
+ * chart adapts to light/dark automatically, same as .amount-positive/
+ * .amount-negative elsewhere. */
+.net-worth-chart {
+  width: 100%;
+  height: auto;
+}
+
+.chart-line {
+  fill: none;
+  stroke: var(--pico-primary);
+  stroke-width: 2;
+}
+
+.chart-point {
+  fill: var(--pico-primary);
+}
+
+.chart-zero-line {
+  stroke: var(--pico-muted-border-color);
+  stroke-dasharray: 4 4;
+}
+
+.chart-range {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 0.25rem;
+}
+
+/* The year-detail report's income/expense category breakdowns sit side
+ * by side, same two-column idea as #categories-tree-wrapper .columns
+ * but not scoped to that page. */
+.report-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3rem;
+}
+
+.subcategory-row td.indent {
+  padding-left: 1.5rem;
+  color: var(--pico-muted-color);
+}

@@ -1,0 +1,33 @@
+{% macro breakdown_table(breakdown) %}
+  {% if breakdown %}
+    <table>
+      <thead><tr><th>Category</th><th>Total</th><th>vs. prior year</th></tr></thead>
+      <tbody>
+        {% for cat in breakdown %}
+          <tr>
+            <td>{{ cat.name }}</td>
+            <td>{{ "%.2f"|format(cat.total) }}</td>
+            <td>
+              {% if cat.yoy_delta is not none %}
+                <span class="{{ 'amount-negative' if cat.yoy_delta < 0 else 'amount-positive' }}">
+                  {{ '+' if cat.yoy_delta >= 0 else '' }}{{ "%.2f"|format(cat.yoy_delta) }}
+                </span>
+              {% else %}
+                —
+              {% endif %}
+            </td>
+          </tr>
+          {% for sub in cat.subcategories %}
+            <tr class="subcategory-row">
+              <td class="indent">{{ sub.name }}</td>
+              <td>{{ "%.2f"|format(sub.total) }}</td>
+              <td></td>
+            </tr>
+          {% endfor %}
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p>No data.</p>
+  {% endif %}
+{% endmacro %}

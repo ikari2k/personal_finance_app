@@ -45,7 +45,18 @@ written (`services.categorizer.plan_reclassification`/`apply_reclassification`).
 set: every rule always applies both to future imports (already automatic since Phase 3) and to
 this manual reclassify run — no per-rule opt-out, a deliberate scope decision to avoid a schema
 change beyond the finalized `config/rules.toml` shape. Transfers and non-matching rows are never
-touched (a non-match must never blank out an existing category). See `docs/implementation-plan.md`
+touched (a non-match must never blank out an existing category). Phase 5 (reporting &
+visualization) is also complete: a `/reports` page (net worth over time as an inline server-
+rendered SVG line chart — no vendored JS charting library, a deliberate deviation from the
+original plan doc, kept swappable later since the chart data and its SVG rendering are separate
+functions — plus an annual income/expense summary table with a year-over-year delta) and
+`/reports/{year}` drill-down (monthly income/expense/net breakdown with a month-over-month delta
+that chains correctly across a year boundary, plus income/expense category-and-subcategory
+totals with a year-over-year delta per category). All of it reads through `services/
+aggregation.py`, extended with `yearly_totals_with_yoy`/`monthly_totals_with_mom`/
+`category_breakdown`/`net_worth_by_month` alongside the existing month/type grouping — one
+shared group-by layer, not one-off per-view logic. Known simplification: subcategory-level YoY
+isn't computed, only category-level (see the module docstring). See `docs/implementation-plan.md`
 for the full phased plan, finalized schemas, and per-phase status checkboxes/implementation notes.
 
 **Work proceeds one phase at a time.** Each phase in `docs/implementation-plan.md` is a discrete,

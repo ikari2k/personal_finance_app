@@ -4,9 +4,9 @@ This elaborates `finance-app-prd.md` into concrete technical decisions and a pha
 Phases are implemented one at a time, each its own reviewable unit of work with its own commit(s).
 `CLAUDE.md` is updated after each phase lands to reflect what became concrete during that phase.
 
-**Status**: Phases 0–4 complete, plus three out-of-sequence addenda inserted after 2.7 (transfer
+**Status**: Phases 0–5 complete, plus three out-of-sequence addenda inserted after 2.7 (transfer
 editing/dialog redesign, icon-set polish, and per-category/subcategory monthly budgets — see
-their entries below).
+their entries below). Only Phase 6 (launcher & polish) remains.
 
 **Environment note**: `uv` is installed under pyenv's Python 3.13.7, not globally on PATH — the
 `uv` shim only resolves once a directory is pinned to that pyenv version. This repo has a
@@ -683,10 +683,30 @@ unit-testable without touching disk. `routers/` stays thin — HTTP/HTMX glue on
   "Gas station" rule correctly diffed 5 existing rows in preview, applied identically, and a
   second preview then showed no changes.
 
-- [ ] **Phase 5 — Reporting & visualization**: `services/aggregation.py` shared group-by layer,
-  annual summary + year→month drill-down, MoM/YoY comparisons, balance/net worth chart via the
-  vendored chart JS. *Verify*: aggregation unit tests against a fixture ledger with known totals;
-  manual browser check of chart rendering.
+- [x] **Phase 5 — Reporting & visualization**: `/reports` (net worth over time + annual
+  income/expense summary with a YoY delta) and `/reports/{year}` (monthly breakdown with a MoM
+  delta that chains across year boundaries, plus income/expense category/subcategory totals with
+  a per-category YoY delta). All built on `services/aggregation.py`'s shared group-by layer,
+  extended with `yearly_totals_with_yoy`, `monthly_totals_with_mom`, `category_breakdown`, and
+  `net_worth_by_month` rather than one-off per-view logic — reusing `group_by_month_and_type`
+  underneath every one of them. **Charting deviates from this doc's original plan**: net worth is
+  rendered as plain inline SVG computed server-side (`app/routers/reports.py::_svg_line_chart`)
+  rather than a vendored JS charting library — discussed with the user, who agreed given this
+  app's otherwise-zero-JS-dependency posture, on the condition the chart data
+  (`net_worth_by_month`) stays decoupled from its SVG rendering so a future move to a JS library
+  (e.g. Chart.js) only touches the rendering function and template, not the aggregation layer.
+  Net worth math: summing every account's starting balance plus *all* transaction amounts to
+  date (any type, not per-account) makes transfer legs cancel automatically, since a transfer's
+  two equal-and-opposite legs always net to zero across the combined total — no special-casing
+  needed the way `group_by_month_and_type`'s `net_total` needs for its per-type subtotals.
+  MoM/YoY comparisons are at the category level only, not subcategory (a deliberate scope cut
+  from the PRD's literal "category and subcategory" wording, to avoid a second nested comparison
+  pass for comparatively little value). *Verified*: 28 new aggregation unit tests (YoY/MoM delta
+  computation including the December→January boundary case, category/subcategory grouping and
+  sorting, transfer-leg cancellation in the net worth series) and 6 new router integration tests
+  (`tests/unit/test_aggregation.py`, `tests/integration/test_reports_router.py`); full suite 285
+  passing; a live manual check against the seeded sample ledger confirmed the chart, annual
+  table, and year drill-down all rendered correctly.
 
 - [ ] **Phase 6 — Launcher & polish**: `scripts/launch.py` (starts uvicorn bound to
   `127.0.0.1`, waits for readiness, opens browser via `webbrowser`), error-handling pass across

@@ -3,11 +3,18 @@
 from datetime import date
 from decimal import Decimal
 
+import pytest
+
+from app.models.account import Account
 from app.models.transaction import Transaction, TransactionType
 from app.services.aggregation import (
+    category_breakdown,
     group_by_month_and_type,
     grouped_transaction_view,
     merge_months,
+    monthly_totals_with_mom,
+    net_worth_by_month,
+    yearly_totals_with_yoy,
 )
 
 
@@ -26,6 +33,18 @@ def _txn(**overrides) -> Transaction:
     }
     fields.update(overrides)
     return Transaction(**fields)
+
+
+def _account(**overrides) -> Account:
+    fields = {
+        "id": "chk",
+        "name": "Checking",
+        "number": "1234",
+        "description": "",
+        "starting_balance": Decimal("0"),
+    }
+    fields.update(overrides)
+    return Account(**fields)
 
 
 def test_empty_ledger_returns_no_months():
@@ -292,3 +311,286 @@ def test_grouped_transaction_view_both_off_is_one_flat_group():
     assert len(view) == 1
     assert view[0].groups == []
     assert [t.id for t in view[0].transactions] == ["t2", "t1"]
+
+
+def test_yearly_totals_with_yoy_returns_newest_first():
+    txns = [
+        _txn(
+            id="t1",
+            date=date(2025, 1, 1),
+            type=TransactionType.INCOME,
+            amount=Decimal("100"),
+        ),
+        _txn(
+            id="t2",
+            date=date(2026, 1, 1),
+            type=TransactionType.INCOME,
+            amount=Decimal("150"),
+        ),
+    ]
+
+    years = yearly_totals_with_yoy(txns)
+
+    assert [y.year for y in years] == [2026, 2025]
+
+
+def test_yearly_totals_with_yoy_computes_income_expense_and_net():
+    txns = [
+        _txn(id="t1", type=TransactionType.INCOME, amount=Decimal("100")),
+        _txn(id="t2", type=TransactionType.EXPENSE, amount=Decimal("-40")),
+    ]
+
+    [year] = yearly_totals_with_yoy(txns)
+
+    assert year.income_total == Decimal("100")
+    assert year.expense_total == Decimal("-40")
+    assert year.net_total == Decimal("60")
+
+
+def test_yearly_totals_with_yoy_first_year_has_no_delta():
+    txns = [_txn(type=TransactionType.INCOME, amount=Decimal("100"))]
+
+    [year] = yearly_totals_with_yoy(txns)
+
+    assert year.yoy_delta is None
+
+
+def test_yearly_totals_with_yoy_computes_delta_against_prior_year():
+    txns = [
+        _txn(
+            id="t1",
+            date=date(2025, 1, 1),
+            type=TransactionType.INCOME,
+            amount=Decimal("100"),
+        ),
+        _txn(
+            id="t2",
+            date=date(2026, 1, 1),
+            type=TransactionType.INCOME,
+            amount=Decimal("150"),
+        ),
+    ]
+
+    years = yearly_totals_with_yoy(txns)
+    current = next(y for y in years if y.year == 2026)
+
+    assert current.yoy_delta == Decimal("50")
+
+
+def test_yearly_totals_with_yoy_excludes_transfers():
+    txns = [
+        _txn(
+            id="t1",
+            type=TransactionType.TRANSFER,
+            category="Transfer",
+            amount=Decimal("500"),
+        ),
+    ]
+
+    years = yearly_totals_with_yoy(txns)
+
+    assert years == []
+
+
+def test_monthly_totals_with_mom_returns_newest_first():
+    txns = [
+        _txn(id="t1", date=date(2026, 7, 1)),
+        _txn(id="t2", date=date(2026, 9, 1)),
+    ]
+
+    months = monthly_totals_with_mom(txns)
+
+    assert [m.key for m in months] == ["2026-09", "2026-07"]
+
+
+def test_monthly_totals_with_mom_first_month_has_no_delta():
+    txns = [_txn(date=date(2026, 8, 1))]
+
+    [month] = monthly_totals_with_mom(txns)
+
+    assert month.mom_delta is None
+
+
+def test_monthly_totals_with_mom_computes_delta_against_prior_month():
+    txns = [
+        _txn(id="t1", date=date(2026, 7, 1), amount=Decimal("-10")),
+        _txn(id="t2", date=date(2026, 8, 1), amount=Decimal("-30")),
+    ]
+
+    months = monthly_totals_with_mom(txns)
+    august = next(m for m in months if m.key == "2026-08")
+
+    assert august.mom_delta == Decimal("-20")
+
+
+def test_monthly_totals_with_mom_delta_chains_across_a_year_boundary():
+    txns = [
+        _txn(id="t1", date=date(2025, 12, 1), amount=Decimal("-10")),
+        _txn(id="t2", date=date(2026, 1, 1), amount=Decimal("-25")),
+    ]
+
+    months = monthly_totals_with_mom(txns)
+    january = next(m for m in months if m.key == "2026-01")
+
+    assert january.mom_delta == Decimal("-15")
+
+
+def test_category_breakdown_raises_for_transfer_type():
+    with pytest.raises(ValueError):
+        category_breakdown([], 2026, TransactionType.TRANSFER)
+
+
+def test_category_breakdown_groups_by_category_and_subcategory():
+    txns = [
+        _txn(
+            id="t1",
+            category="Groceries",
+            subcategory="Supermarket",
+            amount=Decimal("-50"),
+        ),
+        _txn(
+            id="t2",
+            category="Groceries",
+            subcategory="Supermarket",
+            amount=Decimal("-20"),
+        ),
+        _txn(
+            id="t3",
+            category="Groceries",
+            subcategory="Farmers Market",
+            amount=Decimal("-15"),
+        ),
+    ]
+
+    [groceries] = category_breakdown(txns, 2026, TransactionType.EXPENSE)
+
+    assert groceries.name == "Groceries"
+    assert groceries.total == Decimal("85")
+    assert {s.name: s.total for s in groceries.subcategories} == {
+        "Supermarket": Decimal("70"),
+        "Farmers Market": Decimal("15"),
+    }
+
+
+def test_category_breakdown_counts_blank_subcategory_toward_total_without_a_row():
+    txns = [_txn(category="Health", subcategory="", amount=Decimal("-30"))]
+
+    [health] = category_breakdown(txns, 2026, TransactionType.EXPENSE)
+
+    assert health.total == Decimal("30")
+    assert health.subcategories == []
+
+
+def test_category_breakdown_sorted_by_total_descending():
+    txns = [
+        _txn(id="t1", category="Small", amount=Decimal("-5")),
+        _txn(id="t2", category="Big", amount=Decimal("-500")),
+    ]
+
+    breakdown = category_breakdown(txns, 2026, TransactionType.EXPENSE)
+
+    assert [c.name for c in breakdown] == ["Big", "Small"]
+
+
+def test_category_breakdown_ignores_other_years_and_types():
+    txns = [
+        _txn(
+            id="t1", date=date(2025, 1, 1), category="Groceries", amount=Decimal("-50")
+        ),
+        _txn(
+            id="t2",
+            type=TransactionType.INCOME,
+            category="Salary",
+            amount=Decimal("100"),
+        ),
+    ]
+
+    breakdown = category_breakdown(txns, 2026, TransactionType.EXPENSE)
+
+    assert breakdown == []
+
+
+def test_category_breakdown_yoy_delta_against_prior_year_same_category():
+    txns = [
+        _txn(
+            id="t1", date=date(2025, 1, 1), category="Groceries", amount=Decimal("-50")
+        ),
+        _txn(
+            id="t2", date=date(2026, 1, 1), category="Groceries", amount=Decimal("-80")
+        ),
+    ]
+
+    [groceries] = category_breakdown(txns, 2026, TransactionType.EXPENSE)
+
+    assert groceries.yoy_delta == Decimal("30")
+
+
+def test_category_breakdown_yoy_delta_is_none_for_a_new_category():
+    txns = [_txn(category="Groceries", amount=Decimal("-50"))]
+
+    [groceries] = category_breakdown(txns, 2026, TransactionType.EXPENSE)
+
+    assert groceries.yoy_delta is None
+
+
+def test_net_worth_by_month_starts_from_combined_starting_balances():
+    accounts = [_account(id="chk", starting_balance=Decimal("100"))]
+
+    points = net_worth_by_month([], accounts)
+
+    assert points == []
+
+
+def test_net_worth_by_month_is_oldest_first_and_cumulative():
+    accounts = [_account(id="chk", starting_balance=Decimal("1000"))]
+    txns = [
+        _txn(
+            id="t1",
+            date=date(2026, 7, 1),
+            type=TransactionType.INCOME,
+            amount=Decimal("200"),
+        ),
+        _txn(
+            id="t2",
+            date=date(2026, 8, 1),
+            type=TransactionType.EXPENSE,
+            amount=Decimal("-50"),
+        ),
+    ]
+
+    points = net_worth_by_month(txns, accounts)
+
+    assert [p.key for p in points] == ["2026-07", "2026-08"]
+    assert points[0].value == Decimal("1200")
+    assert points[1].value == Decimal("1150")
+
+
+def test_net_worth_by_month_transfer_legs_cancel_out():
+    accounts = [
+        _account(id="chk", starting_balance=Decimal("500")),
+        _account(id="sav", starting_balance=Decimal("500")),
+    ]
+    txns = [
+        _txn(
+            id="t1",
+            date=date(2026, 8, 1),
+            account_id="chk",
+            type=TransactionType.TRANSFER,
+            category="Transfer",
+            amount=Decimal("-100"),
+            transfer_id="tr1",
+        ),
+        _txn(
+            id="t2",
+            date=date(2026, 8, 1),
+            account_id="sav",
+            type=TransactionType.TRANSFER,
+            category="Transfer",
+            amount=Decimal("100"),
+            transfer_id="tr1",
+        ),
+    ]
+
+    [point] = net_worth_by_month(txns, accounts)
+
+    assert point.value == Decimal("1000")

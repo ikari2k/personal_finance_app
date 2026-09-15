@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Reports — Finance Tracker{% endblock %}
+{% block content %}
+  <h1>Reports</h1>
+
+  <article>
+    <h2>Net worth over time</h2>
+    {% if chart.has_data %}
+      <svg viewBox="0 0 {{ chart.width }} {{ chart.height }}" class="net-worth-chart"
+           role="img" aria-label="Net worth over time">
+        {% if chart.zero_y is not none %}
+          <line x1="0" y1="{{ chart.zero_y }}" x2="{{ chart.width }}" y2="{{ chart.zero_y }}"
+                class="chart-zero-line"/>
+        {% endif %}
+        <path d="{{ chart.path_d }}" class="chart-line"/>
+        {% for x, y in chart.coords %}
+          <circle cx="{{ x }}" cy="{{ y }}" r="3" class="chart-point">
+            <title>{{ chart.labels[loop.index0] }}: {{ chart.value_labels[loop.index0] }}</title>
+          </circle>
+        {% endfor %}
+      </svg>
+      <p class="chart-range muted">
+        <span>{{ chart.labels[0] }}: {{ chart.value_labels[0] }}</span>
+        <span>{{ chart.labels[-1] }}: {{ chart.value_labels[-1] }}</span>
+      </p>
+    {% else %}
+      <p>No transactions yet.</p>
+    {% endif %}
+  </article>
+
+  <h2>Annual summary</h2>
+  {% if years %}
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>Year</th><th>Income</th><th>Expense</th><th>Net</th><th>vs. prior year</th></tr>
+        </thead>
+        <tbody>
+          {% for y in years %}
+            <tr>
+              <td><a href="/reports/{{ y.year }}">{{ y.year }}</a></td>
+              <td class="amount-positive">{{ "%.2f"|format(y.income_total) }}</td>
+              <td class="amount-negative">{{ "%.2f"|format(y.expense_total) }}</td>
+              <td class="{{ 'amount-negative' if y.net_total < 0 else 'amount-positive' }}">
+                {{ "%.2f"|format(y.net_total) }}
+              </td>
+              <td>
+                {% if y.yoy_delta is not none %}
+                  <span class="{{ 'amount-negative' if y.yoy_delta < 0 else 'amount-positive' }}">
+                    {{ '+' if y.yoy_delta >= 0 else '' }}{{ "%.2f"|format(y.yoy_delta) }}
+                  </span>
+                {% else %}
+                  —
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p>No transactions yet.</p>
+  {% endif %}
+{% endblock %}

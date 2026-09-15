@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% from "reports/_category_breakdown.html" import breakdown_table %}
+{% block title %}{{ year }} — Reports — Finance Tracker{% endblock %}
+{% block content %}
+  <p><a href="/reports">&larr; Back to reports</a></p>
+  <h1>{{ year }}</h1>
+
+  <h2>Monthly breakdown</h2>
+  {% if months %}
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>Month</th><th>Income</th><th>Expense</th><th>Net</th><th>vs. prior month</th></tr>
+        </thead>
+        <tbody>
+          {% for m in months %}
+            <tr>
+              <td>{{ m.label }}</td>
+              <td class="amount-positive">{{ "%.2f"|format(m.income_total) }}</td>
+              <td class="amount-negative">{{ "%.2f"|format(m.expense_total) }}</td>
+              <td class="{{ 'amount-negative' if m.net_total < 0 else 'amount-positive' }}">
+                {{ "%.2f"|format(m.net_total) }}
+              </td>
+              <td>
+                {% if m.mom_delta is not none %}
+                  <span class="{{ 'amount-negative' if m.mom_delta < 0 else 'amount-positive' }}">
+                    {{ '+' if m.mom_delta >= 0 else '' }}{{ "%.2f"|format(m.mom_delta) }}
+                  </span>
+                {% else %}
+                  —
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p>No transactions in {{ year }}.</p>
+  {% endif %}
+
+  <div class="report-columns">
+    <div>
+      <h2>Income by category</h2>
+      {{ breakdown_table(income_breakdown) }}
+    </div>
+    <div>
+      <h2>Expense by category</h2>
+      {{ breakdown_table(expense_breakdown) }}
+    </div>
+  </div>
+{% endblock %}
