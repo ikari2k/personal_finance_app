@@ -4,6 +4,30 @@
   <h1>Categories</h1>
   {% include "categories/_tree.html" %}
 
+  <h2>Top uncategorized descriptions</h2>
+  {% if top_uncategorized %}
+    <p class="muted">
+      Descriptions still left as "Uncategorized", ranked by how often they recur — good
+      candidates for a new auto-categorization rule on the <a href="/rules">Rules</a> page.
+    </p>
+    <div class="table-scroll">
+      <table class="breakdown-table">
+        <thead><tr><th>Description</th><th># Txns</th><th>Total</th></tr></thead>
+        <tbody>
+          {% for row in top_uncategorized %}
+            <tr>
+              <td>{{ row.description }}</td>
+              <td>{{ row.count }}</td>
+              <td>{{ "%.2f"|format(row.total) }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p>No uncategorized transactions.</p>
+  {% endif %}
+
   <dialog id="category-dialog" hx-on:close-dialog="this.close()"
           hx-on:click="if (event.target === this) this.close()">
     <article>

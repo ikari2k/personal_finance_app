@@ -8,6 +8,7 @@ from fastapi.responses import HTMLResponse
 from app.models.category import ICON_HINTS, VALID_ICONS, CategoriesByType
 from app.models.transaction import TransactionType
 from app.routers.htmx_events import toast
+from app.services.aggregation import top_uncategorized_descriptions
 from app.services.categories import (
     add_category,
     add_subcategory,
@@ -18,6 +19,7 @@ from app.services.categories import (
     update_subcategory,
 )
 from app.storage.categories import read_categories, write_categories
+from app.storage.ledger import read_ledger
 from app.templating import templates
 
 router = APIRouter(prefix="/categories", tags=["categories"])
@@ -125,6 +127,7 @@ def list_categories(request: Request) -> HTMLResponse:
         {
             "categories": categories,
             "budget_warnings": _budget_warnings(categories),
+            "top_uncategorized": top_uncategorized_descriptions(read_ledger()),
             "error": None,
         },
     )

@@ -1,7 +1,25 @@
 """Integration tests for the categories router."""
 
+from datetime import date
+from decimal import Decimal
+
 from app import config
+from app.models.transaction import Transaction, TransactionType
 from app.storage.categories import read_categories
+from app.storage.ledger import write_ledger
+
+
+def _txn(id: str, description: str, category: str = "Uncategorized") -> Transaction:
+    return Transaction(
+        id=id,
+        date=date(2026, 1, 1),
+        account_id="chk",
+        category=category,
+        subcategory="",
+        description=description,
+        amount=Decimal("-10.00"),
+        type=TransactionType.EXPENSE,
+    )
 
 
 def test_list_categories_empty(client):
@@ -9,6 +27,41 @@ def test_list_categories_empty(client):
 
     assert response.status_code == 200
     assert "No categories yet" in response.text
+
+
+def test_list_categories_shows_no_uncategorized_message_when_none_exist(client):
+    response = client.get("/categories")
+
+    assert response.status_code == 200
+    assert "No uncategorized transactions" in response.text
+
+
+def test_list_categories_shows_top_uncategorized_descriptions(client):
+    write_ledger(
+        [
+            _txn("t1", "Allegro"),
+            _txn("t2", "Allegro"),
+            _txn("t3", "Apple.com/Bill"),
+        ],
+        config.LEDGER_PATH,
+    )
+
+    response = client.get("/categories")
+
+    assert response.status_code == 200
+    assert "Top uncategorized descriptions" in response.text
+    assert "Allegro" in response.text
+    # Allegro appears first (count 2) ahead of Apple.com/Bill (count 1).
+    assert response.text.index("Allegro") < response.text.index("Apple.com/Bill")
+
+
+def test_list_categories_excludes_categorized_rows_from_uncategorized_table(client):
+    write_ledger([_txn("t1", "Allegro", category="Shopping")], config.LEDGER_PATH)
+
+    response = client.get("/categories")
+
+    assert response.status_code == 200
+    assert "No uncategorized transactions" in response.text
 
 
 def test_create_category_appears_in_tree(client):

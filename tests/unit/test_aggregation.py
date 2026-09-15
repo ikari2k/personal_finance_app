@@ -16,6 +16,7 @@ from app.services.aggregation import (
     monthly_totals_with_mom,
     net_worth_by_month,
     subcategory_monthly_totals,
+    top_uncategorized_descriptions,
     yearly_totals_with_yoy,
 )
 
@@ -711,3 +712,70 @@ def test_net_worth_by_month_transfer_legs_cancel_out():
     [point] = net_worth_by_month(txns, accounts)
 
     assert point.value == Decimal("1000")
+
+
+def test_top_uncategorized_descriptions_ranks_by_count_not_total():
+    txns = [
+        _txn(
+            id="t1",
+            description="Allegro",
+            category="Uncategorized",
+            amount=Decimal("-10"),
+        ),
+        _txn(
+            id="t2",
+            description="Allegro",
+            category="Uncategorized",
+            amount=Decimal("-10"),
+        ),
+        _txn(
+            id="t3",
+            description="Big one-off",
+            category="Uncategorized",
+            amount=Decimal("-1000"),
+        ),
+    ]
+
+    top = top_uncategorized_descriptions(txns)
+
+    assert top[0].description == "Allegro"
+    assert top[0].count == 2
+    assert top[0].total == Decimal("20")
+
+
+def test_top_uncategorized_descriptions_excludes_categorized_rows():
+    txns = [
+        _txn(description="Allegro", category="Shopping", amount=Decimal("-10")),
+    ]
+
+    assert top_uncategorized_descriptions(txns) == []
+
+
+def test_top_uncategorized_descriptions_excludes_blank_descriptions():
+    txns = [
+        _txn(description="", category="Uncategorized", amount=Decimal("-10")),
+    ]
+
+    assert top_uncategorized_descriptions(txns) == []
+
+
+def test_top_uncategorized_descriptions_excludes_transfers():
+    txns = [
+        _txn(
+            description="Monthly savings transfer",
+            category="Transfer",
+            type=TransactionType.TRANSFER,
+            amount=Decimal("-10"),
+        ),
+    ]
+
+    assert top_uncategorized_descriptions(txns) == []
+
+
+def test_top_uncategorized_descriptions_respects_limit():
+    txns = [
+        _txn(id=str(i), description=f"Merchant {i}", category="Uncategorized")
+        for i in range(15)
+    ]
+
+    assert len(top_uncategorized_descriptions(txns, limit=5)) == 5

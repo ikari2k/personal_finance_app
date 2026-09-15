@@ -63,7 +63,13 @@ it would be permanently unreachable: rules never run against transfers). `catego
 takes the row's `TransactionType` and requires it to equal a rule's own `type` when one is set.
 The reclassify-preview diff table also gained an Amount column (`ReclassificationChange.amount`)
 after the amount-based/type-based rule splits made "what would this actually match" harder to
-eyeball from category names alone. Phase 5 (reporting &
+eyeball from category names alone. The `/categories` page's bottom now surfaces a "Top
+uncategorized descriptions" table (`services.aggregation.top_uncategorized_descriptions`) — every
+still-`"Uncategorized"` description ranked by how often it recurs (not by total spend — one big
+one-off transaction is a worse rule candidate than a small but frequent merchant), pointing at
+good candidates for a new `/rules` entry. Blank descriptions and transfers are excluded, same
+reasoning as elsewhere: a blank description isn't one merchant, and transfers never carry a
+category outside the fixed `"Transfer"` tree. Phase 5 (reporting &
 visualization) is also complete: a `/reports` page with one combined net worth chart — a line
 (cumulative net worth, monthly) with paired income/expense bars on the same shared axis, plus a
 value-axis that always starts at 0 with a step chosen by `app.routers.reports._nice_step` (the

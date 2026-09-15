@@ -739,6 +739,20 @@ unit-testable without touching disk. `routers/` stays thin — HTTP/HTMX glue on
   confirmed a `min_amount`-bound expense-only "Fuel" rule and an income-only "Fuel refund" rule
   sharing one pattern correctly picked "Fuel" (not "Fuel refund") for a matching expense row.
 
+- [x] **Post-Phase-4 addendum #3 — top uncategorized descriptions**: the `/categories` page's
+  bottom now surfaces a "Top uncategorized descriptions" table — every still-`"Uncategorized"`
+  description ranked by how often it recurs, with its count and total, pointing at good
+  candidates for a new `/rules` entry (requested after manually querying the ledger for exactly
+  this a few times). `services.aggregation.top_uncategorized_descriptions` ranks by **count**, not
+  total spend, deliberately — a single large one-off uncategorized transaction is a worse rule
+  candidate than a small but frequent merchant, and ranking by total would let the former crowd
+  out the latter. Blank descriptions are excluded (not one merchant, just "no description") and so
+  are transfers (never carry a category outside the fixed `"Transfer"` tree). *Verified*: unit
+  tests (ranks by count not total, excludes categorized/blank/transfer rows, respects a `limit`)
+  and integration tests for the categories page (empty state, ranking order, categorized rows
+  excluded); full suite 346 passing; the live ranking was cross-checked against the same query run
+  ad hoc against the user's real ledger beforehand and matched.
+
 - [x] **Phase 5 — Reporting & visualization**: `/reports` (net worth over time + annual
   income/expense summary with a YoY delta) and `/reports/{year}` (monthly breakdown with a MoM
   delta that chains across year boundaries, plus income/expense category/subcategory totals with

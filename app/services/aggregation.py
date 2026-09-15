@@ -478,3 +478,50 @@ def net_worth_by_month(
         running += sum((t.amount for t in month.transactions), Decimal("0"))
         points.append(NetWorthPoint(key=month.key, label=month.label, value=running))
     return points
+
+
+UNCATEGORIZED = "Uncategorized"  # matches services.importer.DEFAULT_CATEGORY
+
+
+@dataclass
+class DescriptionCount:
+    """One still-``Uncategorized`` description, how often it recurs, and its total."""
+
+    description: str
+    count: int
+    total: Decimal
+
+
+def top_uncategorized_descriptions(
+    transactions: Iterable[Transaction], *, limit: int = 10
+) -> list[DescriptionCount]:
+    """Return the most frequent still-``Uncategorized`` descriptions, most common first.
+
+    Surfaces good candidates for new auto-categorization rules — a
+    description recurring many times uncategorized is worth a rule far
+    more than one appearing once, so this ranks by ``count``, not
+    ``total`` (a single large uncategorized transfer would otherwise
+    crowd out a small but frequent, more rule-worthy merchant). Blank
+    descriptions are excluded — they aren't one merchant, just "no
+    description," so grouping them together isn't meaningful — and
+    transfers never carry a category outside the fixed ``"Transfer"``
+    tree (see CLAUDE.md), so they're excluded too. Ties in count keep
+    the order their description was first encountered in ``transactions``.
+    """
+    counts: dict[str, int] = defaultdict(int)
+    totals: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
+    for transaction in transactions:
+        if transaction.type is TransactionType.TRANSFER:
+            continue
+        if not transaction.description or transaction.category != UNCATEGORIZED:
+            continue
+        counts[transaction.description] += 1
+        totals[transaction.description] += abs(transaction.amount)
+
+    ranked = sorted(counts.items(), key=lambda item: item[1], reverse=True)[:limit]
+    return [
+        DescriptionCount(
+            description=description, count=count, total=totals[description]
+        )
+        for description, count in ranked
+    ]
