@@ -69,7 +69,15 @@ still-`"Uncategorized"` description ranked by how often it recurs (not by total 
 one-off transaction is a worse rule candidate than a small but frequent merchant), pointing at
 good candidates for a new `/rules` entry. Blank descriptions and transfers are excluded, same
 reasoning as elsewhere: a blank description isn't one merchant, and transfers never carry a
-category outside the fixed `"Transfer"` tree. Phase 5 (reporting &
+category outside the fixed `"Transfer"` tree. The rule form also gained an "Exact amount" field —
+a friendlier alternative to typing the same value into both Min and Max by hand for a rule that
+should only match one specific amount. It isn't its own `Rule` field; `app.routers.rules
+._validate_rule` collapses it to `min_amount = max_amount = exact_value`, reusing the existing
+inclusive-range matching rather than adding a third amount-matching code path, and rejects
+combining it with a separate min/max as ambiguous. The edit form round-trips a `min_amount ==
+max_amount` rule back into the Exact-amount field (not showing it as a min/max pair the user never
+actually typed), and the rules table shows `= X` instead of an `X–X` range for one. Phase 5
+(reporting &
 visualization) is also complete: a `/reports` page with one combined net worth chart — a line
 (cumulative net worth, monthly) with paired income/expense bars on the same shared axis, plus a
 value-axis that always starts at 0 with a step chosen by `app.routers.reports._nice_step` (the

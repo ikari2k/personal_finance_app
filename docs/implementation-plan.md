@@ -753,6 +753,20 @@ unit-testable without touching disk. `routers/` stays thin — HTTP/HTMX glue on
   excluded); full suite 346 passing; the live ranking was cross-checked against the same query run
   ad hoc against the user's real ledger beforehand and matched.
 
+- [x] **Post-Phase-4 addendum #4 — exact-amount rule matching**: the rule form gained an "Exact
+  amount" field — a friendlier alternative to typing the same value into both Min and Max amount
+  by hand for a rule that should only match one specific amount ("no `>=`/`<=`, just `=`", as
+  requested). It's not a new `Rule` field: `app.routers.rules._validate_rule` collapses it to
+  `min_amount = max_amount = exact_value`, reusing the existing inclusive-range amount matching
+  (`services.categorizer._amount_matches`) rather than adding a third code path, and rejects
+  combining it with a separately-set min/max as ambiguous rather than silently picking one. The
+  edit form round-trips a `min_amount == max_amount` rule back into the Exact-amount field alone
+  (not as a min/max pair the user never actually typed), and the rules table shows `= X` instead
+  of an `X–X` range for one. *Verified*: integration tests (sets both bounds, rejects combining
+  with min/max, rejects an invalid value, edit-form round-trip, table display); full suite 351
+  passing; a live check confirmed a `9.99` exact-amount rule matched a `-9.99` transaction but not
+  a `-10.00` one.
+
 - [x] **Phase 5 — Reporting & visualization**: `/reports` (net worth over time + annual
   income/expense summary with a YoY delta) and `/reports/{year}` (monthly breakdown with a MoM
   delta that chains across year boundaries, plus income/expense category/subcategory totals with

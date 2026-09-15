@@ -151,6 +151,7 @@ def _validate_rule(
     priority: str,
     min_amount: str,
     max_amount: str,
+    exact_amount: str,
     txn_type: str,
 ) -> tuple[int, Decimal | None, Decimal | None, TransactionType | None]:
     """Validate a submitted rule; returns parsed fields or raises ``ValueError``.
@@ -158,14 +159,31 @@ def _validate_rule(
     Regex compile-checked here, at save time — CLAUDE.md's "regex rules
     must fail loudly" invariant, extended from Phase 3's apply-time-only
     check so a bad pattern never reaches ``config/rules.toml`` at all.
+
+    ``exact_amount`` is a friendlier alternative to setting
+    ``min_amount``/``max_amount`` to the same value by hand — it's not
+    its own model field (``Rule`` has no ``exact_amount``), just a form
+    convenience that collapses to ``min_value = max_value =
+    exact_value`` here, reusing the amount-matching logic
+    ``categorize``/``_amount_matches`` already has for an inclusive
+    range that happens to be a single point. Combining it with a
+    separate min/max is rejected as ambiguous rather than picking one
+    silently.
     """
     compile_pattern(pattern)
     if not category.strip():
         raise ValueError("category is required")
     priority_value = _parse_priority(priority)
+    exact_value = _parse_amount_bound(exact_amount, "exact amount")
     min_value = _parse_amount_bound(min_amount, "minimum amount")
     max_value = _parse_amount_bound(max_amount, "maximum amount")
-    if min_value is not None and max_value is not None and min_value > max_value:
+    if exact_value is not None:
+        if min_value is not None or max_value is not None:
+            raise ValueError(
+                "exact amount cannot be combined with minimum/maximum amount"
+            )
+        min_value = max_value = exact_value
+    elif min_value is not None and max_value is not None and min_value > max_value:
         raise ValueError("minimum amount cannot be greater than maximum amount")
     type_value = _parse_rule_type(txn_type)
     return priority_value, min_value, max_value, type_value
@@ -192,6 +210,7 @@ def new_rule_form(request: Request) -> HTMLResponse:
             "priority": "0",
             "min_amount": "",
             "max_amount": "",
+            "exact_amount": "",
             "type": "",
         },
     )
@@ -204,6 +223,11 @@ def edit_rule_form(request: Request, index: int) -> HTMLResponse:
     if index < 0 or index >= len(rules):
         return HTMLResponse("Rule not found", status_code=404)
     rule = rules[index]
+    # A rule saved with min == max came from the form's "exact amount"
+    # field (see _validate_rule) — round-trip it back into that same
+    # field on edit, rather than showing it as a min/max pair the user
+    # never actually typed.
+    is_exact = rule.min_amount is not None and rule.min_amount == rule.max_amount
     return _render_form(
         request,
         index=index,
@@ -212,8 +236,13 @@ def edit_rule_form(request: Request, index: int) -> HTMLResponse:
             "category": rule.category,
             "subcategory": rule.subcategory,
             "priority": str(rule.priority),
-            "min_amount": str(rule.min_amount) if rule.min_amount is not None else "",
-            "max_amount": str(rule.max_amount) if rule.max_amount is not None else "",
+            "min_amount": (
+                "" if is_exact or rule.min_amount is None else str(rule.min_amount)
+            ),
+            "max_amount": (
+                "" if is_exact or rule.max_amount is None else str(rule.max_amount)
+            ),
+            "exact_amount": str(rule.min_amount) if is_exact else "",
             "type": rule.type.value if rule.type is not None else "",
         },
     )
@@ -228,6 +257,7 @@ def create_rule(
     priority: str = Form("0"),
     min_amount: str = Form(""),
     max_amount: str = Form(""),
+    exact_amount: str = Form(""),
     type: str = Form(""),
 ) -> HTMLResponse:
     """Create a new rule; close the dialog and refresh the table on success."""
@@ -238,11 +268,12 @@ def create_rule(
         "priority": priority,
         "min_amount": min_amount,
         "max_amount": max_amount,
+        "exact_amount": exact_amount,
         "type": type,
     }
     try:
         priority_value, min_value, max_value, type_value = _validate_rule(
-            pattern, category, priority, min_amount, max_amount, type
+            pattern, category, priority, min_amount, max_amount, exact_amount, type
         )
     except ValueError as exc:
         return _render_form(request, index=None, values=values, error=str(exc))
@@ -274,6 +305,7 @@ def update_rule(
     priority: str = Form("0"),
     min_amount: str = Form(""),
     max_amount: str = Form(""),
+    exact_amount: str = Form(""),
     type: str = Form(""),
 ) -> HTMLResponse:
     """Update an existing rule; close the dialog and refresh the table on success."""
@@ -284,6 +316,7 @@ def update_rule(
         "priority": priority,
         "min_amount": min_amount,
         "max_amount": max_amount,
+        "exact_amount": exact_amount,
         "type": type,
     }
     rules = read_rules()
@@ -291,7 +324,7 @@ def update_rule(
         return HTMLResponse("Rule not found", status_code=404)
     try:
         priority_value, min_value, max_value, type_value = _validate_rule(
-            pattern, category, priority, min_amount, max_amount, type
+            pattern, category, priority, min_amount, max_amount, exact_amount, type
         )
     except ValueError as exc:
         return _render_form(request, index=index, values=values, error=str(exc))

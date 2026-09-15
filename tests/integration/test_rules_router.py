@@ -153,6 +153,92 @@ def test_create_rule_rejects_min_amount_greater_than_max_amount(client):
     assert "minimum amount cannot be greater than maximum amount" in response.text
 
 
+def test_create_rule_with_exact_amount_sets_min_and_max(client):
+    response = client.post(
+        "/rules",
+        data={
+            "pattern": "ORLEN",
+            "category": "Fuel",
+            "priority": "0",
+            "exact_amount": "123.45",
+        },
+    )
+
+    assert response.status_code == 200
+    [rule] = read_rules(config.RULES_PATH)
+    assert rule.min_amount == Decimal("123.45")
+    assert rule.max_amount == Decimal("123.45")
+
+
+def test_create_rule_rejects_exact_amount_combined_with_min_amount(client):
+    response = client.post(
+        "/rules",
+        data={
+            "pattern": "ORLEN",
+            "category": "Fuel",
+            "priority": "0",
+            "exact_amount": "100",
+            "min_amount": "50",
+        },
+    )
+
+    assert response.status_code == 200
+    assert (
+        "exact amount cannot be combined with minimum/maximum amount" in response.text
+    )
+    assert read_rules(config.RULES_PATH) == []
+
+
+def test_create_rule_rejects_invalid_exact_amount(client):
+    response = client.post(
+        "/rules",
+        data={
+            "pattern": "ORLEN",
+            "category": "Fuel",
+            "priority": "0",
+            "exact_amount": "abc",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "invalid exact amount" in response.text
+    assert read_rules(config.RULES_PATH) == []
+
+
+def test_edit_rule_form_shows_exact_amount_field_for_a_min_equals_max_rule(client):
+    client.post(
+        "/rules",
+        data={
+            "pattern": "ORLEN",
+            "category": "Fuel",
+            "priority": "0",
+            "exact_amount": "100.00",
+        },
+    )
+
+    response = client.get("/rules/0/edit")
+
+    assert response.status_code == 200
+    assert 'name="exact_amount" value="100.00"' in response.text
+
+
+def test_rules_table_shows_exact_amount_as_equals(client):
+    client.post(
+        "/rules",
+        data={
+            "pattern": "ORLEN",
+            "category": "Fuel",
+            "priority": "0",
+            "exact_amount": "100.00",
+        },
+    )
+
+    response = client.get("/rules")
+
+    assert response.status_code == 200
+    assert "= 100.00" in response.text
+
+
 def test_create_rule_with_type_is_persisted(client):
     response = client.post(
         "/rules",

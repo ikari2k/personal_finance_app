@@ -19,6 +19,9 @@
       </datalist>
     </label>
   </div>
+  <label>Exact amount (optional — matches only this amount; leave blank to use a range instead)
+    <input type="text" name="exact_amount" value="{{ values.exact_amount }}" placeholder="no exact amount">
+  </label>
   <div class="form-grid-2">
     <label>Min amount (optional — matches this amount or more)
       <input type="text" name="min_amount" value="{{ values.min_amount }}" placeholder="no minimum">
