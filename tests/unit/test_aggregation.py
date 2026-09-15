@@ -468,9 +468,14 @@ def test_category_breakdown_groups_by_category_and_subcategory():
 
     assert groceries.name == "Groceries"
     assert groceries.total == Decimal("85")
+    assert groceries.count == 3
     assert {s.name: s.total for s in groceries.subcategories} == {
         "Supermarket": Decimal("70"),
         "Farmers Market": Decimal("15"),
+    }
+    assert {s.name: s.count for s in groceries.subcategories} == {
+        "Supermarket": 2,
+        "Farmers Market": 1,
     }
 
 
@@ -480,6 +485,7 @@ def test_category_breakdown_counts_blank_subcategory_toward_total_without_a_row(
     [health] = category_breakdown(txns, 2026, TransactionType.EXPENSE)
 
     assert health.total == Decimal("30")
+    assert health.count == 1
     assert health.subcategories == []
 
 

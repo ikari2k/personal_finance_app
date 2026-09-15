@@ -172,6 +172,22 @@ def test_year_detail_shows_monthly_breakdown_and_category_totals(client):
     assert "Supermarket" in response.text
 
 
+def test_year_detail_shows_transaction_count_per_category(client):
+    _create_account(client)
+    _create_transaction(
+        client, date="2026-01-05", type="expense", category="Groceries", amount="40"
+    )
+    _create_transaction(
+        client, date="2026-01-15", type="expense", category="Groceries", amount="20"
+    )
+
+    response = client.get("/reports/2026")
+
+    assert response.status_code == 200
+    assert "# Txns" in response.text
+    assert ">2<" in response.text
+
+
 def test_year_detail_shows_category_icon_when_one_is_set(client):
     client.post("/categories/expense", data={"name": "Groceries", "icon": "cart"})
     _create_account(client)

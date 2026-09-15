@@ -819,7 +819,17 @@ unit-testable without touching disk. `routers/` stays thin — HTTP/HTMX glue on
   tests (adaptive step at a small scale, uncrowded axis at a six-figure scale) replacing the old
   fixed-step test; full suite 303 passing; a live manual check against a throwaway dataset styled
   after the reported crowding (net worth/income/expense reaching ~130,000) confirmed exactly 4
-  clean gridlines (0/50,000/100,000/150,000) instead of dozens.
+  clean gridlines (0/50,000/100,000/150,000) instead of dozens. A seventh round added a
+  transaction-count column to the annual breakdown table (`CategoryTotal`/`SubcategoryTotal`
+  gained a `count` field alongside `total`, since a large total from many small transactions
+  reads very differently from the same total via one big one) and fixed category names wrapping
+  in that table's half-width `.report-columns` cell (`.breakdown-table th/td:first-child`'s
+  `white-space: nowrap`, wrapped in `.table-scroll` so the whole table scrolls horizontally if it
+  overflows instead). *Verified*: unit tests for `category_breakdown`'s counts (per-category and
+  per-subcategory) and an integration test confirming the "# Txns" column renders; full suite 338
+  passing; a live check confirmed both the counts (2 Groceries transactions summing correctly to
+  count 2, split 1+1 across two subcategories) and that a long category name renders without
+  wrapping inside `.table-scroll`.
 
 - [ ] **Phase 6 — Launcher & polish**: `scripts/launch.py` (starts uvicorn bound to
   `127.0.0.1`, waits for readiness, opens browser via `webbrowser`), error-handling pass across

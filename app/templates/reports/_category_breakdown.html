@@ -1,45 +1,49 @@
 {% from "_category_icons.html" import category_icon %}
 {% macro breakdown_table(breakdown, config, txn_type) %}
   {% if breakdown %}
-    <table>
-      <thead><tr><th>Category</th><th>Total</th><th>vs. prior year</th></tr></thead>
-      <tbody>
-        {% for cat in breakdown %}
-          {% set cat_icon = config.get(cat.name, {}).get('icon', '') %}
-          <tr>
-            <td>
-              {% if cat_icon %}
-                <span class="cat-cell-icon cat-cell-icon-{{ txn_type }}">{{ category_icon(cat_icon) }}</span>
-              {% endif %}
-              {{ cat.name }}
-            </td>
-            <td>{{ "%.2f"|format(cat.total) }}</td>
-            <td>
-              {% if cat.yoy_delta is not none %}
-                <span class="{{ 'amount-negative' if cat.yoy_delta < 0 else 'amount-positive' }}">
-                  {{ '+' if cat.yoy_delta >= 0 else '' }}{{ "%.2f"|format(cat.yoy_delta) }}
-                </span>
-              {% else %}
-                —
-              {% endif %}
-            </td>
-          </tr>
-          {% for sub in cat.subcategories %}
-            {% set sub_icon = config.get(cat.name, {}).get('subcategories', {}).get(sub.name, {}).get('icon', '') %}
-            <tr class="subcategory-row">
-              <td class="indent">
-                {% if sub_icon %}
-                  <span class="cat-cell-icon cat-cell-icon-{{ txn_type }}">{{ category_icon(sub_icon) }}</span>
+    <div class="table-scroll">
+      <table class="breakdown-table">
+        <thead><tr><th>Category</th><th>Total</th><th># Txns</th><th>vs. prior year</th></tr></thead>
+        <tbody>
+          {% for cat in breakdown %}
+            {% set cat_icon = config.get(cat.name, {}).get('icon', '') %}
+            <tr>
+              <td>
+                {% if cat_icon %}
+                  <span class="cat-cell-icon cat-cell-icon-{{ txn_type }}">{{ category_icon(cat_icon) }}</span>
                 {% endif %}
-                {{ sub.name }}
+                {{ cat.name }}
               </td>
-              <td>{{ "%.2f"|format(sub.total) }}</td>
-              <td></td>
+              <td>{{ "%.2f"|format(cat.total) }}</td>
+              <td>{{ cat.count }}</td>
+              <td>
+                {% if cat.yoy_delta is not none %}
+                  <span class="{{ 'amount-negative' if cat.yoy_delta < 0 else 'amount-positive' }}">
+                    {{ '+' if cat.yoy_delta >= 0 else '' }}{{ "%.2f"|format(cat.yoy_delta) }}
+                  </span>
+                {% else %}
+                  —
+                {% endif %}
+              </td>
             </tr>
+            {% for sub in cat.subcategories %}
+              {% set sub_icon = config.get(cat.name, {}).get('subcategories', {}).get(sub.name, {}).get('icon', '') %}
+              <tr class="subcategory-row">
+                <td class="indent">
+                  {% if sub_icon %}
+                    <span class="cat-cell-icon cat-cell-icon-{{ txn_type }}">{{ category_icon(sub_icon) }}</span>
+                  {% endif %}
+                  {{ sub.name }}
+                </td>
+                <td>{{ "%.2f"|format(sub.total) }}</td>
+                <td>{{ sub.count }}</td>
+                <td></td>
+              </tr>
+            {% endfor %}
           {% endfor %}
-        {% endfor %}
-      </tbody>
-    </table>
+        </tbody>
+      </table>
+    </div>
   {% else %}
     <p>No data.</p>
   {% endif %}

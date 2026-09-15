@@ -10,7 +10,7 @@ file I/O.
 
 from collections import defaultdict
 from collections.abc import Iterable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from decimal import Decimal
 
 from app.models.account import Account
@@ -278,10 +278,11 @@ def monthly_totals_with_mom(transactions: Iterable[Transaction]) -> list[Monthly
 
 @dataclass
 class SubcategoryTotal:
-    """One subcategory's total spend/income (magnitude, not signed)."""
+    """One subcategory's total spend/income (magnitude, not signed) and row count."""
 
     name: str
     total: Decimal
+    count: int
 
 
 @dataclass
@@ -292,26 +293,42 @@ class CategoryTotal:
     rather than signed — an expense category's total reading as a
     positive "amount spent" is more useful on a report than a negative
     number here. Rows with a blank ``subcategory`` still count toward
-    ``total`` but don't get their own ``SubcategoryTotal`` entry.
+    ``total``/``count`` but don't get their own ``SubcategoryTotal``
+    entry. ``count`` is the number of transactions contributing to
+    ``total`` (across every subcategory, named or blank) — shown
+    alongside the dollar total since a large total from many small
+    transactions reads very differently from the same total via one
+    big one.
     """
 
     name: str
     total: Decimal
+    count: int
     yoy_delta: Decimal | None
     subcategories: list[SubcategoryTotal]
 
 
+@dataclass
+class _CategoryAccumulator:
+    """Mutable running total/count for one category-or-subcategory bucket."""
+
+    total: Decimal = field(default_factory=lambda: Decimal("0"))
+    count: int = 0
+
+
 def _category_totals_for_year(
     transactions: Iterable[Transaction], year: int, txn_type: TransactionType
-) -> dict[str, dict[str, Decimal]]:
-    """Return ``{category: {subcategory: total}}`` for one year and type."""
-    totals: dict[str, dict[str, Decimal]] = defaultdict(
-        lambda: defaultdict(lambda: Decimal("0"))
+) -> dict[str, dict[str, _CategoryAccumulator]]:
+    """Return ``{category: {subcategory: accumulator}}`` for one year and type."""
+    totals: dict[str, dict[str, _CategoryAccumulator]] = defaultdict(
+        lambda: defaultdict(_CategoryAccumulator)
     )
     for transaction in transactions:
         if transaction.type is not txn_type or transaction.date.year != year:
             continue
-        totals[transaction.category][transaction.subcategory] += abs(transaction.amount)
+        bucket = totals[transaction.category][transaction.subcategory]
+        bucket.total += abs(transaction.amount)
+        bucket.count += 1
     return totals
 
 
@@ -336,16 +353,18 @@ def category_breakdown(
     current = _category_totals_for_year(transactions, year, txn_type)
     previous = _category_totals_for_year(transactions, year - 1, txn_type)
     previous_category_totals = {
-        name: sum(subs.values(), Decimal("0")) for name, subs in previous.items()
+        name: sum((bucket.total for bucket in subs.values()), Decimal("0"))
+        for name, subs in previous.items()
     }
 
     result = []
     for category, subs in current.items():
-        total = sum(subs.values(), Decimal("0"))
+        total = sum((bucket.total for bucket in subs.values()), Decimal("0"))
+        count = sum(bucket.count for bucket in subs.values())
         subcategories = sorted(
             (
-                SubcategoryTotal(name=name, total=amount)
-                for name, amount in subs.items()
+                SubcategoryTotal(name=name, total=bucket.total, count=bucket.count)
+                for name, bucket in subs.items()
                 if name
             ),
             key=lambda s: s.total,
@@ -357,6 +376,7 @@ def category_breakdown(
             CategoryTotal(
                 name=category,
                 total=total,
+                count=count,
                 yoy_delta=yoy_delta,
                 subcategories=subcategories,
             )

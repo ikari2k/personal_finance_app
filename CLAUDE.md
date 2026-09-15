@@ -100,8 +100,14 @@ which. All of it reads through `services/aggregation.py`, extended with
 `yearly_totals_with_yoy`/`monthly_totals_with_mom`/`category_breakdown`/`category_monthly_totals`/
 `net_worth_by_month` alongside the existing month/type grouping — one shared group-by layer, not
 one-off per-view logic. Known simplification: subcategory-level YoY isn't computed, only
-category-level (see the module docstring). See `docs/implementation-plan.md` for the full phased
-plan, finalized schemas, and per-phase status checkboxes/implementation notes.
+category-level (see the module docstring). `CategoryTotal`/`SubcategoryTotal` also carry a
+`count` (number of contributing transactions) alongside `total`, shown as a "# Txns" column on
+the annual breakdown table — a large total from many small transactions reads very differently
+from the same total via one big one. That table's Category column also gets `white-space:
+nowrap` (`.breakdown-table th/td:first-child`) since it sits in a half-width `.report-columns`
+cell narrow enough that a long name would otherwise wrap; wrapped in `.table-scroll` so the whole
+table scrolls horizontally instead if it doesn't fit. See `docs/implementation-plan.md` for the
+full phased plan, finalized schemas, and per-phase status checkboxes/implementation notes.
 
 **Work proceeds one phase at a time.** Each phase in `docs/implementation-plan.md` is a discrete,
 separately-reviewable unit — implement it, verify it, stop, and update docs (this file plus the

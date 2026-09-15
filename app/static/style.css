@@ -1022,6 +1022,17 @@ fieldset legend {
   border: 2px solid var(--pico-del-color);
 }
 
+/* The annual category-breakdown table sits in a half-width
+ * .report-columns cell, narrow enough that a long category/subcategory
+ * name would otherwise wrap onto a second line and throw off row
+ * height. Keep it on one line and let the whole table scroll
+ * horizontally instead (.table-scroll, already wrapping it) if it
+ * doesn't fit. */
+.breakdown-table th:first-child,
+.breakdown-table td:first-child {
+  white-space: nowrap;
+}
+
 /* The month-matrix table's Category column stays pinned while the rest
  * scrolls horizontally underneath it — each amount+ring cell is wide
  * enough that a year's worth of months can outgrow the viewport, and
