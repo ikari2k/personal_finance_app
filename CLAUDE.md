@@ -47,9 +47,13 @@ this manual reclassify run — no per-rule opt-out, a deliberate scope decision 
 change beyond the finalized `config/rules.toml` shape. Transfers and non-matching rows are never
 touched (a non-match must never blank out an existing category). Phase 5 (reporting &
 visualization) is also complete: a `/reports` page (net worth over time as an inline server-
-rendered SVG line chart — no vendored JS charting library, a deliberate deviation from the
-original plan doc, kept swappable later since the chart data and its SVG rendering are separate
-functions — plus an annual income/expense summary table with a year-over-year delta) and
+rendered SVG line chart with a value-axis (gridlines + tick labels, not just first/last text
+below the chart) — no vendored JS charting library, a deliberate deviation from the original plan
+doc, kept swappable later since the chart data and its SVG rendering are separate functions —
+plus a paired income/expense bar chart per year (magnitudes, both rising from a shared zero
+baseline, colored via the same `--pico-ins-color`/`--pico-del-color` convention as
+`.amount-positive`/`.amount-negative`) and an annual income/expense summary table with a
+year-over-year delta) and
 `/reports/{year}` drill-down (monthly income/expense/net breakdown with a month-over-month delta
 that chains correctly across a year boundary, plus income/expense category-and-subcategory
 totals with a year-over-year delta per category). All of it reads through `services/

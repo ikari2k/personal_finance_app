@@ -65,6 +65,58 @@ def test_reports_overview_renders_net_worth_chart(client):
     assert "700.00" in response.text
 
 
+def test_reports_overview_chart_renders_a_y_axis(client):
+    _create_account(client, starting_balance="500.00")
+    _create_transaction(
+        client, date="2026-01-01", type="income", category="Salary", amount="200"
+    )
+    _create_transaction(
+        client, date="2026-02-01", type="expense", category="Groceries", amount="50"
+    )
+
+    response = client.get("/reports")
+
+    assert response.status_code == 200
+    net_worth_svg = response.text.split('aria-label="Net worth over time"')[1].split(
+        "</svg>"
+    )[0]
+    assert net_worth_svg.count("chart-gridline") == 3
+    assert net_worth_svg.count("chart-axis-label") == 3
+    # Series is 700 (Jan) then 650 (Feb): max/min axis labels round to
+    # whole numbers, not the 2-decimal tooltip/range values.
+    assert ">700<" in net_worth_svg
+    assert ">650<" in net_worth_svg
+
+
+def test_reports_overview_renders_income_vs_expense_bar_chart(client):
+    _create_account(client)
+    _create_transaction(
+        client, date="2025-01-01", type="income", category="Salary", amount="1000"
+    )
+    _create_transaction(
+        client,
+        date="2025-01-05",
+        type="expense",
+        category="Groceries",
+        amount="200",
+    )
+    _create_transaction(
+        client, date="2026-01-01", type="income", category="Salary", amount="1200"
+    )
+
+    response = client.get("/reports")
+
+    assert response.status_code == 200
+    bar_svg = response.text.split('aria-label="Income vs. expense by year"')[1].split(
+        "</svg>"
+    )[0]
+    assert bar_svg.count("bar-income") == 2
+    assert bar_svg.count("bar-expense") == 2
+    assert ">2025<" in bar_svg
+    assert ">2026<" in bar_svg
+    assert "chart-legend" in response.text
+
+
 def test_year_detail_with_no_transactions(client):
     response = client.get("/reports/2026")
 

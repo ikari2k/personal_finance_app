@@ -877,6 +877,56 @@ fieldset legend {
   stroke-dasharray: 4 4;
 }
 
+.chart-gridline {
+  stroke: var(--pico-muted-border-color);
+  stroke-width: 1;
+  opacity: 0.5;
+}
+
+.chart-axis-label {
+  fill: var(--pico-muted-color);
+  font-size: 10px;
+}
+
+/* Income/expense bars reuse the same signed-amount colors as
+ * .amount-positive/.amount-negative elsewhere, so green/red keeps
+ * meaning the same thing everywhere in the app. */
+.bar-income {
+  fill: var(--pico-ins-color);
+}
+
+.bar-expense {
+  fill: var(--pico-del-color);
+}
+
+.chart-legend {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: var(--pico-muted-color);
+}
+
+.chart-legend-swatch {
+  display: inline-block;
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 2px;
+  margin-left: 0.75rem;
+}
+
+.chart-legend-swatch:first-child {
+  margin-left: 0;
+}
+
+.chart-legend-swatch.bar-income {
+  background-color: var(--pico-ins-color);
+}
+
+.chart-legend-swatch.bar-expense {
+  background-color: var(--pico-del-color);
+}
+
 .chart-range {
   display: flex;
   justify-content: space-between;
