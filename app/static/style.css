@@ -93,7 +93,8 @@
  */
 #accounts-table-wrapper tr,
 #transactions-table-wrapper tr,
-#mappings-page-wrapper tr {
+#mappings-page-wrapper tr,
+#rules-table-wrapper tr {
   position: relative;
 }
 
