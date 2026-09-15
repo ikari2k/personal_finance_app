@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "reports/_category_breakdown.html" import breakdown_table %}
+{% from "reports/_category_breakdown.html" import breakdown_table, month_matrix_table %}
 {% block title %}{{ year }} — Reports — Finance Tracker{% endblock %}
 {% block content %}
   <p><a href="/reports">&larr; Back to reports</a></p>
@@ -49,4 +49,10 @@
       {{ breakdown_table(expense_breakdown, expense_icons, "expense") }}
     </div>
   </div>
+
+  <h2>Income by category — month to month</h2>
+  {{ month_matrix_table(income_month_rows, month_labels, income_icons, "income") }}
+
+  <h2>Expense by category — month to month</h2>
+  {{ month_matrix_table(expense_month_rows, month_labels, expense_icons, "expense") }}
 {% endblock %}

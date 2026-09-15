@@ -58,12 +58,16 @@ across a year boundary, plus income/expense category-and-subcategory totals with
 delta per category — each category/subcategory row shows its configured icon (looked up from
 `config/categories.toml` in the router, since the pure ledger-only aggregation layer has no
 knowledge of category config; blank when unset), reusing the same compact inline
-`.cat-cell-icon`/`category_icon()` convention as the transactions list. All of it reads through
-`services/aggregation.py`, extended with `yearly_totals_with_yoy`/`monthly_totals_with_mom`/
-`category_breakdown`/`net_worth_by_month` alongside the existing month/type grouping — one
-shared group-by layer, not one-off per-view logic. Known simplification: subcategory-level YoY
-isn't computed, only category-level (see the module docstring). See `docs/implementation-plan.md`
-for the full phased plan, finalized schemas, and per-phase status checkboxes/implementation notes.
+`.cat-cell-icon`/`category_icon()` convention as the transactions list, plus a category-by-month
+matrix table per type (`services.aggregation.category_monthly_totals`) — each category's own
+row across the year's months (abbreviated Jan/Feb/... headers), a month with no activity for that
+category showing an explicit "—" rather than a missing cell, in the same category order as the
+annual breakdown table above it. All of it reads through `services/aggregation.py`, extended with
+`yearly_totals_with_yoy`/`monthly_totals_with_mom`/`category_breakdown`/`category_monthly_totals`/
+`net_worth_by_month` alongside the existing month/type grouping — one shared group-by layer, not
+one-off per-view logic. Known simplification: subcategory-level YoY isn't computed, only
+category-level (see the module docstring). See `docs/implementation-plan.md` for the full phased
+plan, finalized schemas, and per-phase status checkboxes/implementation notes.
 
 **Work proceeds one phase at a time.** Each phase in `docs/implementation-plan.md` is a discrete,
 separately-reviewable unit — implement it, verify it, stop, and update docs (this file plus the

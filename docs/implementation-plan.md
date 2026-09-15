@@ -715,14 +715,22 @@ unit-testable without touching disk. `routers/` stays thin — HTTP/HTMX glue on
   configured icon (`app.routers.reports._category_icons`, looked up from
   `config/categories.toml` since the pure ledger aggregation has no knowledge of category
   config), reusing the transactions list's compact inline `.cat-cell-icon`/`category_icon()`
-  convention rather than the categories page's larger card-style glyph slot. *Verified*: 28 new
-  aggregation unit tests (YoY/MoM delta computation including the December→January boundary case,
-  category/subcategory grouping and sorting, transfer-leg cancellation in the net worth series)
-  and 10 new router integration tests including the combined chart's axis/bar geometry and the
-  category-icon lookup (`tests/unit/test_aggregation.py`, `tests/integration/
-  test_reports_router.py`); full suite 289 passing; a live manual check against a throwaway
-  isolated ledger (never the real project data) confirmed the combined chart's axis, bars, and
-  line, plus the annual/year drill-down tables and icons, all rendered correctly.
+  convention rather than the categories page's larger card-style glyph slot. A third round added
+  a month-to-month comparison *by category* (the PRD's category-level MoM, not just the
+  all-categories-combined monthly table already there): `services.aggregation
+  .category_monthly_totals` returns `{category: {month_key: total}}` for one year/type, and
+  `app.routers.reports._category_month_matrix` turns that into one row per category (same order
+  as the annual breakdown table above it) with one column per month (abbreviated Jan/Feb/... via
+  `calendar.month_abbr`) plus a Total column — a month with no activity for that category renders
+  as an explicit "—" rather than a missing cell, so every row stays the same width. *Verified*: 32
+  new aggregation unit tests (YoY/MoM delta computation including the December→January boundary
+  case, category/subcategory grouping and sorting, transfer-leg cancellation in the net worth
+  series, the category-month matrix's zero-fill behavior) and 11 new router integration tests
+  including the combined chart's axis/bar geometry, the category-icon lookup, and the month-matrix
+  table (`tests/unit/test_aggregation.py`, `tests/integration/test_reports_router.py`); full suite
+  294 passing; a live manual check against a throwaway isolated ledger (never the real project
+  data) confirmed the combined chart's axis/bars/line, the annual/year drill-down tables and
+  icons, and the new month-to-month matrix all rendered correctly.
 
 - [ ] **Phase 6 — Launcher & polish**: `scripts/launch.py` (starts uvicorn bound to
   `127.0.0.1`, waits for readiness, opens browser via `webbrowser`), error-handling pass across

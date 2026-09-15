@@ -16,6 +16,7 @@ this function and the template, not ``services.aggregation``'s data.
 """
 
 import math
+from calendar import month_abbr
 from decimal import Decimal
 
 from fastapi import APIRouter, Request
@@ -24,7 +25,9 @@ from fastapi.responses import HTMLResponse
 from app.models.category import CategoriesByType
 from app.models.transaction import TransactionType
 from app.services.aggregation import (
+    CategoryTotal,
     category_breakdown,
+    category_monthly_totals,
     monthly_totals_with_mom,
     net_worth_by_month,
     yearly_totals_with_yoy,
@@ -57,6 +60,32 @@ def _category_icons(categories: CategoriesByType, txn_type: TransactionType) -> 
         }
         for name, entry in tree.items()
     }
+
+
+def _category_month_matrix(
+    breakdown: list[CategoryTotal],
+    monthly_totals: dict[str, dict[str, Decimal]],
+    month_keys: list[str],
+) -> list[dict]:
+    """Build category-by-month rows for the month-to-month comparison table.
+
+    Reuses ``breakdown``'s existing order (already sorted by annual
+    total descending) rather than re-sorting, so this table and the
+    annual breakdown table list categories the same way. A category
+    with no activity in a given month gets an explicit zero rather than
+    a missing column, so every row has the same number of cells.
+    """
+    rows = []
+    for category in breakdown:
+        month_amounts = monthly_totals.get(category.name, {})
+        rows.append(
+            {
+                "name": category.name,
+                "monthly": [month_amounts.get(key, Decimal("0")) for key in month_keys],
+                "total": category.total,
+            }
+        )
+    return rows
 
 
 def _tick_bounds(values: list[float], step: float) -> tuple[float, float]:
@@ -215,15 +244,31 @@ def year_detail(request: Request, year: int) -> HTMLResponse:
         for month in monthly_totals_with_mom(transactions)
         if month.key.startswith(f"{year:04d}-")
     ]
+    # Oldest first (``months`` itself is newest first) so the
+    # month-to-month table reads left-to-right chronologically.
+    month_keys = [month.key for month in reversed(months)]
+    month_labels = [month_abbr[int(key.split("-")[1])] for key in month_keys]
+
+    income_monthly = category_monthly_totals(transactions, year, TransactionType.INCOME)
+    expense_monthly = category_monthly_totals(
+        transactions, year, TransactionType.EXPENSE
+    )
     return templates.TemplateResponse(
         request,
         "reports/year.html",
         {
             "year": year,
             "months": months,
+            "month_labels": month_labels,
             "income_breakdown": income_breakdown,
             "expense_breakdown": expense_breakdown,
             "income_icons": _category_icons(categories, TransactionType.INCOME),
             "expense_icons": _category_icons(categories, TransactionType.EXPENSE),
+            "income_month_rows": _category_month_matrix(
+                income_breakdown, income_monthly, month_keys
+            ),
+            "expense_month_rows": _category_month_matrix(
+                expense_breakdown, expense_monthly, month_keys
+            ),
         },
     )

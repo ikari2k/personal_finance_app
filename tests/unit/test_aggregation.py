@@ -9,6 +9,7 @@ from app.models.account import Account
 from app.models.transaction import Transaction, TransactionType
 from app.services.aggregation import (
     category_breakdown,
+    category_monthly_totals,
     group_by_month_and_type,
     grouped_transaction_view,
     merge_months,
@@ -531,6 +532,67 @@ def test_category_breakdown_yoy_delta_is_none_for_a_new_category():
     [groceries] = category_breakdown(txns, 2026, TransactionType.EXPENSE)
 
     assert groceries.yoy_delta is None
+
+
+def test_category_monthly_totals_raises_for_transfer_type():
+    with pytest.raises(ValueError):
+        category_monthly_totals([], 2026, TransactionType.TRANSFER)
+
+
+def test_category_monthly_totals_groups_by_category_and_month():
+    txns = [
+        _txn(
+            id="t1",
+            date=date(2026, 1, 5),
+            category="Groceries",
+            amount=Decimal("-50"),
+        ),
+        _txn(
+            id="t2",
+            date=date(2026, 1, 20),
+            category="Groceries",
+            amount=Decimal("-20"),
+        ),
+        _txn(
+            id="t3",
+            date=date(2026, 2, 5),
+            category="Groceries",
+            amount=Decimal("-30"),
+        ),
+    ]
+
+    totals = category_monthly_totals(txns, 2026, TransactionType.EXPENSE)
+
+    assert totals == {"Groceries": {"2026-01": Decimal("70"), "2026-02": Decimal("30")}}
+
+
+def test_category_monthly_totals_omits_a_month_with_no_activity():
+    txns = [_txn(date=date(2026, 1, 5), category="Groceries", amount=Decimal("-50"))]
+
+    totals = category_monthly_totals(txns, 2026, TransactionType.EXPENSE)
+
+    assert "2026-02" not in totals["Groceries"]
+
+
+def test_category_monthly_totals_ignores_other_years_and_types():
+    txns = [
+        _txn(
+            id="t1",
+            date=date(2025, 1, 5),
+            category="Groceries",
+            amount=Decimal("-50"),
+        ),
+        _txn(
+            id="t2",
+            type=TransactionType.INCOME,
+            category="Salary",
+            amount=Decimal("100"),
+        ),
+    ]
+
+    totals = category_monthly_totals(txns, 2026, TransactionType.EXPENSE)
+
+    assert totals == {}
 
 
 def test_net_worth_by_month_starts_from_combined_starting_balances():

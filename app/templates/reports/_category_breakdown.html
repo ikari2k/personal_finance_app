@@ -44,3 +44,38 @@
     <p>No data.</p>
   {% endif %}
 {% endmacro %}
+
+{% macro month_matrix_table(rows, month_labels, icons, txn_type) %}
+  {% if rows %}
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Category</th>
+            {% for label in month_labels %}<th>{{ label }}</th>{% endfor %}
+            <th>Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            {% set cat_icon = icons.get(row.name, {}).get('icon', '') %}
+            <tr>
+              <td>
+                {% if cat_icon %}
+                  <span class="cat-cell-icon cat-cell-icon-{{ txn_type }}">{{ category_icon(cat_icon) }}</span>
+                {% endif %}
+                {{ row.name }}
+              </td>
+              {% for amount in row.monthly %}
+                <td>{{ "%.2f"|format(amount) if amount else "—" }}</td>
+              {% endfor %}
+              <td>{{ "%.2f"|format(row.total) }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p>No data.</p>
+  {% endif %}
+{% endmacro %}

@@ -364,6 +364,35 @@ def category_breakdown(
     return sorted(result, key=lambda c: c.total, reverse=True)
 
 
+def category_monthly_totals(
+    transactions: Iterable[Transaction], year: int, txn_type: TransactionType
+) -> dict[str, dict[str, Decimal]]:
+    """Return ``{category: {month_key: total}}`` (magnitudes) for one year and type.
+
+    Complements ``category_breakdown``'s single annual total and
+    ``monthly_totals_with_mom``'s all-categories-combined monthly total
+    with a category-by-month matrix, so a report can show each
+    category's month-to-month trend side by side rather than just one
+    number per category. A month with no activity for a given category
+    is simply absent from that category's dict — the caller decides how
+    to fill the gap (``category_breakdown``'s category order plus the
+    year's own month keys, typically zero). Raises on ``TRANSFER``, same
+    as ``category_breakdown``.
+    """
+    if txn_type is TransactionType.TRANSFER:
+        raise ValueError("transfers have no category breakdown")
+
+    totals: dict[str, dict[str, Decimal]] = defaultdict(
+        lambda: defaultdict(lambda: Decimal("0"))
+    )
+    for transaction in transactions:
+        if transaction.type is not txn_type or transaction.date.year != year:
+            continue
+        month_key = f"{transaction.date.year:04d}-{transaction.date.month:02d}"
+        totals[transaction.category][month_key] += abs(transaction.amount)
+    return {category: dict(months) for category, months in totals.items()}
+
+
 @dataclass
 class NetWorthPoint:
     """Combined net worth across every account, at one month's end."""

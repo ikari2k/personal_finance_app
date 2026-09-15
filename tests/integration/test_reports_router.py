@@ -175,6 +175,31 @@ def test_year_detail_omits_icon_span_for_a_category_with_no_icon(client):
     assert "cat-cell-icon" not in response.text
 
 
+def test_year_detail_shows_month_to_month_category_matrix(client):
+    _create_account(client)
+    _create_transaction(
+        client, date="2026-01-15", type="expense", category="Groceries", amount="50"
+    )
+    _create_transaction(
+        client, date="2026-02-15", type="expense", category="Groceries", amount="80"
+    )
+    _create_transaction(
+        client, date="2026-01-15", type="income", category="Salary", amount="1000"
+    )
+
+    response = client.get("/reports/2026")
+
+    assert response.status_code == 200
+    assert "Expense by category — month to month" in response.text
+    assert "Income by category — month to month" in response.text
+    # Jan/Feb column headers (abbreviated) plus each month's own amount,
+    # including the zero-filled month with no Groceries activity.
+    assert ">Jan<" in response.text
+    assert ">Feb<" in response.text
+    assert ">50.00<" in response.text
+    assert ">80.00<" in response.text
+
+
 def test_year_detail_only_includes_that_years_months(client):
     _create_account(client)
     _create_transaction(
