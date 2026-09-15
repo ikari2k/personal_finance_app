@@ -1,26 +1,40 @@
 """Apply auto-categorization rules to a transaction description.
 
 Pure functions over in-memory data — no file I/O, matching every other
-``services`` module. Used by ``services.importer`` at import time; the
-same rules will later back Phase 4's bulk reclassification of existing
-ledger rows.
+``services`` module. ``categorize`` is used by ``services.importer`` at
+import time; ``plan_reclassification``/``apply_reclassification`` back
+Phase 4's bulk reclassification of existing ledger rows. Both consumers
+share the same ``config/rules.toml`` rule set — see CLAUDE.md's decision
+that a saved rule always applies both to future imports and to a manual
+reclassification run, with no per-rule opt-out.
 """
 
 import re
+from dataclasses import dataclass
+from datetime import date as date_
 
 from app.models.rule import Rule
+from app.models.transaction import Transaction, TransactionType
+
+
+def compile_pattern(pattern: str) -> re.Pattern[str]:
+    """Compile ``pattern``, failing loudly on an invalid regex.
+
+    CLAUDE.md's "regex rules must fail loudly" invariant: an unusable
+    pattern raises here rather than silently matching nothing. Public
+    (unlike the rest of this module's helpers) so the rule-management
+    router can run the same check at save time, before a bad pattern
+    ever reaches ``config/rules.toml``.
+    """
+    try:
+        return re.compile(pattern, re.IGNORECASE)
+    except re.error as exc:
+        raise ValueError(f"invalid rule pattern '{pattern}': {exc}") from exc
 
 
 def _compile(rule: Rule) -> re.Pattern[str]:
-    """Compile ``rule``'s pattern, failing loudly on an invalid regex.
-
-    CLAUDE.md's "regex rules must fail loudly" invariant: an unusable
-    pattern raises here rather than silently matching nothing.
-    """
-    try:
-        return re.compile(rule.pattern, re.IGNORECASE)
-    except re.error as exc:
-        raise ValueError(f"invalid rule pattern '{rule.pattern}': {exc}") from exc
+    """Compile ``rule``'s pattern — see ``compile_pattern``."""
+    return compile_pattern(rule.pattern)
 
 
 def categorize(description: str, rules: list[Rule]) -> tuple[str, str]:
@@ -42,3 +56,89 @@ def categorize(description: str, rules: list[Rule]) -> tuple[str, str]:
         if _compile(rule).search(description):
             return rule.category, rule.subcategory
     return "", ""
+
+
+@dataclass
+class ReclassificationChange:
+    """One existing ledger row a rule run would recategorize, old vs. new.
+
+    Carries every field the preview table needs to display plus what
+    ``apply_reclassification`` needs to write — the two always reuse the
+    exact same list of these (see ``apply_reclassification``'s
+    docstring) so preview output can never disagree with what apply
+    actually does.
+    """
+
+    transaction_id: str
+    date: date_
+    account_id: str
+    description: str
+    old_category: str
+    old_subcategory: str
+    new_category: str
+    new_subcategory: str
+
+
+def plan_reclassification(
+    transactions: list[Transaction], rules: list[Rule]
+) -> list[ReclassificationChange]:
+    """Return the rows a run of ``rules`` would recategorize, unapplied.
+
+    Skips transfers — they carry a fixed ``"Transfer"`` category outside
+    the managed category tree (see CLAUDE.md), never a rule target. Skips
+    any row no rule matches (``categorize`` returns ``("", "")``): unlike
+    import-time categorization's ``DEFAULT_CATEGORY`` fallback, a
+    non-match here must never blank out a row's existing category. A row
+    already carrying the category/subcategory a rule would assign isn't
+    a change either.
+    """
+    changes = []
+    for txn in transactions:
+        if txn.type is TransactionType.TRANSFER:
+            continue
+        category, subcategory = categorize(txn.description, rules)
+        if not category:
+            continue
+        if category == txn.category and subcategory == txn.subcategory:
+            continue
+        changes.append(
+            ReclassificationChange(
+                transaction_id=txn.id,
+                date=txn.date,
+                account_id=txn.account_id,
+                description=txn.description,
+                old_category=txn.category,
+                old_subcategory=txn.subcategory,
+                new_category=category,
+                new_subcategory=subcategory,
+            )
+        )
+    return changes
+
+
+def apply_reclassification(
+    transactions: list[Transaction], changes: list[ReclassificationChange]
+) -> list[Transaction]:
+    """Return ``transactions`` with every ``changes`` row's category updated.
+
+    Pure — the caller writes the result back via storage. Takes the
+    exact ``changes`` list ``plan_reclassification`` produced rather than
+    recomputing it, so a preview a user already confirmed can't end up
+    disagreeing with what apply actually writes. A ``transaction_id``
+    with no matching row (deleted since the preview was shown) is
+    silently skipped rather than erroring.
+    """
+    new_values = {
+        change.transaction_id: (change.new_category, change.new_subcategory)
+        for change in changes
+    }
+    result = []
+    for txn in transactions:
+        if txn.id not in new_values:
+            result.append(txn)
+            continue
+        category, subcategory = new_values[txn.id]
+        result.append(
+            txn.model_copy(update={"category": category, "subcategory": subcategory})
+        )
+    return result

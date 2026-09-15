@@ -1,0 +1,30 @@
+<form hx-post="{{ action_url }}" hx-target="#rule-dialog-content" hx-swap="innerHTML">
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <label>Pattern (regular expression, matched against the description)
+    <input type="text" name="pattern" value="{{ values.pattern }}" required>
+  </label>
+  <div class="form-grid-2">
+    <label>Category (type to create a new one)
+      <input type="text" name="category" list="rule-category-options"
+             value="{{ values.category }}" required>
+      <datalist id="rule-category-options">
+        {% for category in category_names %}<option value="{{ category }}">{% endfor %}
+      </datalist>
+    </label>
+    <label>Subcategory (type to create a new one)
+      <input type="text" name="subcategory" list="rule-subcategory-options"
+             value="{{ values.subcategory }}">
+      <datalist id="rule-subcategory-options">
+        {% for subcategory in subcategory_names %}<option value="{{ subcategory }}">{% endfor %}
+      </datalist>
+    </label>
+  </div>
+  <label>Priority (higher runs first, breaks ties between matching rules)
+    <input type="number" name="priority" value="{{ values.priority }}" step="1">
+  </label>
+  <footer class="dialog-footer">
+    <button type="button" class="btn-outline"
+            onclick="document.getElementById('rule-dialog').close()">Cancel</button>
+    <button type="submit">{{ 'Save changes' if editing else 'Add rule' }}</button>
+  </footer>
+</form>

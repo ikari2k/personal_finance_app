@@ -35,9 +35,18 @@ import; columns blank in every row are hidden from the picker and the current da
 column gets a live parse-check plus blank-count warning as you pick it; an optional
 `description_fallback` column covers rows where the primary description is blank; and
 `/import/mappings` now lists every saved mapping (edit/delete) alongside a full import history
-log (`data/import_history.toml`). Phase 4 (rule engine) has not started. See
-`docs/implementation-plan.md` for the full phased plan, finalized schemas, and per-phase status
-checkboxes/implementation notes.
+log (`data/import_history.toml`). Phase 4 (rule engine) is also complete: a `/rules` management
+page (add/edit/delete, sharing the standard dialog-form pattern, addressed by list position since
+a rule has no natural unique key) with save-time regex compile-checking (extended from Phase 3's
+apply-time-only check, so a bad pattern never reaches `config/rules.toml`), plus "Reclassify
+existing transactions" — a preview-then-apply bulk run of the current rules against the whole
+ledger, showing a full old→new category/subcategory diff per affected row before anything is
+written (`services.categorizer.plan_reclassification`/`apply_reclassification`). One shared rule
+set: every rule always applies both to future imports (already automatic since Phase 3) and to
+this manual reclassify run — no per-rule opt-out, a deliberate scope decision to avoid a schema
+change beyond the finalized `config/rules.toml` shape. Transfers and non-matching rows are never
+touched (a non-match must never blank out an existing category). See `docs/implementation-plan.md`
+for the full phased plan, finalized schemas, and per-phase status checkboxes/implementation notes.
 
 **Work proceeds one phase at a time.** Each phase in `docs/implementation-plan.md` is a discrete,
 separately-reviewable unit — implement it, verify it, stop, and update docs (this file plus the

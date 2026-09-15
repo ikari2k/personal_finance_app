@@ -4,9 +4,9 @@ This elaborates `finance-app-prd.md` into concrete technical decisions and a pha
 Phases are implemented one at a time, each its own reviewable unit of work with its own commit(s).
 `CLAUDE.md` is updated after each phase lands to reflect what became concrete during that phase.
 
-**Status**: Phases 0–3 complete, plus three out-of-sequence addenda inserted after 2.7 (transfer
+**Status**: Phases 0–4 complete, plus three out-of-sequence addenda inserted after 2.7 (transfer
 editing/dialog redesign, icon-set polish, and per-category/subcategory monthly budgets — see
-their entries below). Phase 4 (rule engine) not yet started.
+their entries below).
 
 **Environment note**: `uv` is installed under pyenv's Python 3.13.7, not globally on PATH — the
 `uv` shim only resolves once a directory is pinned to that pyenv version. This repo has a
@@ -658,10 +658,30 @@ unit-testable without touching disk. `routers/` stays thin — HTTP/HTMX glue on
     fixture's monkeypatched paths, so the new history tests had been writing fake entries into
     the real project's `data/import_history.toml` until caught and fixed.
 
-- [ ] **Phase 4 — Rule engine (bulk reclassification)**: rule CRUD UI, preview endpoint (full
-  before/after diff per row; regex compile-checked at save time, never silently zero-matching),
-  apply endpoint (locked write). *Verify*: invalid regex rejected at save; preview output matches
-  apply output exactly.
+- [x] **Phase 4 — Rule engine (bulk reclassification)**: `/rules` CRUD UI (add/edit/delete,
+  addressed by list position — a rule has no natural unique key and CLAUDE.md's finalized
+  `config/rules.toml` schema wasn't extended with one), save-time regex compile-checking
+  (`services.categorizer.compile_pattern`, reused by the existing apply-time check), and a
+  preview-then-apply bulk reclassification run: `plan_reclassification` computes the full
+  before/after diff (old vs. new category/subcategory) for every row a rule run would change,
+  skipping transfers (fixed `"Transfer"` category, never a rule target) and any row no rule
+  matches (a non-match must never blank out an existing category — unlike import-time
+  categorization's `DEFAULT_CATEGORY` fallback). The diff is threaded to the apply step as a
+  hidden JSON field (the same no-server-session pattern as the import wizard's `rows_payload`),
+  so `apply_reclassification` writes exactly what was previewed rather than recomputing against a
+  ledger that may have moved on since — a change whose row was deleted in between is silently
+  skipped rather than erroring. A newly-introduced category/subcategory is added to
+  `config/categories.toml` on the fly via `ensure_category`, same as import-time categorization.
+  One shared rule set, deliberately: every rule always applies both to future imports (already
+  automatic since Phase 3) and to a manual reclassify run — no per-rule auto-apply toggle, to
+  avoid a schema change beyond the finalized `config/rules.toml` shape. *Verified*: unit tests for
+  `plan_reclassification`/`apply_reclassification` (matching row, already-correct row, no-match
+  row, transfer, and an apply against a row deleted since preview) and `compile_pattern`
+  (`tests/unit/test_categorizer.py`); integration tests for rule CRUD (including invalid-regex and
+  blank-category rejection at save time) and the full preview→apply flow, including that transfers
+  are never touched (`tests/integration/test_rules_router.py`); a live manual run confirming a
+  "Gas station" rule correctly diffed 5 existing rows in preview, applied identically, and a
+  second preview then showed no changes.
 
 - [ ] **Phase 5 — Reporting & visualization**: `services/aggregation.py` shared group-by layer,
   annual summary + year→month drill-down, MoM/YoY comparisons, balance/net worth chart via the

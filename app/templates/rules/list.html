@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Rules — Finance Tracker{% endblock %}
+{% block content %}
+  <div class="page-header-row">
+    <h1>Auto-categorization rules</h1>
+    <div class="cta-row">
+      <button type="button" role="button"
+              hx-get="/rules/new" hx-target="#rule-dialog-content" hx-swap="innerHTML">+ Add rule</button>
+      <button type="button" class="btn-outline" role="button"
+              hx-get="/rules/reclassify/preview" hx-target="#reclassify-dialog-content" hx-swap="innerHTML">
+        Reclassify existing transactions
+      </button>
+    </div>
+  </div>
+  <p class="muted">
+    Every rule here also runs automatically the next time you import a bank CSV — there's no
+    separate step to turn that on. "Reclassify existing transactions" applies the current rules
+    to what's already in the ledger.
+  </p>
+  {% include "rules/_table.html" %}
+
+  <dialog id="rule-dialog" hx-on:close-dialog="this.close()"
+          hx-on:click="if (event.target === this) this.close()">
+    <article>
+      <header>
+        <button aria-label="Close" rel="prev"
+                onclick="document.getElementById('rule-dialog').close()"></button>
+        <strong>Rule</strong>
+      </header>
+      <div id="rule-dialog-content"
+           hx-on::after-swap="if (this.firstElementChild) { const d = this.closest('dialog'); if (!d.open) d.showModal(); }"></div>
+    </article>
+  </dialog>
+
+  <dialog id="reclassify-dialog" hx-on:close-dialog="this.close()"
+          hx-on:click="if (event.target === this) this.close()">
+    <article>
+      <header>
+        <button aria-label="Close" rel="prev"
+                onclick="document.getElementById('reclassify-dialog').close()"></button>
+        <strong>Reclassify existing transactions</strong>
+      </header>
+      <div id="reclassify-dialog-content"
+           hx-on::after-swap="if (this.firstElementChild) { const d = this.closest('dialog'); if (!d.open) d.showModal(); }"></div>
+    </article>
+  </dialog>
+{% endblock %}

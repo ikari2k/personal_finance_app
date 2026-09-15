@@ -1,0 +1,40 @@
+<h2>Reclassify existing transactions</h2>
+{% if changes %}
+  <p>
+    Running the current rules against the ledger would recategorize
+    {{ changes | length }} transaction{{ '' if changes | length == 1 else 's' }}.
+    Transfers and rows no rule matches are left untouched.
+  </p>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr><th>Date</th><th>Account</th><th>Description</th><th>Current</th><th>New</th></tr>
+      </thead>
+      <tbody>
+        {% for change in changes %}
+          <tr>
+            <td>{{ change.date }}</td>
+            <td>{{ accounts[change.account_id].name if change.account_id in accounts else change.account_id }}</td>
+            <td>{{ change.description }}</td>
+            <td>{{ change.old_category }}{% if change.old_subcategory %} / {{ change.old_subcategory }}{% endif %}</td>
+            <td>{{ change.new_category }}{% if change.new_subcategory %} / {{ change.new_subcategory }}{% endif %}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <form hx-post="/rules/reclassify/apply" hx-target="#reclassify-dialog-content" hx-swap="innerHTML">
+    <input type="hidden" name="changes_payload" value="{{ changes_payload }}">
+    <footer class="dialog-footer">
+      <button type="button" class="btn-outline"
+              onclick="document.getElementById('reclassify-dialog').close()">Cancel</button>
+      <button type="submit">Apply to {{ changes | length }} transaction{{ '' if changes | length == 1 else 's' }}</button>
+    </footer>
+  </form>
+{% else %}
+  <p>No changes — every transaction already matches the current rules.</p>
+  <footer class="dialog-footer">
+    <button type="button" class="btn-outline"
+            onclick="document.getElementById('reclassify-dialog').close()">Close</button>
+  </footer>
+{% endif %}

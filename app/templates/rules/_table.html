@@ -1,0 +1,41 @@
+{% from "_icons.html" import edit_icon, delete_icon %}
+<div id="rules-table-wrapper" {% if oob %}hx-swap-oob="true"{% endif %}>
+  {% if rules %}
+    <!-- Not wrapped in .table-scroll: the row-actions icons float outside
+         the table via a negative offset, which an overflow-x: auto
+         ancestor would clip — see the same note on
+         import/_mappings_content.html's mappings-table. -->
+    <table class="rules-table">
+      <thead>
+        <tr>
+          <th>Pattern</th><th>Category</th><th>Subcategory</th><th>Priority</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for index, rule in rules %}
+          <tr>
+            <td>
+              <span class="row-actions">
+                <button type="button" class="icon-edit" aria-label="Edit rule"
+                        hx-get="/rules/{{ index }}/edit"
+                        hx-target="#rule-dialog-content" hx-swap="innerHTML">{{ edit_icon() }}</button>
+                <button type="button" class="icon-delete" aria-label="Delete rule"
+                        hx-post="/rules/{{ index }}/delete"
+                        hx-target="#rules-table-wrapper" hx-swap="outerHTML"
+                        hx-confirm="Delete this rule? This cannot be undone.">
+                  {{ delete_icon() }}
+                </button>
+              </span>
+              <code>{{ rule.pattern }}</code>
+            </td>
+            <td>{{ rule.category }}</td>
+            <td>{{ rule.subcategory or '—' }}</td>
+            <td>{{ rule.priority }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p>No rules yet.</p>
+  {% endif %}
+</div>

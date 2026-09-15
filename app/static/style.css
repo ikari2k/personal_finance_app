@@ -101,7 +101,8 @@
  * buttons spill vertically into the row above/below when revealed. */
 #accounts-table-wrapper td,
 #transactions-table-wrapper td,
-#mappings-page-wrapper td {
+#mappings-page-wrapper td,
+#rules-table-wrapper td {
   padding-top: 0.6rem;
   padding-bottom: 0.6rem;
 }
