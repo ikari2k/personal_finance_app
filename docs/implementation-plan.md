@@ -325,6 +325,16 @@ unit-testable without touching disk. `routers/` stays thin — HTTP/HTMX glue on
     through the UI, confirming the schema upgrade and icon assignment both round-tripped
     correctly).
 
+- [x] **Post-Phase-2.5 addendum — expand/collapse-all, sticky header**: the `/categories` page
+  gained the same single-button expand/collapse-all toggle already used on the transactions list
+  (`.cat-row` in place of `.month-section` — its onclick checks whether any target `<details>` is
+  currently closed to decide which way to toggle, rather than two separate buttons), placed in a
+  new sticky `.page-header-row` alongside the `<h1>` — reusing that exact convention from the
+  transactions page rather than inventing a new header treatment, so it stays visible while
+  scrolling a long category list. *Verified*: an integration test confirming the button and sticky
+  header render; full suite 352 passing; a live check confirmed the toggle actually opens/closes
+  every category's `<details>` together.
+
 - [x] **Phase 2.6 — Edit/delete transactions**: transactions were create-only since Phase 2; this
   closes that gap. Same decimal-insertion reasoning as 2.5 — slots after it without renumbering
   Phase 3+.

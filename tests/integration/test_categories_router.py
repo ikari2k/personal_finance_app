@@ -29,6 +29,15 @@ def test_list_categories_empty(client):
     assert "No categories yet" in response.text
 
 
+def test_list_categories_shows_expand_collapse_all_in_a_sticky_header(client):
+    response = client.get("/categories")
+
+    assert response.status_code == 200
+    assert "Expand/collapse all" in response.text
+    assert "page-header-row" in response.text
+    assert ".cat-row" in response.text
+
+
 def test_list_categories_shows_no_uncategorized_message_when_none_exist(client):
     response = client.get("/categories")
 

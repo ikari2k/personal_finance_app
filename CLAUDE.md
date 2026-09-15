@@ -318,9 +318,13 @@ module itself.
     create/transfer POST — that state isn't available there without extra plumbing (hidden form
     fields or parsing the `Referer` header), which wasn't judged worth it for a one-click-to-
     restore inconvenience.
-  - Expand-all/collapse-all stays a pure client-side `onclick` (no round-trip — it doesn't change
-    what data is shown, just whether an already-rendered `<details>` is open) and is only shown
-    in the toolbar when `by_month` is on, since there's nothing to expand/collapse otherwise.
+  - Expand/collapse-all is a single button, pure client-side `onclick` (no round-trip — it
+    doesn't change what data is shown, just whether an already-rendered `<details>` is open); its
+    handler checks whether *any* target `<details>` is currently closed to decide which way to
+    toggle, rather than two separate expand/collapse buttons. On the transactions list it's only
+    shown when `by_month` is on, since there's nothing to expand/collapse otherwise; the
+    `/categories` page reuses the exact same pattern (`.cat-row` in place of `.month-section`) in
+    its own sticky `.page-header-row`, always shown since categories are always collapsible there.
 - **Account/category/subcategory filters** (`account_id`/`category`/`subcategory` query params,
   alongside `by_month`/`by_type`) filter the ledger *before* aggregating — so subtotals/net-totals
   reflect only the filtered rows, not the whole ledger with irrelevant rows hidden. Empty string

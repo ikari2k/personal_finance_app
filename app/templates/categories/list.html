@@ -1,7 +1,15 @@
 {% extends "base.html" %}
 {% block title %}Categories — Finance Tracker{% endblock %}
 {% block content %}
-  <h1>Categories</h1>
+  <div class="page-header-row">
+    <h1>Categories</h1>
+    <div class="cta-row">
+      <button type="button" class="secondary"
+              onclick="var anyClosed = document.querySelector('.cat-row:not([open])'); document.querySelectorAll('.cat-row').forEach(function (d) { d.open = !!anyClosed; });">
+        Expand/collapse all
+      </button>
+    </div>
+  </div>
   {% include "categories/_tree.html" %}
 
   <h2>Top uncategorized descriptions</h2>
