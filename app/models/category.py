@@ -113,6 +113,7 @@ VALID_ICONS: frozenset[str] = frozenset(
         "dice",
         "fuel",
         "parking",
+        "dog",
     }
 )
 
@@ -166,4 +167,5 @@ ICON_HINTS: dict[str, str] = {
     "dice": "Games, gambling",
     "fuel": "Fuel, gas",
     "parking": "Parking",
+    "dog": "Pets, veterinary",
 }
