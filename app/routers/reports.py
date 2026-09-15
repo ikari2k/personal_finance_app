@@ -30,6 +30,7 @@ from app.services.aggregation import (
     category_monthly_totals,
     monthly_totals_with_mom,
     net_worth_by_month,
+    subcategory_monthly_totals,
     yearly_totals_with_yoy,
 )
 from app.storage.accounts import read_accounts
@@ -40,21 +41,31 @@ from app.templating import templates
 router = APIRouter(prefix="/reports", tags=["reports"])
 
 
-def _category_icons(categories: CategoriesByType, txn_type: TransactionType) -> dict:
-    """Return ``{category_name: {"icon": ..., "subcategories": {sub_name: icon}}}``.
+def _category_config(categories: CategoriesByType, txn_type: TransactionType) -> dict:
+    """Return per-category ``{"icon", "budget", "subcategories": {sub_name: {...}}}``.
 
-    ``category_breakdown`` is a pure ledger aggregation with no
-    knowledge of ``config/categories.toml`` (icons are config, not
-    ledger data), so the breakdown table's icons are looked up here and
-    passed to the template separately, rather than teaching
-    ``services.aggregation`` about category config.
+    ``category_breakdown``/``category_monthly_totals`` are pure ledger
+    aggregations with no knowledge of ``config/categories.toml`` (icons
+    and budgets are config, not ledger data), so this lookup happens
+    here and gets passed to the template separately, rather than
+    teaching ``services.aggregation`` about category config. ``budget``
+    is ``None`` when unset (income categories always have ``None`` —
+    they can never carry one, see ``services.categories``).
     """
     tree = categories.get(txn_type.value, {})
+
+    def _budget(raw: str) -> Decimal | None:
+        return Decimal(raw) if raw else None
+
     return {
         name: {
             "icon": entry["icon"],
+            "budget": _budget(entry["budget"]),
             "subcategories": {
-                sub_name: sub_entry["icon"]
+                sub_name: {
+                    "icon": sub_entry["icon"],
+                    "budget": _budget(sub_entry["budget"]),
+                }
                 for sub_name, sub_entry in entry["subcategories"].items()
             },
         }
@@ -62,29 +73,101 @@ def _category_icons(categories: CategoriesByType, txn_type: TransactionType) -> 
     }
 
 
+_RING_RADIUS = 7
+_RING_CIRCUMFERENCE = 2 * math.pi * _RING_RADIUS
+
+
+def _ring_geometry(amount: Decimal, budget: Decimal | None) -> dict | None:
+    """Return SVG ring geometry for one budget-utilization cell, or ``None``.
+
+    A ring is only ever drawn for a category/subcategory that actually
+    has a budget set — an unset budget has nothing to compare spend
+    against, so the template skips the ring entirely for that cell
+    rather than showing a meaningless 0%. The fill is capped at 100% of
+    the ring's circumference (matching the reference design: a category
+    at 211% of budget still draws one full, closed ring, not a
+    double-wound one) — the exact percentage is still shown as text
+    alongside it, so going over budget stays visible even though the
+    ring itself maxes out.
+    """
+    if not budget:
+        return None
+    pct = float(amount / budget * 100)
+    fraction = min(pct, 100) / 100
+    dash = _RING_CIRCUMFERENCE * fraction
+    return {
+        "dash": dash,
+        "gap": _RING_CIRCUMFERENCE - dash,
+        "over": pct >= 100,
+        "pct_label": f"{pct:.0f}%",
+    }
+
+
+def _month_cells(
+    month_amounts: dict[str, Decimal], budget: Decimal | None, month_keys: list[str]
+) -> list[dict]:
+    """Build one row's per-month cells: an amount plus ring geometry, if budgeted."""
+    cells = []
+    for key in month_keys:
+        amount = month_amounts.get(key, Decimal("0"))
+        cells.append({"amount": amount, "ring": _ring_geometry(amount, budget)})
+    return cells
+
+
 def _category_month_matrix(
     breakdown: list[CategoryTotal],
     monthly_totals: dict[str, dict[str, Decimal]],
+    subcategory_monthly: dict[str, dict[str, dict[str, Decimal]]],
+    config: dict,
     month_keys: list[str],
 ) -> list[dict]:
-    """Build category-by-month rows for the month-to-month comparison table.
+    """Build category (+ subcategory) rows for the month-to-month comparison table.
 
     Reuses ``breakdown``'s existing order (already sorted by annual
     total descending) rather than re-sorting, so this table and the
-    annual breakdown table list categories the same way. A category
-    with no activity in a given month gets an explicit zero rather than
-    a missing column, so every row has the same number of cells.
+    annual breakdown table list categories the same way; each
+    category's own subcategories follow it in ``subcategories`` order
+    (already sorted by total descending too). A month with no activity
+    gets an explicit zero rather than a missing column, so every row has
+    the same number of cells. Each cell also carries budget-utilization
+    ring geometry via ``_ring_geometry`` — that month's spend against
+    the category's (or subcategory's) own single configured budget,
+    since ``config/categories.toml`` has one budget per category, not a
+    separate one per month.
     """
     rows = []
     for category in breakdown:
-        month_amounts = monthly_totals.get(category.name, {})
+        cat_config = config.get(category.name, {})
         rows.append(
             {
                 "name": category.name,
-                "monthly": [month_amounts.get(key, Decimal("0")) for key in month_keys],
+                "icon": cat_config.get("icon", ""),
+                "indent": False,
+                "monthly": _month_cells(
+                    monthly_totals.get(category.name, {}),
+                    cat_config.get("budget"),
+                    month_keys,
+                ),
                 "total": category.total,
             }
         )
+        sub_monthly = subcategory_monthly.get(category.name, {})
+        sub_configs = cat_config.get("subcategories", {})
+        for sub in category.subcategories:
+            sub_config = sub_configs.get(sub.name, {})
+            rows.append(
+                {
+                    "name": sub.name,
+                    "icon": sub_config.get("icon", ""),
+                    "indent": True,
+                    "monthly": _month_cells(
+                        sub_monthly.get(sub.name, {}),
+                        sub_config.get("budget"),
+                        month_keys,
+                    ),
+                    "total": sub.total,
+                }
+            )
     return rows
 
 
@@ -253,6 +336,14 @@ def year_detail(request: Request, year: int) -> HTMLResponse:
     expense_monthly = category_monthly_totals(
         transactions, year, TransactionType.EXPENSE
     )
+    income_sub_monthly = subcategory_monthly_totals(
+        transactions, year, TransactionType.INCOME
+    )
+    expense_sub_monthly = subcategory_monthly_totals(
+        transactions, year, TransactionType.EXPENSE
+    )
+    income_config = _category_config(categories, TransactionType.INCOME)
+    expense_config = _category_config(categories, TransactionType.EXPENSE)
     return templates.TemplateResponse(
         request,
         "reports/year.html",
@@ -262,13 +353,21 @@ def year_detail(request: Request, year: int) -> HTMLResponse:
             "month_labels": month_labels,
             "income_breakdown": income_breakdown,
             "expense_breakdown": expense_breakdown,
-            "income_icons": _category_icons(categories, TransactionType.INCOME),
-            "expense_icons": _category_icons(categories, TransactionType.EXPENSE),
+            "income_config": income_config,
+            "expense_config": expense_config,
             "income_month_rows": _category_month_matrix(
-                income_breakdown, income_monthly, month_keys
+                income_breakdown,
+                income_monthly,
+                income_sub_monthly,
+                income_config,
+                month_keys,
             ),
             "expense_month_rows": _category_month_matrix(
-                expense_breakdown, expense_monthly, month_keys
+                expense_breakdown,
+                expense_monthly,
+                expense_sub_monthly,
+                expense_config,
+                month_keys,
             ),
         },
     )

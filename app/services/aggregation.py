@@ -393,6 +393,39 @@ def category_monthly_totals(
     return {category: dict(months) for category, months in totals.items()}
 
 
+def subcategory_monthly_totals(
+    transactions: Iterable[Transaction], year: int, txn_type: TransactionType
+) -> dict[str, dict[str, dict[str, Decimal]]]:
+    """Return ``{category: {subcategory: {month_key: total}}}`` for one year/type.
+
+    The subcategory-level counterpart to ``category_monthly_totals`` —
+    needed for a per-subcategory budget-utilization row, since a
+    subcategory can carry its own independent budget (see
+    ``app.models.category``). A blank ``subcategory`` ("") is included
+    under that key too, same as ``category_breakdown``'s treatment of
+    subcategory-less rows — callers wanting only *named* subcategories
+    skip that key themselves. Raises on ``TRANSFER``, same as
+    ``category_breakdown``.
+    """
+    if txn_type is TransactionType.TRANSFER:
+        raise ValueError("transfers have no category breakdown")
+
+    totals: dict[str, dict[str, dict[str, Decimal]]] = defaultdict(
+        lambda: defaultdict(lambda: defaultdict(lambda: Decimal("0")))
+    )
+    for transaction in transactions:
+        if transaction.type is not txn_type or transaction.date.year != year:
+            continue
+        month_key = f"{transaction.date.year:04d}-{transaction.date.month:02d}"
+        totals[transaction.category][transaction.subcategory][month_key] += abs(
+            transaction.amount
+        )
+    return {
+        category: {sub: dict(months) for sub, months in subs.items()}
+        for category, subs in totals.items()
+    }
+
+
 @dataclass
 class NetWorthPoint:
     """Combined net worth across every account, at one month's end."""

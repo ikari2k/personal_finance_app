@@ -15,6 +15,7 @@ from app.services.aggregation import (
     merge_months,
     monthly_totals_with_mom,
     net_worth_by_month,
+    subcategory_monthly_totals,
     yearly_totals_with_yoy,
 )
 
@@ -593,6 +594,54 @@ def test_category_monthly_totals_ignores_other_years_and_types():
     totals = category_monthly_totals(txns, 2026, TransactionType.EXPENSE)
 
     assert totals == {}
+
+
+def test_subcategory_monthly_totals_raises_for_transfer_type():
+    with pytest.raises(ValueError):
+        subcategory_monthly_totals([], 2026, TransactionType.TRANSFER)
+
+
+def test_subcategory_monthly_totals_groups_by_category_subcategory_and_month():
+    txns = [
+        _txn(
+            id="t1",
+            date=date(2026, 1, 5),
+            category="Groceries",
+            subcategory="Supermarket",
+            amount=Decimal("-50"),
+        ),
+        _txn(
+            id="t2",
+            date=date(2026, 2, 5),
+            category="Groceries",
+            subcategory="Supermarket",
+            amount=Decimal("-30"),
+        ),
+        _txn(
+            id="t3",
+            date=date(2026, 1, 10),
+            category="Groceries",
+            subcategory="Farmers Market",
+            amount=Decimal("-15"),
+        ),
+    ]
+
+    totals = subcategory_monthly_totals(txns, 2026, TransactionType.EXPENSE)
+
+    assert totals == {
+        "Groceries": {
+            "Supermarket": {"2026-01": Decimal("50"), "2026-02": Decimal("30")},
+            "Farmers Market": {"2026-01": Decimal("15")},
+        }
+    }
+
+
+def test_subcategory_monthly_totals_includes_blank_subcategory_key():
+    txns = [_txn(date=date(2026, 1, 5), category="Health", amount=Decimal("-30"))]
+
+    totals = subcategory_monthly_totals(txns, 2026, TransactionType.EXPENSE)
+
+    assert totals == {"Health": {"": {"2026-01": Decimal("30")}}}
 
 
 def test_net_worth_by_month_starts_from_combined_starting_balances():

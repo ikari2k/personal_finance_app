@@ -951,3 +951,78 @@ fieldset legend {
   padding-left: 1.5rem;
   color: var(--pico-muted-color);
 }
+
+/* Budget-utilization ring: a small SVG donut next to each month's spend
+ * amount in the expense month-to-month table, filled to (up to) 100% of
+ * the category/subcategory's own configured budget for that month. No
+ * ring at all means "no budget set" (see reports.py's _ring_geometry) —
+ * distinct from a ring at 0%, which means "budgeted but nothing spent
+ * yet this month". */
+.budget-cell {
+  white-space: nowrap;
+}
+
+/* Amount and its ring/percentage sit on one line, not stacked — a
+ * wider cell than a plain amount-only column, which is exactly what
+ * .table-scroll (already wrapping this table) and the sticky category
+ * column below are for. */
+.budget-cell-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.utilization {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.ring-track {
+  fill: none;
+  stroke: var(--pico-muted-border-color);
+  stroke-width: 3;
+}
+
+.ring-fill {
+  fill: none;
+  stroke: var(--pico-del-color);
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+.utilization-pct {
+  font-size: 0.75rem;
+  color: var(--pico-muted-color);
+}
+
+/* Over 100%: the ring itself is already capped at a full closed loop
+ * (see _ring_geometry's docstring), so the only visual left to signal
+ * "over budget" is the percentage text itself. */
+.utilization-over .utilization-pct {
+  color: var(--pico-del-color);
+  font-weight: 600;
+}
+
+.utilization-legend-ring {
+  display: inline-block;
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 50%;
+  border: 2px solid var(--pico-del-color);
+}
+
+/* The month-matrix table's Category column stays pinned while the rest
+ * scrolles horizontally underneath it — each amount+ring cell is wide
+ * enough that a year's worth of months can outgrow the viewport, and
+ * losing sight of which row you're looking at while scrolling right
+ * would defeat the table's whole point. A solid background matching
+ * the page's own (not transparent) is required, or scrolled-under
+ * cells show through the "pinned" column. */
+.month-matrix-table th:first-child,
+.month-matrix-table td:first-child {
+  position: sticky;
+  left: 0;
+  background: var(--pico-background-color);
+  z-index: 1;
+}

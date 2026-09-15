@@ -200,6 +200,70 @@ def test_year_detail_shows_month_to_month_category_matrix(client):
     assert ">80.00<" in response.text
 
 
+def test_year_detail_shows_utilization_ring_for_a_budgeted_category(client):
+    client.post("/categories/expense", data={"name": "Groceries", "budget": "100.00"})
+    _create_account(client)
+    _create_transaction(
+        client, date="2026-01-15", type="expense", category="Groceries", amount="50"
+    )
+
+    response = client.get("/reports/2026")
+
+    assert response.status_code == 200
+    assert "utilization-ring" in response.text
+    assert "50% of budget" in response.text
+
+
+def test_year_detail_over_budget_month_flags_utilization_over(client):
+    client.post("/categories/expense", data={"name": "Groceries", "budget": "50.00"})
+    _create_account(client)
+    _create_transaction(
+        client, date="2026-01-15", type="expense", category="Groceries", amount="150"
+    )
+
+    response = client.get("/reports/2026")
+
+    assert response.status_code == 200
+    assert "utilization-over" in response.text
+    assert "300% of budget" in response.text
+
+
+def test_year_detail_omits_ring_for_an_unbudgeted_category(client):
+    _create_account(client)
+    _create_transaction(
+        client, date="2026-01-15", type="expense", category="Groceries", amount="50"
+    )
+
+    response = client.get("/reports/2026")
+
+    assert response.status_code == 200
+    assert "utilization-ring" not in response.text
+
+
+def test_year_detail_shows_subcategory_row_and_its_own_utilization_ring(client):
+    client.post("/categories/expense", data={"name": "Groceries", "budget": "500.00"})
+    client.post(
+        "/categories/expense/Groceries/subcategories",
+        data={"name": "Supermarket", "budget": "80.00"},
+    )
+    _create_account(client)
+    _create_transaction(
+        client,
+        date="2026-01-15",
+        type="expense",
+        category="Groceries",
+        subcategory="Supermarket",
+        amount="40",
+    )
+
+    response = client.get("/reports/2026")
+
+    assert response.status_code == 200
+    assert "Supermarket" in response.text
+    assert "subcategory-row" in response.text
+    assert "50% of budget" in response.text
+
+
 def test_year_detail_only_includes_that_years_months(client):
     _create_account(client)
     _create_transaction(

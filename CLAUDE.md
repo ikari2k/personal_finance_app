@@ -58,11 +58,21 @@ across a year boundary, plus income/expense category-and-subcategory totals with
 delta per category — each category/subcategory row shows its configured icon (looked up from
 `config/categories.toml` in the router, since the pure ledger-only aggregation layer has no
 knowledge of category config; blank when unset), reusing the same compact inline
-`.cat-cell-icon`/`category_icon()` convention as the transactions list, plus a category-by-month
-matrix table per type (`services.aggregation.category_monthly_totals`) — each category's own
-row across the year's months (abbreviated Jan/Feb/... headers), a month with no activity for that
-category showing an explicit "—" rather than a missing cell, in the same category order as the
-annual breakdown table above it. All of it reads through `services/aggregation.py`, extended with
+`.cat-cell-icon`/`category_icon()` convention as the transactions list, plus a category-**and-
+subcategory**-by-month matrix table per type (`services.aggregation.category_monthly_totals`/
+`subcategory_monthly_totals`) — each row across the year's months (abbreviated Jan/Feb/...
+headers), a month with no activity showing an explicit "—", in the same order as the annual
+breakdown table above it. The expense month-matrix additionally shows a small SVG budget-
+utilization ring next to each budgeted category/subcategory's monthly amount — that month's
+spend as a fraction of its own single configured budget (`app.routers.reports._ring_geometry`;
+`config/categories.toml` has one budget per category, not a separate one per month), capped at a
+full closed ring past 100% with the exact (possibly >100%) percentage always shown as text
+alongside it, and a bolded/colored percentage once at or over budget. No ring at all means "no
+budget set" — distinct from a ring at 0%, "budgeted but nothing spent yet". Amount and ring sit
+on one line per cell (`.budget-cell-row`), which widens the table enough that its Category column
+is pinned via `position: sticky` (`.month-matrix-table th/td:first-child`) while the month columns
+scroll underneath — otherwise scrolling right to see later months loses track of which row is
+which. All of it reads through `services/aggregation.py`, extended with
 `yearly_totals_with_yoy`/`monthly_totals_with_mom`/`category_breakdown`/`category_monthly_totals`/
 `net_worth_by_month` alongside the existing month/type grouping — one shared group-by layer, not
 one-off per-view logic. Known simplification: subcategory-level YoY isn't computed, only

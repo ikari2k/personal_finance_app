@@ -722,15 +722,30 @@ unit-testable without touching disk. `routers/` stays thin — HTTP/HTMX glue on
   `app.routers.reports._category_month_matrix` turns that into one row per category (same order
   as the annual breakdown table above it) with one column per month (abbreviated Jan/Feb/... via
   `calendar.month_abbr`) plus a Total column — a month with no activity for that category renders
-  as an explicit "—" rather than a missing cell, so every row stays the same width. *Verified*: 32
-  new aggregation unit tests (YoY/MoM delta computation including the December→January boundary
-  case, category/subcategory grouping and sorting, transfer-leg cancellation in the net worth
-  series, the category-month matrix's zero-fill behavior) and 11 new router integration tests
-  including the combined chart's axis/bar geometry, the category-icon lookup, and the month-matrix
-  table (`tests/unit/test_aggregation.py`, `tests/integration/test_reports_router.py`); full suite
-  294 passing; a live manual check against a throwaway isolated ledger (never the real project
-  data) confirmed the combined chart's axis/bars/line, the annual/year drill-down tables and
-  icons, and the new month-to-month matrix all rendered correctly.
+  as an explicit "—" rather than a missing cell, so every row stays the same width. A fourth round
+  delivered the "future Monthly Budgets page" CLAUDE.md had flagged as not-yet-built, but folded
+  into the existing month-matrix table rather than a separate page: `services.aggregation
+  .subcategory_monthly_totals` (the subcategory-level counterpart to `category_monthly_totals`)
+  plus `app.routers.reports._ring_geometry`/`_category_config` compute, per category *and*
+  subcategory, a small SVG budget-utilization ring for each budgeted month — that month's spend
+  against the category/subcategory's own single configured budget (there's no per-month budget in
+  `config/categories.toml`), capped at a full closed ring past 100% of budget with the exact
+  percentage always shown as text since the ring alone can't distinguish 100% from 300%. No ring
+  at all (not a 0% ring) means no budget is set for that category/subcategory. Amount and ring sit
+  on one line per cell after a request to keep them adjacent rather than stacked, which widens the
+  table enough that its Category column needed pinning via `position: sticky`
+  (`.month-matrix-table th/td:first-child`) so scrolling right through a year's months doesn't
+  lose track of which row is which. *Verified*: 32 new aggregation unit tests (YoY/MoM delta
+  computation including the December→January boundary case, category/subcategory grouping and
+  sorting, transfer-leg cancellation in the net worth series, the category-month matrix's
+  zero-fill behavior, subcategory-monthly-totals grouping) and 15 new router integration tests
+  including the combined chart's axis/bar geometry, the category-icon lookup, the month-matrix
+  table, and budget-utilization rings for both categories and subcategories including the
+  over-budget case (`tests/unit/test_aggregation.py`, `tests/integration/test_reports_router.py`);
+  full suite 301 passing; a live manual check against a throwaway isolated ledger (never the real
+  project data) confirmed the combined chart, the annual/year drill-down tables and icons, the
+  month-to-month matrix, and the budget-utilization rings (including an over-100% case and the
+  sticky-column scroll behavior) all rendered correctly.
 
 - [ ] **Phase 6 — Launcher & polish**: `scripts/launch.py` (starts uvicorn bound to
   `127.0.0.1`, waits for readiness, opens browser via `webbrowser`), error-handling pass across

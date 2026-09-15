@@ -1,11 +1,11 @@
 {% from "_category_icons.html" import category_icon %}
-{% macro breakdown_table(breakdown, icons, txn_type) %}
+{% macro breakdown_table(breakdown, config, txn_type) %}
   {% if breakdown %}
     <table>
       <thead><tr><th>Category</th><th>Total</th><th>vs. prior year</th></tr></thead>
       <tbody>
         {% for cat in breakdown %}
-          {% set cat_icon = icons.get(cat.name, {}).get('icon', '') %}
+          {% set cat_icon = config.get(cat.name, {}).get('icon', '') %}
           <tr>
             <td>
               {% if cat_icon %}
@@ -25,7 +25,7 @@
             </td>
           </tr>
           {% for sub in cat.subcategories %}
-            {% set sub_icon = icons.get(cat.name, {}).get('subcategories', {}).get(sub.name, '') %}
+            {% set sub_icon = config.get(cat.name, {}).get('subcategories', {}).get(sub.name, {}).get('icon', '') %}
             <tr class="subcategory-row">
               <td class="indent">
                 {% if sub_icon %}
@@ -45,10 +45,10 @@
   {% endif %}
 {% endmacro %}
 
-{% macro month_matrix_table(rows, month_labels, icons, txn_type) %}
+{% macro month_matrix_table(rows, month_labels, txn_type) %}
   {% if rows %}
     <div class="table-scroll">
-      <table>
+      <table class="month-matrix-table">
         <thead>
           <tr>
             <th>Category</th>
@@ -58,16 +58,32 @@
         </thead>
         <tbody>
           {% for row in rows %}
-            {% set cat_icon = icons.get(row.name, {}).get('icon', '') %}
-            <tr>
-              <td>
-                {% if cat_icon %}
-                  <span class="cat-cell-icon cat-cell-icon-{{ txn_type }}">{{ category_icon(cat_icon) }}</span>
+            <tr class="{{ 'subcategory-row' if row.indent }}">
+              <td class="{{ 'indent' if row.indent }}">
+                {% if row.icon %}
+                  <span class="cat-cell-icon cat-cell-icon-{{ txn_type }}">{{ category_icon(row.icon) }}</span>
                 {% endif %}
                 {{ row.name }}
               </td>
-              {% for amount in row.monthly %}
-                <td>{{ "%.2f"|format(amount) if amount else "—" }}</td>
+              {% for cell in row.monthly %}
+                <td class="budget-cell">
+                  <span class="budget-cell-row">
+                    <span class="budget-amount">{{ "%.2f"|format(cell.amount) if cell.amount else "—" }}</span>
+                    {% if cell.ring %}
+                      <span class="utilization{{ ' utilization-over' if cell.ring.over }}">
+                        <svg width="16" height="16" viewBox="0 0 20 20" class="utilization-ring">
+                          <circle cx="10" cy="10" r="7" class="ring-track"/>
+                          <circle cx="10" cy="10" r="7" class="ring-fill"
+                                  stroke-dasharray="{{ cell.ring.dash }} {{ cell.ring.gap }}"
+                                  transform="rotate(-90 10 10)">
+                            <title>{{ row.name }}: {{ cell.ring.pct_label }} of budget</title>
+                          </circle>
+                        </svg>
+                        <span class="utilization-pct">{{ cell.ring.pct_label }}</span>
+                      </span>
+                    {% endif %}
+                  </span>
+                </td>
               {% endfor %}
               <td>{{ "%.2f"|format(row.total) }}</td>
             </tr>
