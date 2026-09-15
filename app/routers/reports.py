@@ -180,13 +180,42 @@ def _category_month_matrix(
     return rows
 
 
+def _nice_step(span: float, target_ticks: int = 5) -> float:
+    """Return a "nice" (1/2/5 × a power of ten) tick step for an axis spanning ``span``.
+
+    A flat step (e.g. always every 5,000) either crowds the axis with
+    dozens of labels once the data reaches into six figures, or wastes
+    space on too few ticks for a small range — the classic "nice
+    numbers" axis algorithm instead scales the step to the data,
+    landing on roughly ``target_ticks`` gridlines regardless of
+    magnitude. Picks whichever of 1/2/5 (times a power of ten) is the
+    smallest that still keeps the step at or above ``span /
+    target_ticks``, so the axis never ends up with *more* than roughly
+    ``target_ticks`` steps either.
+    """
+    if span <= 0:
+        return 1.0
+    raw_step = span / target_ticks
+    magnitude = 10 ** math.floor(math.log10(raw_step))
+    residual = raw_step / magnitude
+    if residual <= 1:
+        nice = 1
+    elif residual <= 2:
+        nice = 2
+    elif residual <= 5:
+        nice = 5
+    else:
+        nice = 10
+    return nice * magnitude
+
+
 def _tick_bounds(values: list[float], step: float) -> tuple[float, float]:
     """Round ``values``' range outward to a multiple of ``step``, always spanning 0.
 
     Anchoring every tick to a multiple of ``step`` starting from 0
-    (rather than the data's own min/max) is what the user asked for
-    directly: "0 and then every 5000" — round numbers you can read off
-    at a glance, not values that happen to line up with the data.
+    (rather than the data's own min/max) keeps every label a round
+    number you can read off at a glance, not one that happens to line
+    up with the data — ``step`` itself is chosen by ``_nice_step``.
     """
     lo = min([*values, 0.0])
     hi = max([*values, 0.0])
@@ -206,7 +235,7 @@ def _svg_net_worth_chart(
     pad_right: int = 16,
     pad_top: int = 16,
     pad_bottom: int = 16,
-    tick_step: int = 5000,
+    tick_step: float | None = None,
 ) -> dict:
     """Return template-ready SVG geometry: a net worth line plus income/expense bars.
 
@@ -216,9 +245,10 @@ def _svg_net_worth_chart(
     magnitudes (``abs``) rising from the shared zero baseline — mixing a
     signed expense total with an unsigned bar height would read wrong —
     while the net worth line plots its actual (signed) value against
-    the same baseline. Y-axis ticks are fixed at every ``tick_step``
-    starting from 0 (see ``_tick_bounds``), covering whichever of the
-    line or the bars reaches further.
+    the same baseline. Y-axis ticks start from 0 (see ``_tick_bounds``)
+    at a step ``_nice_step`` picks to fit the data (``tick_step``
+    overrides that, mainly for tests that want an exact, predictable
+    step rather than whatever the sample data happens to produce).
     """
     if not rows:
         return {"has_data": False}
@@ -227,7 +257,13 @@ def _svg_net_worth_chart(
     magnitudes = [abs(float(income)) for _, _, income, _ in rows] + [
         abs(float(expense)) for _, _, _, expense in rows
     ]
-    y_min, y_max = _tick_bounds(net_worth_values + magnitudes, tick_step)
+    all_values = net_worth_values + magnitudes
+    step = (
+        tick_step
+        if tick_step is not None
+        else _nice_step(max((abs(v) for v in all_values), default=0))
+    )
+    y_min, y_max = _tick_bounds(all_values, step)
 
     plot_left = pad_left
     plot_right = width - pad_right
@@ -273,11 +309,11 @@ def _svg_net_worth_chart(
 
     path_d = "M " + " L ".join(f"{x:.1f},{y:.1f}" for x, y in coords)
 
-    step_count = round((y_max - y_min) / tick_step)
+    step_count = round((y_max - y_min) / step)
     y_ticks = [
         {
-            "y": y_at(y_min + i * tick_step),
-            "label": f"{y_min + i * tick_step:,.0f}",
+            "y": y_at(y_min + i * step),
+            "label": f"{y_min + i * step:,.0f}",
         }
         for i in range(step_count + 1)
     ]

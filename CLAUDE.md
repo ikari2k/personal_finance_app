@@ -48,8 +48,11 @@ change beyond the finalized `config/rules.toml` shape. Transfers and non-matchin
 touched (a non-match must never blank out an existing category). Phase 5 (reporting &
 visualization) is also complete: a `/reports` page with one combined net worth chart — a line
 (cumulative net worth, monthly) with paired income/expense bars on the same shared axis, plus a
-value-axis fixed at every 5,000 starting from 0 (not a data-driven min/max range — round numbers
-you can read at a glance) — rendered as inline SVG (`app.routers.reports._svg_net_worth_chart`),
+value-axis that always starts at 0 with a step chosen by `app.routers.reports._nice_step` (the
+classic "nice numbers" axis algorithm: whichever of 1/2/5 × a power of ten lands closest to
+`span / 5`) rather than a flat step — a fixed every-5,000 step was tried first and rejected once
+real data reached six figures and crowded the axis with dozens of gridlines — rendered as inline
+SVG (`app.routers.reports._svg_net_worth_chart`),
 no vendored JS charting library (a deliberate deviation from the original plan doc, kept
 swappable later since the chart data and its SVG rendering are separate functions), plus an
 annual income/expense summary table with a year-over-year delta. `/reports/{year}` drill-down

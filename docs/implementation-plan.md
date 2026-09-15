@@ -707,9 +707,12 @@ unit-testable without touching disk. `routers/` stays thin — HTTP/HTMX glue on
   with monthly income/expense bars (magnitudes rising from a shared zero baseline — mixing a
   signed expense total with an unsigned bar height would read wrong) sitting behind the net worth
   line, all on one shared axis, since a separate yearly-granularity chart didn't line up with the
-  line's monthly x-axis. The axis itself is fixed at every 5,000 starting from 0
-  (`_tick_bounds`), not a data-driven min/max range, per explicit request — round numbers readable
-  at a glance rather than values that happen to line up with the data. Bars and line share the
+  line's monthly x-axis. The axis itself always starts at 0 (`_tick_bounds`), not a data-driven
+  min/max range, per explicit request — round numbers readable at a glance rather than values
+  that happen to line up with the data; the tick *step* was originally fixed at a flat 5,000 too,
+  but a later round replaced that with `_nice_step` (picks whichever of 1/2/5 × a power of ten
+  lands closest to `span / 5`) once real data reaching six figures crowded the axis with dozens of
+  gridlines — see the entry below. Bars and line share the
   same green/red/`--pico-primary` convention as `.amount-positive`/`.amount-negative` elsewhere.
   Separately, the year-detail category breakdown tables gained each category/subcategory's
   configured icon (`app.routers.reports._category_icons`, looked up from
@@ -749,7 +752,18 @@ unit-testable without touching disk. `routers/` stays thin — HTTP/HTMX glue on
   passing; a live manual check against a throwaway isolated ledger (never the real project data)
   confirmed the combined chart, the annual/year drill-down tables and icons, the month-to-month
   matrix, all three utilization-ring color tiers, the no-wrap sticky category column, and the
-  scroll behavior all rendered correctly.
+  scroll behavior all rendered correctly. A sixth round replaced the net worth chart's flat
+  every-5,000 y-axis tick step with `app.routers.reports._nice_step` after real (larger) data
+  showed the flat step crowding the axis with ~27 gridlines — the classic "nice numbers" axis
+  algorithm instead scales the step to the data (whichever of 1/2/5 × a power of ten lands
+  closest to `span / 5`), landing on a small, readable handful of gridlines regardless of whether
+  the range is in the hundreds or the hundreds of thousands. `_svg_net_worth_chart` keeps a
+  `tick_step` override parameter so a caller (namely tests) can still force an exact step rather
+  than depend on whatever a given dataset happens to compute. *Verified*: two router integration
+  tests (adaptive step at a small scale, uncrowded axis at a six-figure scale) replacing the old
+  fixed-step test; full suite 303 passing; a live manual check against a throwaway dataset styled
+  after the reported crowding (net worth/income/expense reaching ~130,000) confirmed exactly 4
+  clean gridlines (0/50,000/100,000/150,000) instead of dozens.
 
 - [ ] **Phase 6 — Launcher & polish**: `scripts/launch.py` (starts uvicorn bound to
   `127.0.0.1`, waits for readiness, opens browser via `webbrowser`), error-handling pass across

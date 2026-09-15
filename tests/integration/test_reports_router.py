@@ -65,7 +65,7 @@ def test_reports_overview_renders_net_worth_chart(client):
     assert "700.00" in response.text
 
 
-def test_reports_overview_chart_renders_fixed_zero_based_y_axis(client):
+def test_reports_overview_chart_y_axis_starts_at_zero_and_adapts_step(client):
     _create_account(client, starting_balance="500.00")
     _create_transaction(
         client, date="2026-01-01", type="income", category="Salary", amount="200"
@@ -80,12 +80,34 @@ def test_reports_overview_chart_renders_fixed_zero_based_y_axis(client):
     net_worth_svg = response.text.split('aria-label="Net worth over time"')[1].split(
         "</svg>"
     )[0]
-    # Net worth stays within 0-5000 (700 then 650), so the fixed
-    # every-5000-starting-from-0 axis has exactly two ticks: 0 and 5,000.
-    assert net_worth_svg.count("chart-gridline") == 2
-    assert net_worth_svg.count("chart-axis-label") == 2
+    # Values stay within 0-700ish, so _nice_step picks 200 (not a flat
+    # 5,000) to land on a readable ~5 gridlines: 0/200/400/600/800.
+    assert net_worth_svg.count("chart-gridline") == 5
+    assert net_worth_svg.count("chart-axis-label") == 5
     assert ">0<" in net_worth_svg
-    assert ">5,000<" in net_worth_svg
+    assert ">200<" in net_worth_svg
+    assert ">800<" in net_worth_svg
+
+
+def test_reports_overview_chart_y_axis_stays_uncrowded_for_large_values(client):
+    _create_account(client, starting_balance="0.00")
+    _create_transaction(
+        client, date="2026-01-01", type="income", category="Salary", amount="130000"
+    )
+    _create_transaction(
+        client, date="2026-01-05", type="expense", category="Rent", amount="128000"
+    )
+
+    response = client.get("/reports")
+
+    assert response.status_code == 200
+    net_worth_svg = response.text.split('aria-label="Net worth over time"')[1].split(
+        "</svg>"
+    )[0]
+    # A flat every-5,000 step would crowd this axis with ~27 gridlines;
+    # the adaptive step keeps it to a small, readable handful instead.
+    assert net_worth_svg.count("chart-gridline") <= 6
+    assert ">50,000<" in net_worth_svg
 
 
 def test_reports_overview_chart_includes_monthly_income_expense_bars(client):
