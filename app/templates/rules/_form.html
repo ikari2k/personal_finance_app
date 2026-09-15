@@ -19,6 +19,14 @@
       </datalist>
     </label>
   </div>
+  <div class="form-grid-2">
+    <label>Min amount (optional — matches this amount or more)
+      <input type="text" name="min_amount" value="{{ values.min_amount }}" placeholder="no minimum">
+    </label>
+    <label>Max amount (optional — matches this amount or less)
+      <input type="text" name="max_amount" value="{{ values.max_amount }}" placeholder="no maximum">
+    </label>
+  </div>
   <label>Priority (higher runs first, breaks ties between matching rules)
     <input type="number" name="priority" value="{{ values.priority }}" step="1">
   </label>

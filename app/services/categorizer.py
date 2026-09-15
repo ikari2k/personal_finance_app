@@ -12,6 +12,7 @@ reclassification run, with no per-rule opt-out.
 import re
 from dataclasses import dataclass
 from datetime import date as date_
+from decimal import Decimal
 
 from app.models.rule import Rule
 from app.models.transaction import Transaction, TransactionType
@@ -37,14 +38,35 @@ def _compile(rule: Rule) -> re.Pattern[str]:
     return compile_pattern(rule.pattern)
 
 
-def categorize(description: str, rules: list[Rule]) -> tuple[str, str]:
+def _amount_matches(rule: Rule, magnitude: Decimal) -> bool:
+    """Return whether ``magnitude`` (``abs(amount)``) is within the rule's bounds.
+
+    Both bounds are inclusive and either may be unset (``None``, "no
+    bound" — see ``app.models.rule``). A rule with neither set always
+    matches on amount, i.e. amount-filtering is opt-in per rule.
+    """
+    if rule.min_amount is not None and magnitude < rule.min_amount:
+        return False
+    if rule.max_amount is not None and magnitude > rule.max_amount:
+        return False
+    return True
+
+
+def categorize(description: str, amount: Decimal, rules: list[Rule]) -> tuple[str, str]:
     """Return the ``(category, subcategory)`` of the first matching rule.
 
     Only ``field == "description"`` rules are evaluated (see
     ``app.models.rule``'s note on other field values, not yet
-    implemented). Candidates are tried highest ``priority`` first, with
-    ties keeping their original relative order. Returns ``("", "")`` when
-    no rule matches or none exist — the caller decides the fallback (see
+    implemented). A rule additionally needs ``amount``'s magnitude
+    (``abs``, so callers pass the ledger's signed amount directly rather
+    than pre-``abs``ing it themselves) to fall within its
+    ``min_amount``/``max_amount`` bounds, if it sets either — this is
+    what lets one description pattern split into different rules by
+    amount (e.g. a gas station chain that also sells groceries/car
+    washes: a big fill-up vs. a small in-store purchase). Candidates are
+    tried highest ``priority`` first, with ties keeping their original
+    relative order. Returns ``("", "")`` when no rule matches or none
+    exist — the caller decides the fallback (see
     ``services.importer.DEFAULT_CATEGORY``).
     """
     candidates = sorted(
@@ -52,7 +74,10 @@ def categorize(description: str, rules: list[Rule]) -> tuple[str, str]:
         key=lambda rule: rule.priority,
         reverse=True,
     )
+    magnitude = abs(amount)
     for rule in candidates:
+        if not _amount_matches(rule, magnitude):
+            continue
         if _compile(rule).search(description):
             return rule.category, rule.subcategory
     return "", ""
@@ -96,7 +121,7 @@ def plan_reclassification(
     for txn in transactions:
         if txn.type is TransactionType.TRANSFER:
             continue
-        category, subcategory = categorize(txn.description, rules)
+        category, subcategory = categorize(txn.description, txn.amount, rules)
         if not category:
             continue
         if category == txn.category and subcategory == txn.subcategory:

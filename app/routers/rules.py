@@ -11,6 +11,7 @@ in practice.
 
 import json
 from datetime import date as date_
+from decimal import Decimal, InvalidOperation
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
@@ -101,8 +102,30 @@ def _parse_priority(raw: str) -> int:
         raise ValueError("priority must be a whole number") from exc
 
 
-def _validate_rule(pattern: str, category: str, priority: str) -> int:
-    """Validate a submitted rule; returns the parsed priority or raises ``ValueError``.
+def _parse_amount_bound(raw: str, field_name: str) -> Decimal | None:
+    """Parse a raw min/max-amount form field; blank means "no bound".
+
+    Raises ``ValueError`` (not ``InvalidOperation``) on unparseable
+    input, so callers can fold it into the same ``except ValueError``
+    block that already handles every other rule-form validation error —
+    same pattern as ``services.categories._parse_budget``.
+    """
+    raw = raw.strip()
+    if not raw:
+        return None
+    try:
+        value = Decimal(raw)
+    except InvalidOperation as exc:
+        raise ValueError(f"invalid {field_name}") from exc
+    if value < 0:
+        raise ValueError(f"{field_name} cannot be negative")
+    return value
+
+
+def _validate_rule(
+    pattern: str, category: str, priority: str, min_amount: str, max_amount: str
+) -> tuple[int, Decimal | None, Decimal | None]:
+    """Validate a submitted rule; returns parsed fields or raises ``ValueError``.
 
     Regex compile-checked here, at save time — CLAUDE.md's "regex rules
     must fail loudly" invariant, extended from Phase 3's apply-time-only
@@ -111,7 +134,12 @@ def _validate_rule(pattern: str, category: str, priority: str) -> int:
     compile_pattern(pattern)
     if not category.strip():
         raise ValueError("category is required")
-    return _parse_priority(priority)
+    priority_value = _parse_priority(priority)
+    min_value = _parse_amount_bound(min_amount, "minimum amount")
+    max_value = _parse_amount_bound(max_amount, "maximum amount")
+    if min_value is not None and max_value is not None and min_value > max_value:
+        raise ValueError("minimum amount cannot be greater than maximum amount")
+    return priority_value, min_value, max_value
 
 
 @router.get("", response_class=HTMLResponse)
@@ -128,7 +156,14 @@ def new_rule_form(request: Request) -> HTMLResponse:
     return _render_form(
         request,
         index=None,
-        values={"pattern": "", "category": "", "subcategory": "", "priority": "0"},
+        values={
+            "pattern": "",
+            "category": "",
+            "subcategory": "",
+            "priority": "0",
+            "min_amount": "",
+            "max_amount": "",
+        },
     )
 
 
@@ -147,6 +182,8 @@ def edit_rule_form(request: Request, index: int) -> HTMLResponse:
             "category": rule.category,
             "subcategory": rule.subcategory,
             "priority": str(rule.priority),
+            "min_amount": str(rule.min_amount) if rule.min_amount is not None else "",
+            "max_amount": str(rule.max_amount) if rule.max_amount is not None else "",
         },
     )
 
@@ -158,6 +195,8 @@ def create_rule(
     category: str = Form(...),
     subcategory: str = Form(""),
     priority: str = Form("0"),
+    min_amount: str = Form(""),
+    max_amount: str = Form(""),
 ) -> HTMLResponse:
     """Create a new rule; close the dialog and refresh the table on success."""
     values = {
@@ -165,9 +204,13 @@ def create_rule(
         "category": category,
         "subcategory": subcategory,
         "priority": priority,
+        "min_amount": min_amount,
+        "max_amount": max_amount,
     }
     try:
-        priority_value = _validate_rule(pattern, category, priority)
+        priority_value, min_value, max_value = _validate_rule(
+            pattern, category, priority, min_amount, max_amount
+        )
     except ValueError as exc:
         return _render_form(request, index=None, values=values, error=str(exc))
     rules = read_rules()
@@ -177,6 +220,8 @@ def create_rule(
             category=category,
             subcategory=subcategory,
             priority=priority_value,
+            min_amount=min_value,
+            max_amount=max_value,
         )
     )
     write_rules(rules)
@@ -193,6 +238,8 @@ def update_rule(
     category: str = Form(...),
     subcategory: str = Form(""),
     priority: str = Form("0"),
+    min_amount: str = Form(""),
+    max_amount: str = Form(""),
 ) -> HTMLResponse:
     """Update an existing rule; close the dialog and refresh the table on success."""
     values = {
@@ -200,12 +247,16 @@ def update_rule(
         "category": category,
         "subcategory": subcategory,
         "priority": priority,
+        "min_amount": min_amount,
+        "max_amount": max_amount,
     }
     rules = read_rules()
     if index < 0 or index >= len(rules):
         return HTMLResponse("Rule not found", status_code=404)
     try:
-        priority_value = _validate_rule(pattern, category, priority)
+        priority_value, min_value, max_value = _validate_rule(
+            pattern, category, priority, min_amount, max_amount
+        )
     except ValueError as exc:
         return _render_form(request, index=index, values=values, error=str(exc))
     rules[index] = Rule(
@@ -213,6 +264,8 @@ def update_rule(
         category=category,
         subcategory=subcategory,
         priority=priority_value,
+        min_amount=min_value,
+        max_amount=max_value,
     )
     write_rules(rules)
     return _render_table(

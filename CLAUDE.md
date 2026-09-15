@@ -45,7 +45,17 @@ written (`services.categorizer.plan_reclassification`/`apply_reclassification`).
 set: every rule always applies both to future imports (already automatic since Phase 3) and to
 this manual reclassify run — no per-rule opt-out, a deliberate scope decision to avoid a schema
 change beyond the finalized `config/rules.toml` shape. Transfers and non-matching rows are never
-touched (a non-match must never blank out an existing category). Phase 5 (reporting &
+touched (a non-match must never blank out an existing category). A post-Phase-4 addendum added
+optional `min_amount`/`max_amount` bounds per rule (both inclusive, either or both may be unset) —
+requested so one description pattern can split into different rules by transaction size (e.g. a
+gas-station chain that also sells groceries/car washes: a big fill-up vs. a small in-store
+purchase). `services.categorizer.categorize` now takes the row's amount alongside its description,
+matching a rule's bounds against `abs(amount)` (magnitude, not signed) before its pattern is even
+tried. Stored in `config/rules.toml` as a quoted string, same convention as
+`Account.starting_balance`, since `tomli_w` would otherwise serialize a bare `Decimal` as an
+imprecise TOML float — `app.storage.rules` round-trips this manually (`Rule(**entry)`/
+`rule.model_dump()` no longer suffice) and tolerates a rules file written before these fields
+existed (a missing key means "no bound", same as an explicit empty string). Phase 5 (reporting &
 visualization) is also complete: a `/reports` page with one combined net worth chart — a line
 (cumulative net worth, monthly) with paired income/expense bars on the same shared axis, plus a
 value-axis that always starts at 0 with a step chosen by `app.routers.reports._nice_step` (the

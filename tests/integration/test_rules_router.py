@@ -88,6 +88,72 @@ def test_create_rule_rejects_non_numeric_priority(client):
     assert read_rules(config.RULES_PATH) == []
 
 
+def test_create_rule_with_amount_bounds_is_persisted(client):
+    response = client.post(
+        "/rules",
+        data={
+            "pattern": "ORLEN",
+            "category": "Fuel",
+            "priority": "0",
+            "min_amount": "100",
+        },
+    )
+
+    assert response.status_code == 200
+    [rule] = read_rules(config.RULES_PATH)
+    assert rule.min_amount == Decimal("100")
+    assert rule.max_amount is None
+
+
+def test_create_rule_rejects_non_numeric_amount_bound(client):
+    response = client.post(
+        "/rules",
+        data={
+            "pattern": "ORLEN",
+            "category": "Fuel",
+            "priority": "0",
+            "min_amount": "abc",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "invalid minimum amount" in response.text
+    assert read_rules(config.RULES_PATH) == []
+
+
+def test_create_rule_rejects_negative_amount_bound(client):
+    response = client.post(
+        "/rules",
+        data={
+            "pattern": "ORLEN",
+            "category": "Fuel",
+            "priority": "0",
+            "min_amount": "-5",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "cannot be negative" in response.text
+    assert read_rules(config.RULES_PATH) == []
+
+
+def test_create_rule_rejects_min_amount_greater_than_max_amount(client):
+    response = client.post(
+        "/rules",
+        data={
+            "pattern": "ORLEN",
+            "category": "Fuel",
+            "priority": "0",
+            "min_amount": "100",
+            "max_amount": "50",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "minimum amount cannot be greater than maximum amount" in response.text
+    assert read_rules(config.RULES_PATH) == []
+
+
 def test_edit_rule_form_is_prefilled(client):
     client.post(
         "/rules", data={"pattern": "ZABKA", "category": "Groceries", "priority": "0"}

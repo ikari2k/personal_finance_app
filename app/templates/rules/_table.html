@@ -8,7 +8,7 @@
     <table class="rules-table">
       <thead>
         <tr>
-          <th>Pattern</th><th>Category</th><th>Subcategory</th><th>Priority</th>
+          <th>Pattern</th><th>Category</th><th>Subcategory</th><th>Amount range</th><th>Priority</th>
         </tr>
       </thead>
       <tbody>
@@ -30,6 +30,17 @@
             </td>
             <td>{{ rule.category }}</td>
             <td>{{ rule.subcategory or '—' }}</td>
+            <td>
+              {% if rule.min_amount is none and rule.max_amount is none %}
+                —
+              {% elif rule.min_amount is not none and rule.max_amount is not none %}
+                {{ "%.2f"|format(rule.min_amount) }}–{{ "%.2f"|format(rule.max_amount) }}
+              {% elif rule.min_amount is not none %}
+                ≥ {{ "%.2f"|format(rule.min_amount) }}
+              {% else %}
+                ≤ {{ "%.2f"|format(rule.max_amount) }}
+              {% endif %}
+            </td>
             <td>{{ rule.priority }}</td>
           </tr>
         {% endfor %}

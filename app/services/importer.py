@@ -221,7 +221,7 @@ def build_transactions(
     """
     transactions = []
     for row in rows:
-        category, subcategory = categorize(row.description, rules)
+        category, subcategory = categorize(row.description, row.amount, rules)
         transactions.append(
             Transaction(
                 id=str(uuid.uuid4()),

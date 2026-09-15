@@ -37,23 +37,26 @@ def _txn(
 def test_categorize_returns_first_matching_rule():
     rules = [Rule(pattern="ZABKA", category="Groceries", subcategory="Supermarket")]
 
-    assert categorize("ZABKA Z8540 K.2", rules) == ("Groceries", "Supermarket")
+    assert categorize("ZABKA Z8540 K.2", Decimal("-10"), rules) == (
+        "Groceries",
+        "Supermarket",
+    )
 
 
 def test_categorize_is_case_insensitive():
     rules = [Rule(pattern="netflix", category="Entertainment")]
 
-    assert categorize("NETFLIX.COM", rules) == ("Entertainment", "")
+    assert categorize("NETFLIX.COM", Decimal("-10"), rules) == ("Entertainment", "")
 
 
 def test_categorize_returns_blank_when_nothing_matches():
     rules = [Rule(pattern="ZABKA", category="Groceries")]
 
-    assert categorize("APPLE.COM/BILL", rules) == ("", "")
+    assert categorize("APPLE.COM/BILL", Decimal("-10"), rules) == ("", "")
 
 
 def test_categorize_returns_blank_with_no_rules():
-    assert categorize("anything", []) == ("", "")
+    assert categorize("anything", Decimal("-10"), []) == ("", "")
 
 
 def test_categorize_prefers_higher_priority_rule():
@@ -62,20 +65,80 @@ def test_categorize_prefers_higher_priority_rule():
         Rule(pattern="AUCHAN", category="Groceries", priority=10),
     ]
 
-    assert categorize("AUCHAN 1035 KRAKOW", rules) == ("Groceries", "")
+    assert categorize("AUCHAN 1035 KRAKOW", Decimal("-10"), rules) == ("Groceries", "")
 
 
 def test_categorize_ignores_rules_for_other_fields():
     rules = [Rule(pattern="ZABKA", field="amount", category="Groceries")]
 
-    assert categorize("ZABKA Z8540 K.2", rules) == ("", "")
+    assert categorize("ZABKA Z8540 K.2", Decimal("-10"), rules) == ("", "")
 
 
 def test_categorize_raises_on_invalid_regex():
     rules = [Rule(pattern="[", category="Groceries")]
 
     with pytest.raises(ValueError):
-        categorize("anything", rules)
+        categorize("anything", Decimal("-10"), rules)
+
+
+def test_categorize_matches_amount_above_min_amount():
+    rules = [Rule(pattern="ORLEN", category="Fuel", min_amount=Decimal("100"))]
+
+    assert categorize("ORLEN STACJA 123", Decimal("-150"), rules) == ("Fuel", "")
+
+
+def test_categorize_skips_rule_when_amount_below_min_amount():
+    rules = [Rule(pattern="ORLEN", category="Fuel", min_amount=Decimal("100"))]
+
+    assert categorize("ORLEN STACJA 123", Decimal("-40"), rules) == ("", "")
+
+
+def test_categorize_matches_amount_at_or_below_max_amount():
+    rules = [Rule(pattern="ORLEN", category="Groceries", max_amount=Decimal("100"))]
+
+    assert categorize("ORLEN STACJA 123", Decimal("-40"), rules) == ("Groceries", "")
+
+
+def test_categorize_skips_rule_when_amount_above_max_amount():
+    rules = [Rule(pattern="ORLEN", category="Groceries", max_amount=Decimal("100"))]
+
+    assert categorize("ORLEN STACJA 123", Decimal("-150"), rules) == ("", "")
+
+
+def test_categorize_amount_bounds_are_inclusive():
+    rules = [
+        Rule(
+            pattern="ORLEN",
+            category="Fuel",
+            min_amount=Decimal("100"),
+            max_amount=Decimal("100"),
+        )
+    ]
+
+    assert categorize("ORLEN STACJA 123", Decimal("-100"), rules) == ("Fuel", "")
+
+
+def test_categorize_splits_one_pattern_into_two_rules_by_amount():
+    rules = [
+        Rule(pattern="ORLEN", category="Fuel", min_amount=Decimal("100.01")),
+        Rule(pattern="ORLEN", category="Groceries", max_amount=Decimal("100")),
+    ]
+
+    assert categorize("ORLEN STACJA 123", Decimal("-150"), rules) == ("Fuel", "")
+    assert categorize("ORLEN STACJA 123", Decimal("-40"), rules) == ("Groceries", "")
+
+
+def test_categorize_amount_matching_uses_magnitude_not_sign():
+    rules = [Rule(pattern="ORLEN", category="Fuel", min_amount=Decimal("100"))]
+
+    assert categorize("ORLEN STACJA 123", Decimal("150"), rules) == ("Fuel", "")
+
+
+def test_categorize_rule_with_no_amount_bounds_matches_any_amount():
+    rules = [Rule(pattern="ZABKA", category="Groceries")]
+
+    assert categorize("ZABKA Z8540", Decimal("-0.01"), rules) == ("Groceries", "")
+    assert categorize("ZABKA Z8540", Decimal("-99999"), rules) == ("Groceries", "")
 
 
 def test_compile_pattern_raises_on_invalid_regex():
