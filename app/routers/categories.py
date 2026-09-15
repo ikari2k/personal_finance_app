@@ -18,8 +18,13 @@ from app.services.categories import (
     update_category,
     update_subcategory,
 )
+from app.services.categorizer import (
+    rename_category_in_rules,
+    rename_subcategory_in_rules,
+)
 from app.storage.categories import read_categories, write_categories
 from app.storage.ledger import read_ledger
+from app.storage.rules import read_rules, write_rules
 from app.templating import templates
 
 router = APIRouter(prefix="/categories", tags=["categories"])
@@ -84,6 +89,19 @@ def _render_tree(
         },
         headers=headers,
     )
+
+
+def _toast_with_rule_count(base_message: str, rules_renamed: int) -> dict[str, str]:
+    """Build the success toast, noting how many rules were kept in sync, if any.
+
+    Silent otherwise — a rename that didn't touch any rule (the common
+    case) shouldn't call attention to the fact.
+    """
+    if not rules_renamed:
+        return toast(base_message, close_dialog=True)
+    plural = "" if rules_renamed == 1 else "s"
+    message = f"{base_message} ({rules_renamed} rule{plural} updated)"
+    return toast(message, close_dialog=True)
 
 
 def _render_form(
@@ -242,8 +260,21 @@ def update_category_route(
             error=str(exc),
         )
     write_categories(categories)
+
+    rules_renamed = 0
+    if name != category_name:
+        rules = read_rules()
+        renamed_rules = rename_category_in_rules(rules, category_name, name)
+        if renamed_rules != rules:
+            rules_renamed = sum(
+                1 for old, new in zip(rules, renamed_rules) if old != new
+            )
+            write_rules(renamed_rules)
+
     return _render_tree(
-        request, oob=True, headers=toast("Category updated", close_dialog=True)
+        request,
+        oob=True,
+        headers=_toast_with_rule_count("Category updated", rules_renamed),
     )
 
 
@@ -392,8 +423,23 @@ def update_subcategory_route(
             error=str(exc),
         )
     write_categories(categories)
+
+    rules_renamed = 0
+    if name != sub_name:
+        rules = read_rules()
+        renamed_rules = rename_subcategory_in_rules(
+            rules, category_name, sub_name, name
+        )
+        if renamed_rules != rules:
+            rules_renamed = sum(
+                1 for old, new in zip(rules, renamed_rules) if old != new
+            )
+            write_rules(renamed_rules)
+
     return _render_tree(
-        request, oob=True, headers=toast("Subcategory updated", close_dialog=True)
+        request,
+        oob=True,
+        headers=_toast_with_rule_count("Subcategory updated", rules_renamed),
     )
 
 

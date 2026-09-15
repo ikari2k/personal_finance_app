@@ -12,6 +12,8 @@ from app.services.categorizer import (
     categorize,
     compile_pattern,
     plan_reclassification,
+    rename_category_in_rules,
+    rename_subcategory_in_rules,
 )
 
 EXPENSE = TransactionType.EXPENSE
@@ -313,3 +315,59 @@ def test_apply_reclassification_skips_a_change_whose_row_no_longer_exists():
     updated = apply_reclassification([], changes)
 
     assert updated == []
+
+
+def test_rename_category_in_rules_renames_matching_rules():
+    rules = [
+        Rule(pattern="ZABKA", category="Food", subcategory="Groceries"),
+        Rule(pattern="MCD", category="Food", subcategory="Dining Out"),
+        Rule(pattern="NETFLIX", category="Entertainment"),
+    ]
+
+    renamed = rename_category_in_rules(rules, "Food", "Meals")
+
+    assert [r.category for r in renamed] == ["Meals", "Meals", "Entertainment"]
+    # Subcategory is untouched by a category rename.
+    assert renamed[0].subcategory == "Groceries"
+    assert renamed[1].subcategory == "Dining Out"
+
+
+def test_rename_category_in_rules_no_op_when_names_match():
+    rules = [Rule(pattern="ZABKA", category="Food")]
+
+    renamed = rename_category_in_rules(rules, "Food", "Food")
+
+    assert renamed == rules
+    assert renamed is not rules
+
+
+def test_rename_category_in_rules_does_not_mutate_input():
+    rules = [Rule(pattern="ZABKA", category="Food")]
+
+    rename_category_in_rules(rules, "Food", "Meals")
+
+    assert rules[0].category == "Food"
+
+
+def test_rename_subcategory_in_rules_scoped_to_its_category():
+    rules = [
+        Rule(pattern="ZABKA", category="Groceries", subcategory="Other"),
+        Rule(pattern="RANDOM", category="Shopping", subcategory="Other"),
+    ]
+
+    renamed = rename_subcategory_in_rules(rules, "Groceries", "Other", "Misc")
+
+    assert renamed[0].category == "Groceries"
+    assert renamed[0].subcategory == "Misc"
+    # The unrelated "Other" under a different category is untouched.
+    assert renamed[1].category == "Shopping"
+    assert renamed[1].subcategory == "Other"
+
+
+def test_rename_subcategory_in_rules_no_op_when_names_match():
+    rules = [Rule(pattern="ZABKA", category="Groceries", subcategory="Other")]
+
+    renamed = rename_subcategory_in_rules(rules, "Groceries", "Other", "Other")
+
+    assert renamed == rules
+    assert renamed is not rules

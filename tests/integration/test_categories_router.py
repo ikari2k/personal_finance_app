@@ -4,9 +4,11 @@ from datetime import date
 from decimal import Decimal
 
 from app import config
+from app.models.rule import Rule
 from app.models.transaction import Transaction, TransactionType
 from app.storage.categories import read_categories
 from app.storage.ledger import write_ledger
+from app.storage.rules import read_rules, write_rules
 
 
 def _txn(id: str, description: str, category: str = "Uncategorized") -> Transaction:
@@ -202,6 +204,42 @@ def test_update_category_renames_and_reicons(client):
     assert result["expense"]["Food"]["icon"] == "utensils"
 
 
+def test_update_category_renames_it_in_matching_rules(client):
+    client.post("/categories/expense", data={"name": "Groceries", "icon": "cart"})
+    write_rules(
+        [
+            Rule(pattern="ZABKA", category="Groceries", subcategory="Supermarket"),
+            Rule(pattern="NETFLIX", category="Entertainment"),
+        ],
+        config.RULES_PATH,
+    )
+
+    response = client.post(
+        "/categories/expense/Groceries", data={"name": "Food", "icon": "cart"}
+    )
+
+    assert response.status_code == 200
+    assert "1 rule updated" in response.headers["hx-trigger"]
+    rules = read_rules(config.RULES_PATH)
+    assert rules[0].category == "Food"
+    assert rules[0].subcategory == "Supermarket"
+    assert rules[1].category == "Entertainment"
+
+
+def test_update_category_without_a_rename_does_not_touch_rules(client):
+    client.post("/categories/expense", data={"name": "Groceries", "icon": "cart"})
+    write_rules([Rule(pattern="ZABKA", category="Groceries")], config.RULES_PATH)
+
+    response = client.post(
+        "/categories/expense/Groceries",
+        data={"name": "Groceries", "icon": "store"},
+    )
+
+    assert response.status_code == 200
+    assert "rule updated" not in response.headers["hx-trigger"]
+    assert read_rules(config.RULES_PATH)[0].category == "Groceries"
+
+
 def test_delete_category_removes_it(client):
     client.post("/categories/expense", data={"name": "Groceries", "icon": ""})
 
@@ -269,6 +307,34 @@ def test_update_subcategory_renames_and_reicons(client):
     assert result["expense"]["Groceries"]["subcategories"] == {
         "Store": {"icon": "store", "budget": ""}
     }
+
+
+def test_update_subcategory_renames_it_in_matching_rules_only(client):
+    client.post("/categories/expense", data={"name": "Groceries", "icon": "cart"})
+    client.post(
+        "/categories/expense/Groceries/subcategories",
+        data={"name": "Supermarket", "icon": ""},
+    )
+    write_rules(
+        [
+            Rule(pattern="ZABKA", category="Groceries", subcategory="Supermarket"),
+            # Same subcategory name, different category — must not rename.
+            Rule(pattern="TARGET", category="Shopping", subcategory="Supermarket"),
+        ],
+        config.RULES_PATH,
+    )
+
+    response = client.post(
+        "/categories/expense/Groceries/subcategories/Supermarket",
+        data={"name": "Grocery Store", "icon": ""},
+    )
+
+    assert response.status_code == 200
+    assert "1 rule updated" in response.headers["hx-trigger"]
+    rules = read_rules(config.RULES_PATH)
+    assert rules[0].subcategory == "Grocery Store"
+    assert rules[1].category == "Shopping"
+    assert rules[1].subcategory == "Supermarket"
 
 
 def test_delete_subcategory_removes_it(client):

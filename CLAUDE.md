@@ -476,6 +476,19 @@ module itself.
 - **Bulk reclassification always previews first**: a rule run against the ledger must show a full
   before/after diff per affected row (old category/subcategory → new, plus any other changed
   fields), never just a count. Preview output must match apply output exactly.
+- **Renaming a category/subcategory propagates into `config/rules.toml` but never into the
+  ledger.** These are two different kinds of reference: a ledger row's `category`/`subcategory`
+  are free-text copies made at entry time (not a foreign key — Phase 2.5's "no automatic
+  dedup/cleanup" stance is specifically about this, §4.2), so a rename correctly leaves existing
+  rows alone. A rule is different — it's an ongoing instruction ("when X, categorize as Y"), and a
+  rule left pointing at a stale name would keep silently recreating the old category on the fly
+  (`services.transactions.ensure_category`) every time it fires, a real behavioral bug rather than
+  a cosmetic mismatch. `app.routers.categories`'s update routes call
+  `services.categorizer.rename_category_in_rules`/`rename_subcategory_in_rules` (pure — only
+  touch matching `Rule.category`/`Rule.subcategory` fields) after a successful rename, only when
+  the name actually changed, and the success toast names how many rules were updated. Don't
+  extend this to delete — deleting a category/subcategory intentionally still doesn't touch rules
+  or the ledger, matching the existing no-cleanup stance.
 - Reports pull from **one shared aggregation layer**, `services/aggregation.py` — it already has
   `group_by_month_and_type` (backing the transactions list); Phase 5 extends it with
   category/subcategory grouping rather than duplicating a second group-by module. Not per-view

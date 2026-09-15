@@ -185,3 +185,48 @@ def apply_reclassification(
             txn.model_copy(update={"category": category, "subcategory": subcategory})
         )
     return result
+
+
+def rename_category_in_rules(
+    rules: list[Rule], old_name: str, new_name: str
+) -> list[Rule]:
+    """Return ``rules`` with every ``category == old_name`` renamed to ``new_name``.
+
+    Pure — the caller writes the result back via storage. Keeps a rule
+    pointed at a renamed category's new name instead of silently
+    recreating the old name on the fly (via ``services.transactions
+    .ensure_category``) the next time the rule fires. A rule's
+    ``subcategory`` is left untouched — renaming a category doesn't
+    rename its subcategories. A no-op rename (``old_name == new_name``)
+    returns a shallow copy of ``rules`` unchanged.
+    """
+    if old_name == new_name:
+        return list(rules)
+    return [
+        rule.model_copy(update={"category": new_name})
+        if rule.category == old_name
+        else rule
+        for rule in rules
+    ]
+
+
+def rename_subcategory_in_rules(
+    rules: list[Rule], category: str, old_subcategory: str, new_subcategory: str
+) -> list[Rule]:
+    """Return ``rules`` with ``category``'s ``old_subcategory`` renamed.
+
+    Pure — the caller writes the result back via storage. Scoped to
+    ``category`` (not a bare subcategory-name match) since the same
+    subcategory name can exist under different categories — renaming
+    "Other" under "Groceries" must not touch an unrelated "Other" rule
+    under "Shopping". A no-op rename returns a shallow copy of
+    ``rules`` unchanged.
+    """
+    if old_subcategory == new_subcategory:
+        return list(rules)
+    return [
+        rule.model_copy(update={"subcategory": new_subcategory})
+        if rule.category == category and rule.subcategory == old_subcategory
+        else rule
+        for rule in rules
+    ]

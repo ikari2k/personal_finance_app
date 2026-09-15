@@ -335,6 +335,28 @@ unit-testable without touching disk. `routers/` stays thin — HTTP/HTMX glue on
   header render; full suite 352 passing; a live check confirmed the toggle actually opens/closes
   every category's `<details>` together.
 
+- [x] **Post-Phase-2.5 addendum #2 — renames propagate into rules**: renaming a category or
+  subcategory now also updates every matching rule in `config/rules.toml`, so an existing
+  auto-categorization rule keeps pointing at the new name instead of silently recreating the old
+  one on the fly (via `services.transactions.ensure_category`) the next time it fires. This is a
+  deliberate, narrow exception to CLAUDE.md's established "renaming a category does not touch
+  existing ledger rows, no automatic dedup/cleanup" stance (§4.2, Phase 2.5's own write-up above)
+  — that invariant is specifically about the *ledger* (free-text copies, not a foreign key); rules
+  are different; a rule left pointing at a stale name is a real, ongoing behavioral bug, not just
+  a cosmetic mismatch. Ledger rows themselves are still never touched by a rename (unchanged).
+  `services.categorizer.rename_category_in_rules`/`rename_subcategory_in_rules` are pure
+  functions the two update routes call after the category/subcategory rename itself succeeds
+  (only when the name actually changed, not on an icon/budget-only edit); the subcategory rename
+  is scoped to its parent category, since the same subcategory name can exist under different
+  categories (renaming "Other" under "Groceries" must not touch an unrelated "Other" rule under
+  "Shopping"). The success toast mentions how many rules were updated, e.g. "Category updated (2
+  rules updated)" — silent when zero, so the common no-rules-affected case doesn't call attention
+  to itself. *Verified*: unit tests for both rename functions (renames matching rules, scoped
+  correctly, no-op when names match, doesn't mutate input) and integration tests for both routes
+  (renames rules, leaves unrelated ones alone, no rule touched on a non-rename edit); full suite
+  360 passing; a live end-to-end check confirmed both a category rename and a subsequent
+  subcategory rename correctly propagated into a real rule.
+
 - [x] **Phase 2.6 — Edit/delete transactions**: transactions were create-only since Phase 2; this
   closes that gap. Same decimal-insertion reasoning as 2.5 — slots after it without renumbering
   Phase 3+.
