@@ -243,6 +243,20 @@ unit-testable without touching disk. `routers/` stays thin — HTTP/HTMX glue on
       item inside a `display: flex` `<summary>`, so `justify-content: space-between` put the net
       total in the middle slot, not flush right, at a position that shifted with each month's
       label width. Fixed with `display: grid; grid-template-columns: 1fr auto auto` instead.
+    - **Category/subcategory filters + toolbar decluttered (round 3)**, much later: added
+      `category`/`subcategory` ledger filters (same `account_id`-style pattern — query params
+      falling back to sticky cookies, filtering before aggregation, AND-combined). The resulting
+      3-select-plus-4-button toolbar was reported as noisy, so it was redesigned to 4 controls:
+      Account, one combined Category select (subcategories nested per category via `<optgroup>`
+      rather than a separate top-level Subcategory select — a category's subcategories are already
+      implied by which one is picked), a "Group by" select replacing the two grouping-toggle
+      buttons (its four options are exactly the four `by_month`/`by_type` combinations), and one
+      Expand/collapse-all button (its onclick checks whether any `.month-section` is currently
+      closed to decide which way to toggle, instead of two direction-specific buttons). Since a
+      single `<select>` can only submit one value under one `name=`, the combined Category and
+      Group-by selects use htmx's dynamic `hx-vals='js:{...}'` form to also read a second value off
+      a `data-*` attribute on the just-selected `<option>` — the one exception to the otherwise
+      fully-declarative htmx pattern used everywhere else, still with no separate `<script>`.
 
 - [x] **Phase 2.5 — Categories management**: a dedicated `/categories` page for the income and
   expense trees the app has been building on-the-fly since Phase 2 — the "editable by hand or via
@@ -682,6 +696,26 @@ unit-testable without touching disk. `routers/` stays thin — HTTP/HTMX glue on
   are never touched (`tests/integration/test_rules_router.py`); a live manual run confirming a
   "Gas station" rule correctly diffed 5 existing rows in preview, applied identically, and a
   second preview then showed no changes.
+
+- [x] **Post-Phase-4 addendum — amount-bound rules**: optional `min_amount`/`max_amount` per rule
+  (both inclusive, either/both may be unset), requested so one description pattern can split into
+  different rules by transaction size — e.g. a gas-station chain that also sells
+  groceries/car-washes, a big fill-up vs. a small in-store purchase. `services.categorizer
+  .categorize` now takes the row's amount alongside its description and checks a rule's bounds
+  against `abs(amount)` before its pattern is even tried; both import-time categorization and
+  bulk reclassification pick this up automatically since they share one `categorize` call.
+  `app.storage.rules` gained `_to_dict`/`_from_dict` (round-tripping `Rule(**entry)`/
+  `rule.model_dump()` no longer suffice) to store the bounds as a quoted TOML string — same
+  convention as `Account.starting_balance`, since `tomli_w` would otherwise serialize a bare
+  `Decimal` as an imprecise float — and to tolerate a rules file written before these fields
+  existed (a missing key means "no bound"). The rule form/table gained matching Min/Max amount
+  fields and a save-time check that min ≤ max. *Verified*: unit tests for `categorize`'s amount
+  matching (above/below each bound, inclusive edges, magnitude not sign, splitting one pattern
+  into two rules by amount) and `app.storage.rules` round-tripping (including a
+  before-these-fields-existed fixture file); integration tests for rule-form validation (invalid/
+  negative/min>max amounts); a live consolidation of the user's real `config/rules.toml` (20 rules
+  → 7, merging same-outcome patterns with regex alternation) confirmed against real ledger rows
+  that the merged patterns categorize identically to the originals.
 
 - [x] **Phase 5 — Reporting & visualization**: `/reports` (net worth over time + annual
   income/expense summary with a YoY delta) and `/reports/{year}` (monthly breakdown with a MoM
