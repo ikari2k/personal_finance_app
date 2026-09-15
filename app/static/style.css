@@ -335,10 +335,6 @@ button.btn-transfer {
   margin-right: -0.25rem;
 }
 
-.toolbar-spacer {
-  flex: 1 1 auto;
-}
-
 /* Transactions list: collapsible month sections (when month grouping is
  * on), each optionally split into color-coded type groups (see
  * app/services/aggregation.py::grouped_transaction_view). */

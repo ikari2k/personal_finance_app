@@ -290,19 +290,28 @@ module itself.
   params explicitly, so there's one consistent "unset" representation rather than sometimes
   omitting a param. All three filters AND together (e.g. category + subcategory narrows to rows
   matching both, not either).
-  - Each `<select>` fires via `hx-trigger="change"` and carries its own value automatically (its
-    own `name=`), plus a static, server-rendered `hx-vals` JSON blob carrying every *other*
-    current param so changing one filter doesn't reset the rest — and conversely, the
-    grouping-toggle buttons' own hrefs always interpolate all three filter values so switching
-    grouping doesn't reset any of them. All controls must keep round-tripping every param like
-    this; dropping one from any single control's URL/vals silently resets it for that action. The
-    one deliberate exception: changing the **category** select's `hx-vals` explicitly resets
-    `subcategory` to `""` rather than preserving it — an old subcategory selection may not belong
-    to the newly-picked category, so keeping it would silently filter to zero rows instead of
-    "narrow to the new category, no subcategory picked yet". The subcategory `<select>`'s own
-    options (`app.routers.transactions._subcategory_names_for`) narrow to just the selected
-    category's subcategories once one is picked, falling back to every subcategory across every
-    category when none is.
+  - **Toolbar control count is a deliberate, revisited decision**: an earlier version had three
+    side-by-side selects (Account/Category/Subcategory) plus two grouping-toggle buttons plus two
+    expand/collapse buttons — seven controls, reported as too noisy. Now four: Account, one
+    combined Category select (subcategories nested per category via `<optgroup>` — a category's
+    subcategories are already implied by which one is picked, so a separate top-level Subcategory
+    control was redundant, not a second axis of information), one "Group by" select replacing the
+    two grouping-toggle buttons (its four options are exactly the four `by_month`/`by_type`
+    combinations), and a single Expand/collapse-all button (its own onclick checks whether *any*
+    `.month-section` is currently closed to decide which way to toggle, rather than two separate
+    buttons for the two directions).
+  - Since one `<select>` can only submit its own single value under its own `name=`, the combined
+    Category select and the Group-by select both use htmx's dynamic `hx-vals='js:{...}'` form (a
+    JS object expression evaluated against `event`, not static JSON) to also read a second value
+    off the just-selected `<option>`'s `data-*` attribute — `dataset.subcategory` for the Category
+    select, `dataset.byType` for the Group-by select. This is the one exception to the otherwise
+    fully-declarative htmx pattern used everywhere else in the app; still no separate `<script>`,
+    just an inline expression.
+  - Every control's `hx-vals`/URL must keep round-tripping every *other* current filter/grouping
+    value — dropping one from any single control silently resets it for that action. The one
+    deliberate exception: picking a new **category** always resets `subcategory` to `""` (baked
+    into the Category select's own options, not a separate reset step) rather than preserving an
+    old subcategory selection that may not belong to the newly-picked category.
   - When filtered to one account, the row-level Account column disappears (`txn_row(txn,
     accounts, show_account)` in `_table.html` — `show_account` is `not account_id`) since every
     row would show the same, now-redundant, name.

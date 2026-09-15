@@ -37,36 +37,21 @@ def _grouping_from_cookies(request: Request) -> tuple[bool, bool]:
     return by_month, by_type
 
 
-def _all_category_names(categories: CategoriesByType) -> list[str]:
-    """Every category name across both income and expense trees, sorted.
+def _categories_grouped(categories: CategoriesByType) -> list[tuple[str, list[str]]]:
+    """Every category name (across both trees) paired with its own subcategory names.
 
-    The transactions list mixes both types in one flat table (unless
-    type grouping happens to be on), so the category filter's dropdown
-    merges both trees rather than needing its own type selector.
+    Backs the transactions list's single combined category/subcategory
+    filter dropdown (one control with a per-category `<optgroup>`
+    rather than two side-by-side selects — a category's subcategories
+    are already implied by which category is picked, so a second
+    top-level control was pure noise). Both the outer list and each
+    inner subcategory list are sorted.
     """
-    names: set[str] = set()
+    grouped: dict[str, set[str]] = {}
     for tree in categories.values():
-        names.update(tree.keys())
-    return sorted(names)
-
-
-def _subcategory_names_for(categories: CategoriesByType, category: str) -> list[str]:
-    """Subcategory names under ``category`` (checked in both trees), sorted.
-
-    Falls back to every subcategory across every category when
-    ``category`` is blank ("all categories" still selected) — there's no
-    one category's subcategories to narrow the picker down to yet.
-    """
-    names: set[str] = set()
-    for tree in categories.values():
-        if category:
-            entry = tree.get(category)
-            if entry is not None:
-                names.update(entry["subcategories"].keys())
-        else:
-            for entry in tree.values():
-                names.update(entry["subcategories"].keys())
-    return sorted(names)
+        for name, entry in tree.items():
+            grouped.setdefault(name, set()).update(entry["subcategories"].keys())
+    return [(name, sorted(subs)) for name, subs in sorted(grouped.items())]
 
 
 def render_table(
@@ -110,8 +95,7 @@ def render_table(
             "accounts": {account.id: account for account in accounts_list},
             "accounts_list": accounts_list,
             "categories": categories_tree,
-            "category_names": _all_category_names(categories_tree),
-            "subcategory_names": _subcategory_names_for(categories_tree, category),
+            "categories_grouped": _categories_grouped(categories_tree),
             "by_month": by_month,
             "by_type": by_type,
             "account_id": account_id,
@@ -190,8 +174,7 @@ def list_transactions(
         "accounts": {account.id: account for account in accounts_list},
         "accounts_list": accounts_list,
         "categories": categories_tree,
-        "category_names": _all_category_names(categories_tree),
-        "subcategory_names": _subcategory_names_for(categories_tree, resolved_category),
+        "categories_grouped": _categories_grouped(categories_tree),
         "by_month": resolved_by_month,
         "by_type": resolved_by_type,
         "account_id": resolved_account_id,

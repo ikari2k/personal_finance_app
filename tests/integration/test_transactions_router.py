@@ -476,7 +476,6 @@ def test_grouping_toggle_persists_across_bare_navigation(client):
 
     bare = client.get("/transactions")
 
-    assert "Month grouping: off" in bare.text
     assert "flat-net-total" in bare.text
     assert "month-section" not in bare.text
 
@@ -500,7 +499,6 @@ def test_explicit_grouping_param_overrides_cookie(client):
 
     explicit = client.get("/transactions?by_month=true&by_type=true&account_id=")
 
-    assert "Month grouping: on" in explicit.text
     assert "month-section" in explicit.text
 
 
