@@ -151,6 +151,63 @@ def test_create_rule_rejects_min_amount_greater_than_max_amount(client):
 
     assert response.status_code == 200
     assert "minimum amount cannot be greater than maximum amount" in response.text
+
+
+def test_create_rule_with_type_is_persisted(client):
+    response = client.post(
+        "/rules",
+        data={
+            "pattern": "ORLEN",
+            "category": "Fuel",
+            "priority": "0",
+            "type": "expense",
+        },
+    )
+
+    assert response.status_code == 200
+    [rule] = read_rules(config.RULES_PATH)
+    assert rule.type == TransactionType.EXPENSE
+
+
+def test_create_rule_with_blank_type_matches_either(client):
+    response = client.post(
+        "/rules", data={"pattern": "ORLEN", "category": "Fuel", "priority": "0"}
+    )
+
+    assert response.status_code == 200
+    [rule] = read_rules(config.RULES_PATH)
+    assert rule.type is None
+
+
+def test_create_rule_rejects_transfer_type(client):
+    response = client.post(
+        "/rules",
+        data={
+            "pattern": "ORLEN",
+            "category": "Fuel",
+            "priority": "0",
+            "type": "transfer",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "type cannot be transfer" in response.text
+    assert read_rules(config.RULES_PATH) == []
+
+
+def test_create_rule_rejects_unrecognized_type(client):
+    response = client.post(
+        "/rules",
+        data={
+            "pattern": "ORLEN",
+            "category": "Fuel",
+            "priority": "0",
+            "type": "bogus",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "invalid type" in response.text
     assert read_rules(config.RULES_PATH) == []
 
 
@@ -243,6 +300,48 @@ def test_preview_reclassification_shows_diff_for_matching_rows(client):
     assert "Uncategorized" in response.text
     assert "Groceries" in response.text
     assert 'name="changes_payload"' in response.text
+
+
+def test_preview_reclassification_shows_the_transaction_amount(client):
+    write_ledger(
+        [_txn("t1", "ZABKA Z8540", category="Uncategorized")], config.LEDGER_PATH
+    )
+    client.post(
+        "/rules", data={"pattern": "ZABKA", "category": "Groceries", "priority": "0"}
+    )
+
+    response = client.get("/rules/reclassify/preview")
+
+    assert response.status_code == 200
+    assert "10.00" in response.text
+
+
+def test_reclassify_respects_rule_type_filter(client):
+    write_ledger(
+        [
+            _txn(
+                "t1",
+                "ZABKA REFUND",
+                category="Uncategorized",
+                type=TransactionType.INCOME,
+            )
+        ],
+        config.LEDGER_PATH,
+    )
+    client.post(
+        "/rules",
+        data={
+            "pattern": "ZABKA",
+            "category": "Groceries",
+            "priority": "0",
+            "type": "expense",
+        },
+    )
+
+    response = client.get("/rules/reclassify/preview")
+
+    assert response.status_code == 200
+    assert "No changes" in response.text
 
 
 def test_reclassify_apply_updates_ledger_and_creates_category(client):

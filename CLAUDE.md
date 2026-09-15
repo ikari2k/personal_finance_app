@@ -55,7 +55,15 @@ tried. Stored in `config/rules.toml` as a quoted string, same convention as
 `Account.starting_balance`, since `tomli_w` would otherwise serialize a bare `Decimal` as an
 imprecise TOML float — `app.storage.rules` round-trips this manually (`Rule(**entry)`/
 `rule.model_dump()` no longer suffice) and tolerates a rules file written before these fields
-existed (a missing key means "no bound", same as an explicit empty string). Phase 5 (reporting &
+existed (a missing key means "no bound", same as an explicit empty string). A magnitude alone
+can't tell an expense from an income of the same size (a 150 outflow and a 150 refund both have
+`abs(amount) == 150`), so a follow-up added an optional `type` field too (`TransactionType.INCOME`/
+`.EXPENSE`/`None` for "either" — never `TRANSFER`, rejected at save time, since a rule pinned to
+it would be permanently unreachable: rules never run against transfers). `categorize` now also
+takes the row's `TransactionType` and requires it to equal a rule's own `type` when one is set.
+The reclassify-preview diff table also gained an Amount column (`ReclassificationChange.amount`)
+after the amount-based/type-based rule splits made "what would this actually match" harder to
+eyeball from category names alone. Phase 5 (reporting &
 visualization) is also complete: a `/reports` page with one combined net worth chart — a line
 (cumulative net worth, monthly) with paired income/expense bars on the same shared axis, plus a
 value-axis that always starts at 0 with a step chosen by `app.routers.reports._nice_step` (the

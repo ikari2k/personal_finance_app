@@ -52,21 +52,35 @@ def _amount_matches(rule: Rule, magnitude: Decimal) -> bool:
     return True
 
 
-def categorize(description: str, amount: Decimal, rules: list[Rule]) -> tuple[str, str]:
+def categorize(
+    description: str, amount: Decimal, txn_type: TransactionType, rules: list[Rule]
+) -> tuple[str, str]:
     """Return the ``(category, subcategory)`` of the first matching rule.
 
     Only ``field == "description"`` rules are evaluated (see
     ``app.models.rule``'s note on other field values, not yet
-    implemented). A rule additionally needs ``amount``'s magnitude
-    (``abs``, so callers pass the ledger's signed amount directly rather
-    than pre-``abs``ing it themselves) to fall within its
-    ``min_amount``/``max_amount`` bounds, if it sets either — this is
-    what lets one description pattern split into different rules by
-    amount (e.g. a gas station chain that also sells groceries/car
-    washes: a big fill-up vs. a small in-store purchase). Candidates are
-    tried highest ``priority`` first, with ties keeping their original
-    relative order. Returns ``("", "")`` when no rule matches or none
-    exist — the caller decides the fallback (see
+    implemented). A rule additionally needs:
+
+    - ``amount``'s magnitude (``abs``, so callers pass the ledger's
+      signed amount directly rather than pre-``abs``ing it themselves)
+      to fall within its ``min_amount``/``max_amount`` bounds, if it
+      sets either — this is what lets one description pattern split
+      into different rules by amount (e.g. a gas station chain that
+      also sells groceries/car washes: a big fill-up vs. a small
+      in-store purchase).
+    - ``txn_type`` to equal its own ``type``, if it sets one — a
+      magnitude alone can't tell an expense from an income of the same
+      size (a 150 outflow and a 150 refund both have ``abs(amount) ==
+      150``), so this is the other half of disambiguating a shared
+      pattern. ``txn_type`` should never be ``TRANSFER`` (callers skip
+      those before calling this at all — see
+      ``plan_reclassification``); a rule's own ``type`` should never be
+      ``TRANSFER`` either (see ``app.models.rule``), so that value
+      never actually participates in the comparison in practice.
+
+    Candidates are tried highest ``priority`` first, with ties keeping
+    their original relative order. Returns ``("", "")`` when no rule
+    matches or none exist — the caller decides the fallback (see
     ``services.importer.DEFAULT_CATEGORY``).
     """
     candidates = sorted(
@@ -76,6 +90,8 @@ def categorize(description: str, amount: Decimal, rules: list[Rule]) -> tuple[st
     )
     magnitude = abs(amount)
     for rule in candidates:
+        if rule.type is not None and rule.type is not txn_type:
+            continue
         if not _amount_matches(rule, magnitude):
             continue
         if _compile(rule).search(description):
@@ -98,6 +114,7 @@ class ReclassificationChange:
     date: date_
     account_id: str
     description: str
+    amount: Decimal
     old_category: str
     old_subcategory: str
     new_category: str
@@ -121,7 +138,7 @@ def plan_reclassification(
     for txn in transactions:
         if txn.type is TransactionType.TRANSFER:
             continue
-        category, subcategory = categorize(txn.description, txn.amount, rules)
+        category, subcategory = categorize(txn.description, txn.amount, txn.type, rules)
         if not category:
             continue
         if category == txn.category and subcategory == txn.subcategory:
@@ -132,6 +149,7 @@ def plan_reclassification(
                 date=txn.date,
                 account_id=txn.account_id,
                 description=txn.description,
+                amount=txn.amount,
                 old_category=txn.category,
                 old_subcategory=txn.subcategory,
                 new_category=category,

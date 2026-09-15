@@ -27,6 +27,13 @@
       <input type="text" name="max_amount" value="{{ values.max_amount }}" placeholder="no maximum">
     </label>
   </div>
+  <label>Type (optional — an amount alone can't tell an expense from an income of the same size)
+    <select name="type">
+      <option value="" {{ 'selected' if not values.type }}>Either</option>
+      <option value="income" {{ 'selected' if values.type == 'income' }}>Income only</option>
+      <option value="expense" {{ 'selected' if values.type == 'expense' }}>Expense only</option>
+    </select>
+  </label>
   <label>Priority (higher runs first, breaks ties between matching rules)
     <input type="number" name="priority" value="{{ values.priority }}" step="1">
   </label>

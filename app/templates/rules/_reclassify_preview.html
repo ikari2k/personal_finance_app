@@ -8,7 +8,7 @@
   <div class="table-scroll">
     <table>
       <thead>
-        <tr><th>Date</th><th>Account</th><th>Description</th><th>Current</th><th>New</th></tr>
+        <tr><th>Date</th><th>Account</th><th>Description</th><th>Amount</th><th>Current</th><th>New</th></tr>
       </thead>
       <tbody>
         {% for change in changes %}
@@ -16,6 +16,9 @@
             <td>{{ change.date }}</td>
             <td>{{ accounts[change.account_id].name if change.account_id in accounts else change.account_id }}</td>
             <td>{{ change.description }}</td>
+            <td class="{{ 'amount-negative' if change.amount < 0 else 'amount-positive' }}">
+              {{ "%.2f"|format(change.amount) }}
+            </td>
             <td>{{ change.old_category }}{% if change.old_subcategory %} / {{ change.old_subcategory }}{% endif %}</td>
             <td>{{ change.new_category }}{% if change.new_subcategory %} / {{ change.new_subcategory }}{% endif %}</td>
           </tr>

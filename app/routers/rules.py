@@ -18,6 +18,7 @@ from fastapi.responses import HTMLResponse
 
 from app.models.category import CategoriesByType
 from app.models.rule import Rule
+from app.models.transaction import TransactionType
 from app.routers.htmx_events import toast
 from app.services.categorizer import (
     ReclassificationChange,
@@ -122,9 +123,36 @@ def _parse_amount_bound(raw: str, field_name: str) -> Decimal | None:
     return value
 
 
+def _parse_rule_type(raw: str) -> TransactionType | None:
+    """Parse the rule form's Type select; blank means "either income or expense".
+
+    The select only ever offers "", "income", or "expense", but this
+    still validates rather than trusting the client: any other value
+    (including "transfer" — a rule pinned to it would be permanently
+    unreachable, since rules never run against transfers in the first
+    place, see ``app.models.rule``) raises loudly instead of silently
+    saving a dead rule.
+    """
+    raw = raw.strip()
+    if not raw:
+        return None
+    try:
+        txn_type = TransactionType(raw)
+    except ValueError as exc:
+        raise ValueError(f"invalid type '{raw}'") from exc
+    if txn_type is TransactionType.TRANSFER:
+        raise ValueError("type cannot be transfer — rules never match transfers")
+    return txn_type
+
+
 def _validate_rule(
-    pattern: str, category: str, priority: str, min_amount: str, max_amount: str
-) -> tuple[int, Decimal | None, Decimal | None]:
+    pattern: str,
+    category: str,
+    priority: str,
+    min_amount: str,
+    max_amount: str,
+    txn_type: str,
+) -> tuple[int, Decimal | None, Decimal | None, TransactionType | None]:
     """Validate a submitted rule; returns parsed fields or raises ``ValueError``.
 
     Regex compile-checked here, at save time — CLAUDE.md's "regex rules
@@ -139,7 +167,8 @@ def _validate_rule(
     max_value = _parse_amount_bound(max_amount, "maximum amount")
     if min_value is not None and max_value is not None and min_value > max_value:
         raise ValueError("minimum amount cannot be greater than maximum amount")
-    return priority_value, min_value, max_value
+    type_value = _parse_rule_type(txn_type)
+    return priority_value, min_value, max_value, type_value
 
 
 @router.get("", response_class=HTMLResponse)
@@ -163,6 +192,7 @@ def new_rule_form(request: Request) -> HTMLResponse:
             "priority": "0",
             "min_amount": "",
             "max_amount": "",
+            "type": "",
         },
     )
 
@@ -184,6 +214,7 @@ def edit_rule_form(request: Request, index: int) -> HTMLResponse:
             "priority": str(rule.priority),
             "min_amount": str(rule.min_amount) if rule.min_amount is not None else "",
             "max_amount": str(rule.max_amount) if rule.max_amount is not None else "",
+            "type": rule.type.value if rule.type is not None else "",
         },
     )
 
@@ -197,6 +228,7 @@ def create_rule(
     priority: str = Form("0"),
     min_amount: str = Form(""),
     max_amount: str = Form(""),
+    type: str = Form(""),
 ) -> HTMLResponse:
     """Create a new rule; close the dialog and refresh the table on success."""
     values = {
@@ -206,10 +238,11 @@ def create_rule(
         "priority": priority,
         "min_amount": min_amount,
         "max_amount": max_amount,
+        "type": type,
     }
     try:
-        priority_value, min_value, max_value = _validate_rule(
-            pattern, category, priority, min_amount, max_amount
+        priority_value, min_value, max_value, type_value = _validate_rule(
+            pattern, category, priority, min_amount, max_amount, type
         )
     except ValueError as exc:
         return _render_form(request, index=None, values=values, error=str(exc))
@@ -222,6 +255,7 @@ def create_rule(
             priority=priority_value,
             min_amount=min_value,
             max_amount=max_value,
+            type=type_value,
         )
     )
     write_rules(rules)
@@ -240,6 +274,7 @@ def update_rule(
     priority: str = Form("0"),
     min_amount: str = Form(""),
     max_amount: str = Form(""),
+    type: str = Form(""),
 ) -> HTMLResponse:
     """Update an existing rule; close the dialog and refresh the table on success."""
     values = {
@@ -249,13 +284,14 @@ def update_rule(
         "priority": priority,
         "min_amount": min_amount,
         "max_amount": max_amount,
+        "type": type,
     }
     rules = read_rules()
     if index < 0 or index >= len(rules):
         return HTMLResponse("Rule not found", status_code=404)
     try:
-        priority_value, min_value, max_value = _validate_rule(
-            pattern, category, priority, min_amount, max_amount
+        priority_value, min_value, max_value, type_value = _validate_rule(
+            pattern, category, priority, min_amount, max_amount, type
         )
     except ValueError as exc:
         return _render_form(request, index=index, values=values, error=str(exc))
@@ -266,6 +302,7 @@ def update_rule(
         priority=priority_value,
         min_amount=min_value,
         max_amount=max_value,
+        type=type_value,
     )
     write_rules(rules)
     return _render_table(
@@ -303,6 +340,7 @@ def preview_reclassification(request: Request) -> HTMLResponse:
                 "date": change.date.isoformat(),
                 "account_id": change.account_id,
                 "description": change.description,
+                "amount": str(change.amount),
                 "old_category": change.old_category,
                 "old_subcategory": change.old_subcategory,
                 "new_category": change.new_category,
@@ -342,6 +380,7 @@ def apply_reclassification_route(
             date=date_.fromisoformat(raw["date"]),
             account_id=raw["account_id"],
             description=raw["description"],
+            amount=Decimal(raw["amount"]),
             old_category=raw["old_category"],
             old_subcategory=raw["old_subcategory"],
             new_category=raw["new_category"],

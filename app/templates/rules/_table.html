@@ -8,7 +8,7 @@
     <table class="rules-table">
       <thead>
         <tr>
-          <th>Pattern</th><th>Category</th><th>Subcategory</th><th>Amount range</th><th>Priority</th>
+          <th>Pattern</th><th>Category</th><th>Subcategory</th><th>Amount range</th><th>Type</th><th>Priority</th>
         </tr>
       </thead>
       <tbody>
@@ -41,6 +41,7 @@
                 ≤ {{ "%.2f"|format(rule.max_amount) }}
               {% endif %}
             </td>
+            <td>{{ rule.type.value|capitalize if rule.type else '—' }}</td>
             <td>{{ rule.priority }}</td>
           </tr>
         {% endfor %}

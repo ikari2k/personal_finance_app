@@ -3,6 +3,7 @@
 from decimal import Decimal
 
 from app.models.rule import Rule
+from app.models.transaction import TransactionType
 from app.storage.rules import read_rules, write_rules
 
 
@@ -57,3 +58,26 @@ def test_read_rules_tolerates_a_file_written_before_amount_bounds_existed(tmp_pa
     assert loaded.pattern == "ZABKA"
     assert loaded.min_amount is None
     assert loaded.max_amount is None
+    assert loaded.type is None
+
+
+def test_write_then_read_round_trips_type(tmp_path):
+    path = tmp_path / "rules.toml"
+    rules = [
+        Rule(pattern="ORLEN", category="Fuel", type=TransactionType.EXPENSE),
+        Rule(pattern="ORLEN", category="Refund", type=TransactionType.INCOME),
+    ]
+
+    write_rules(rules, path)
+
+    assert read_rules(path) == rules
+
+
+def test_write_then_read_round_trips_unset_type_as_none(tmp_path):
+    path = tmp_path / "rules.toml"
+    rules = [Rule(pattern="ZABKA", category="Groceries")]
+
+    write_rules(rules, path)
+    [loaded] = read_rules(path)
+
+    assert loaded.type is None

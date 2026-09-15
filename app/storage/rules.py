@@ -7,10 +7,14 @@ and the Phase 4 bulk-reclassification rule-management UI.
 same reasoning as ``Account.starting_balance`` (see that module's
 docstring): ``tomli_w`` would otherwise serialize a ``Decimal`` as an
 imprecise TOML float literal, and ``tomllib`` reads it back as a lossy
-Python ``float``. An empty string means "no bound", parsed back to
-``None`` rather than raising trying to build a ``Decimal`` from "" — this
-is also why rules can't just round-trip through ``Rule(**entry)``/
-``rule.model_dump()`` directly the way simpler models can.
+Python ``float``. ``type`` is a quoted string too (its own enum value,
+e.g. ``"income"``), for consistency with the same "empty string means
+unset" convention, even though it isn't a float-precision risk itself.
+An empty string means "no bound"/"no type filter", parsed back to
+``None`` rather than raising trying to build a ``Decimal``/
+``TransactionType`` from "" — this is also why rules can't just
+round-trip through ``Rule(**entry)``/``rule.model_dump()`` directly the
+way simpler models can.
 """
 
 import tomllib
@@ -22,6 +26,7 @@ import tomli_w
 
 from app import config
 from app.models.rule import Rule
+from app.models.transaction import TransactionType
 from app.storage.lock import file_lock
 
 
@@ -35,18 +40,20 @@ def _to_dict(rule: Rule) -> dict[str, str | int]:
         "priority": rule.priority,
         "min_amount": str(rule.min_amount) if rule.min_amount is not None else "",
         "max_amount": str(rule.max_amount) if rule.max_amount is not None else "",
+        "type": rule.type.value if rule.type is not None else "",
     }
 
 
 def _from_dict(entry: dict) -> Rule:
-    """Build a ``Rule`` from one TOML table, parsing its amount bounds.
+    """Build a ``Rule`` from one TOML table, parsing its amount bounds and type.
 
     ``entry.get(..., "")`` covers a rules.toml written before
-    ``min_amount``/``max_amount`` existed — a missing key means "no
-    bound", same as an explicit empty string.
+    ``min_amount``/``max_amount``/``type`` existed — a missing key means
+    "no bound"/"no type filter", same as an explicit empty string.
     """
     min_amount = entry.get("min_amount", "")
     max_amount = entry.get("max_amount", "")
+    txn_type = entry.get("type", "")
     return Rule(
         pattern=entry["pattern"],
         field=entry.get("field", "description"),
@@ -55,6 +62,7 @@ def _from_dict(entry: dict) -> Rule:
         priority=entry.get("priority", 0),
         min_amount=Decimal(min_amount) if min_amount else None,
         max_amount=Decimal(max_amount) if max_amount else None,
+        type=TransactionType(txn_type) if txn_type else None,
     )
 
 

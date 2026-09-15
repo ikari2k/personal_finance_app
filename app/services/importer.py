@@ -221,7 +221,8 @@ def build_transactions(
     """
     transactions = []
     for row in rows:
-        category, subcategory = categorize(row.description, row.amount, rules)
+        txn_type = TransactionType.EXPENSE if row.amount < 0 else TransactionType.INCOME
+        category, subcategory = categorize(row.description, row.amount, txn_type, rules)
         transactions.append(
             Transaction(
                 id=str(uuid.uuid4()),
@@ -231,9 +232,7 @@ def build_transactions(
                 subcategory=subcategory,
                 description=row.description,
                 amount=row.amount,
-                type=TransactionType.EXPENSE
-                if row.amount < 0
-                else TransactionType.INCOME,
+                type=txn_type,
                 transfer_id=None,
                 notes=None,
             )

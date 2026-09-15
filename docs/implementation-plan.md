@@ -717,6 +717,28 @@ unit-testable without touching disk. `routers/` stays thin — HTTP/HTMX glue on
   → 7, merging same-outcome patterns with regex alternation) confirmed against real ledger rows
   that the merged patterns categorize identically to the originals.
 
+- [x] **Post-Phase-4 addendum #2 — rule type filter + preview amount column**: a magnitude alone
+  can't tell an expense from an income of the same size (a 150 outflow and a 150 refund both have
+  `abs(amount) == 150`), so `Rule` gained an optional `type` (`TransactionType.INCOME`/`.EXPENSE`/
+  `None` for "either") — never `TRANSFER`, rejected at both the model-adjacent validation layer
+  (`app.routers.rules._parse_rule_type`) and implicitly by never being offered in the Type select,
+  since a rule pinned to it would be permanently unreachable (rules never run against transfers).
+  `categorize` now takes the row's actual `TransactionType` (importer derives it from amount sign
+  before calling in; reclassification already has `txn.type`) and requires it to equal a rule's
+  own `type` when one is set, checked before the pattern/amount-bound checks. Stored in
+  `config/rules.toml` as a quoted enum-value string, same "empty means unset" convention as the
+  amount bounds. Separately, `ReclassificationChange` gained an `amount` field, threaded through
+  the JSON preview payload the same way every other field already was, so the reclassify-preview
+  diff table shows each row's amount — requested after the amount/type rule splits made "what
+  would this actually match" harder to eyeball from category names alone. *Verified*: unit tests
+  for `categorize`'s type matching (pinned-to-income/pinned-to-expense on both an income and an
+  expense, unset matches either, splitting one pattern+magnitude by type) and
+  `app.storage.rules`/`plan_reclassification` round-tripping; integration tests for rule-type
+  validation (persists, blank matches either, transfer rejected, unrecognized value rejected) and
+  the reclassify preview showing both the amount and the type-filtered result; a live check
+  confirmed a `min_amount`-bound expense-only "Fuel" rule and an income-only "Fuel refund" rule
+  sharing one pattern correctly picked "Fuel" (not "Fuel refund") for a matching expense row.
+
 - [x] **Phase 5 — Reporting & visualization**: `/reports` (net worth over time + annual
   income/expense summary with a YoY delta) and `/reports/{year}` (monthly breakdown with a MoM
   delta that chains across year boundaries, plus income/expense category/subcategory totals with
