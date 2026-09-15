@@ -986,9 +986,23 @@ fieldset legend {
 
 .ring-fill {
   fill: none;
-  stroke: var(--pico-del-color);
   stroke-width: 3;
   stroke-linecap: round;
+}
+
+/* Three tiers, matching _ring_geometry's thresholds: green under 75%,
+ * amber (the same amber as the categories page's own budget-exceeds
+ * warning) from 75-99%, red at/over 100%. */
+.utilization-under .ring-fill {
+  stroke: var(--pico-ins-color);
+}
+
+.utilization-warning .ring-fill {
+  stroke: #b45309;
+}
+
+.utilization-over .ring-fill {
+  stroke: var(--pico-del-color);
 }
 
 .utilization-pct {
@@ -997,8 +1011,8 @@ fieldset legend {
 }
 
 /* Over 100%: the ring itself is already capped at a full closed loop
- * (see _ring_geometry's docstring), so the only visual left to signal
- * "over budget" is the percentage text itself. */
+ * (see _ring_geometry's docstring), so the only other visual left to
+ * signal "over budget" is bolding the percentage text itself. */
 .utilization-over .utilization-pct {
   color: var(--pico-del-color);
   font-weight: 600;
@@ -1013,7 +1027,7 @@ fieldset legend {
 }
 
 /* The month-matrix table's Category column stays pinned while the rest
- * scrolles horizontally underneath it — each amount+ring cell is wide
+ * scrolls horizontally underneath it — each amount+ring cell is wide
  * enough that a year's worth of months can outgrow the viewport, and
  * losing sight of which row you're looking at while scrolling right
  * would defeat the table's whole point. A solid background matching
@@ -1025,4 +1039,5 @@ fieldset legend {
   left: 0;
   background: var(--pico-background-color);
   z-index: 1;
+  white-space: nowrap;
 }

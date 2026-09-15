@@ -70,7 +70,7 @@
                   <span class="budget-cell-row">
                     <span class="budget-amount">{{ "%.2f"|format(cell.amount) if cell.amount else "—" }}</span>
                     {% if cell.ring %}
-                      <span class="utilization{{ ' utilization-over' if cell.ring.over }}">
+                      <span class="utilization utilization-{{ cell.ring.tier }}">
                         <svg width="16" height="16" viewBox="0 0 20 20" class="utilization-ring">
                           <circle cx="10" cy="10" r="7" class="ring-track"/>
                           <circle cx="10" cy="10" r="7" class="ring-fill"

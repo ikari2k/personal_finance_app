@@ -731,21 +731,25 @@ unit-testable without touching disk. `routers/` stays thin — HTTP/HTMX glue on
   against the category/subcategory's own single configured budget (there's no per-month budget in
   `config/categories.toml`), capped at a full closed ring past 100% of budget with the exact
   percentage always shown as text since the ring alone can't distinguish 100% from 300%. No ring
-  at all (not a 0% ring) means no budget is set for that category/subcategory. Amount and ring sit
-  on one line per cell after a request to keep them adjacent rather than stacked, which widens the
-  table enough that its Category column needed pinning via `position: sticky`
-  (`.month-matrix-table th/td:first-child`) so scrolling right through a year's months doesn't
-  lose track of which row is which. *Verified*: 32 new aggregation unit tests (YoY/MoM delta
-  computation including the December→January boundary case, category/subcategory grouping and
-  sorting, transfer-leg cancellation in the net worth series, the category-month matrix's
-  zero-fill behavior, subcategory-monthly-totals grouping) and 15 new router integration tests
+  at all (not a 0% ring) means no budget is set for that category/subcategory. A fifth round added
+  three color tiers instead of one flat color: green under 75% (`.utilization-under`), amber
+  75-99% (`.utilization-warning`, the same amber as the categories page's own budget-exceeds
+  warning), red at/over 100% (`.utilization-over`, also bolded there). Amount and ring sit on one
+  line per cell after a request to keep them adjacent rather than stacked, which widens the table
+  enough that its Category column needed pinning via `position: sticky`
+  (`.month-matrix-table th/td:first-child`, also `white-space: nowrap` so a long category name
+  can't wrap and break the sticky column's row height) so scrolling right through a year's months
+  doesn't lose track of which row is which. *Verified*: 32 new aggregation unit tests (YoY/MoM
+  delta computation including the December→January boundary case, category/subcategory grouping
+  and sorting, transfer-leg cancellation in the net worth series, the category-month matrix's
+  zero-fill behavior, subcategory-monthly-totals grouping) and 16 new router integration tests
   including the combined chart's axis/bar geometry, the category-icon lookup, the month-matrix
-  table, and budget-utilization rings for both categories and subcategories including the
-  over-budget case (`tests/unit/test_aggregation.py`, `tests/integration/test_reports_router.py`);
-  full suite 301 passing; a live manual check against a throwaway isolated ledger (never the real
-  project data) confirmed the combined chart, the annual/year drill-down tables and icons, the
-  month-to-month matrix, and the budget-utilization rings (including an over-100% case and the
-  sticky-column scroll behavior) all rendered correctly.
+  table, and all three budget-utilization tiers for both categories and subcategories
+  (`tests/unit/test_aggregation.py`, `tests/integration/test_reports_router.py`); full suite 302
+  passing; a live manual check against a throwaway isolated ledger (never the real project data)
+  confirmed the combined chart, the annual/year drill-down tables and icons, the month-to-month
+  matrix, all three utilization-ring color tiers, the no-wrap sticky category column, and the
+  scroll behavior all rendered correctly.
 
 - [ ] **Phase 6 — Launcher & polish**: `scripts/launch.py` (starts uvicorn bound to
   `127.0.0.1`, waits for readiness, opens browser via `webbrowser`), error-handling pass across

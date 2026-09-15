@@ -211,7 +211,22 @@ def test_year_detail_shows_utilization_ring_for_a_budgeted_category(client):
 
     assert response.status_code == 200
     assert "utilization-ring" in response.text
+    assert "utilization-under" in response.text
     assert "50% of budget" in response.text
+
+
+def test_year_detail_utilization_warning_tier_between_75_and_99_pct(client):
+    client.post("/categories/expense", data={"name": "Groceries", "budget": "100.00"})
+    _create_account(client)
+    _create_transaction(
+        client, date="2026-01-15", type="expense", category="Groceries", amount="80"
+    )
+
+    response = client.get("/reports/2026")
+
+    assert response.status_code == 200
+    assert "utilization-warning" in response.text
+    assert "80% of budget" in response.text
 
 
 def test_year_detail_over_budget_month_flags_utilization_over(client):

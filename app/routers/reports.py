@@ -88,17 +88,26 @@ def _ring_geometry(amount: Decimal, budget: Decimal | None) -> dict | None:
     at 211% of budget still draws one full, closed ring, not a
     double-wound one) — the exact percentage is still shown as text
     alongside it, so going over budget stays visible even though the
-    ring itself maxes out.
+    ring itself maxes out. ``tier`` drives the ring/text color: "under"
+    (<75%, green), "warning" (75-99%, amber — the same amber already
+    used for the categories page's own budget-exceeds warning), "over"
+    (>=100%, red).
     """
     if not budget:
         return None
     pct = float(amount / budget * 100)
     fraction = min(pct, 100) / 100
     dash = _RING_CIRCUMFERENCE * fraction
+    if pct >= 100:
+        tier = "over"
+    elif pct >= 75:
+        tier = "warning"
+    else:
+        tier = "under"
     return {
         "dash": dash,
         "gap": _RING_CIRCUMFERENCE - dash,
-        "over": pct >= 100,
+        "tier": tier,
         "pct_label": f"{pct:.0f}%",
     }
 

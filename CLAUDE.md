@@ -67,11 +67,14 @@ utilization ring next to each budgeted category/subcategory's monthly amount —
 spend as a fraction of its own single configured budget (`app.routers.reports._ring_geometry`;
 `config/categories.toml` has one budget per category, not a separate one per month), capped at a
 full closed ring past 100% with the exact (possibly >100%) percentage always shown as text
-alongside it, and a bolded/colored percentage once at or over budget. No ring at all means "no
-budget set" — distinct from a ring at 0%, "budgeted but nothing spent yet". Amount and ring sit
-on one line per cell (`.budget-cell-row`), which widens the table enough that its Category column
-is pinned via `position: sticky` (`.month-matrix-table th/td:first-child`) while the month columns
-scroll underneath — otherwise scrolling right to see later months loses track of which row is
+alongside it. Three color tiers, not one: green under 75%, amber (the same amber as the
+categories page's own budget-exceeds warning) 75-99%, red at/over 100% (also bolded there, since
+the ring alone can't distinguish 100% from 300%). No ring at all means "no budget set" — distinct
+from a ring at 0%, "budgeted but nothing spent yet". Amount and ring sit on one line per cell
+(`.budget-cell-row`), which widens the table enough that its Category column is pinned via
+`position: sticky` (`.month-matrix-table th/td:first-child`, also `white-space: nowrap` so a long
+category name doesn't wrap and break the sticky column's height) while the month columns scroll
+underneath — otherwise scrolling right to see later months loses track of which row is
 which. All of it reads through `services/aggregation.py`, extended with
 `yearly_totals_with_yoy`/`monthly_totals_with_mom`/`category_breakdown`/`category_monthly_totals`/
 `net_worth_by_month` alongside the existing month/type grouping — one shared group-by layer, not
