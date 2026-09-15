@@ -46,18 +46,20 @@ set: every rule always applies both to future imports (already automatic since P
 this manual reclassify run — no per-rule opt-out, a deliberate scope decision to avoid a schema
 change beyond the finalized `config/rules.toml` shape. Transfers and non-matching rows are never
 touched (a non-match must never blank out an existing category). Phase 5 (reporting &
-visualization) is also complete: a `/reports` page (net worth over time as an inline server-
-rendered SVG line chart with a value-axis (gridlines + tick labels, not just first/last text
-below the chart) — no vendored JS charting library, a deliberate deviation from the original plan
-doc, kept swappable later since the chart data and its SVG rendering are separate functions —
-plus a paired income/expense bar chart per year (magnitudes, both rising from a shared zero
-baseline, colored via the same `--pico-ins-color`/`--pico-del-color` convention as
-`.amount-positive`/`.amount-negative`) and an annual income/expense summary table with a
-year-over-year delta) and
-`/reports/{year}` drill-down (monthly income/expense/net breakdown with a month-over-month delta
-that chains correctly across a year boundary, plus income/expense category-and-subcategory
-totals with a year-over-year delta per category). All of it reads through `services/
-aggregation.py`, extended with `yearly_totals_with_yoy`/`monthly_totals_with_mom`/
+visualization) is also complete: a `/reports` page with one combined net worth chart — a line
+(cumulative net worth, monthly) with paired income/expense bars on the same shared axis, plus a
+value-axis fixed at every 5,000 starting from 0 (not a data-driven min/max range — round numbers
+you can read at a glance) — rendered as inline SVG (`app.routers.reports._svg_net_worth_chart`),
+no vendored JS charting library (a deliberate deviation from the original plan doc, kept
+swappable later since the chart data and its SVG rendering are separate functions), plus an
+annual income/expense summary table with a year-over-year delta. `/reports/{year}` drill-down
+adds monthly income/expense/net breakdown with a month-over-month delta that chains correctly
+across a year boundary, plus income/expense category-and-subcategory totals with a year-over-year
+delta per category — each category/subcategory row shows its configured icon (looked up from
+`config/categories.toml` in the router, since the pure ledger-only aggregation layer has no
+knowledge of category config; blank when unset), reusing the same compact inline
+`.cat-cell-icon`/`category_icon()` convention as the transactions list. All of it reads through
+`services/aggregation.py`, extended with `yearly_totals_with_yoy`/`monthly_totals_with_mom`/
 `category_breakdown`/`net_worth_by_month` alongside the existing month/type grouping — one
 shared group-by layer, not one-off per-view logic. Known simplification: subcategory-level YoY
 isn't computed, only category-level (see the module docstring). See `docs/implementation-plan.md`

@@ -6,6 +6,11 @@
   <article>
     <h2>Net worth over time</h2>
     {% if chart.has_data %}
+      <p class="chart-legend">
+        <span class="chart-legend-swatch bar-income"></span> Income
+        <span class="chart-legend-swatch bar-expense"></span> Expense
+        <span class="chart-legend-swatch line-net-worth"></span> Net worth
+      </p>
       <svg viewBox="0 0 {{ chart.width }} {{ chart.height }}" class="net-worth-chart"
            role="img" aria-label="Net worth over time">
         {% for tick in chart.y_ticks %}
@@ -14,42 +19,9 @@
           <text x="{{ chart.plot_left - 8 }}" y="{{ tick.y }}" class="chart-axis-label"
                 text-anchor="end" dominant-baseline="middle">{{ tick.label }}</text>
         {% endfor %}
-        {% if chart.zero_y is not none %}
-          <line x1="{{ chart.plot_left }}" y1="{{ chart.zero_y }}" x2="{{ chart.plot_right }}" y2="{{ chart.zero_y }}"
-                class="chart-zero-line"/>
-        {% endif %}
-        <path d="{{ chart.path_d }}" class="chart-line"/>
-        {% for x, y in chart.coords %}
-          <circle cx="{{ x }}" cy="{{ y }}" r="3" class="chart-point">
-            <title>{{ chart.labels[loop.index0] }}: {{ chart.value_labels[loop.index0] }}</title>
-          </circle>
-        {% endfor %}
-      </svg>
-      <p class="chart-range muted">
-        <span>{{ chart.labels[0] }}: {{ chart.value_labels[0] }}</span>
-        <span>{{ chart.labels[-1] }}: {{ chart.value_labels[-1] }}</span>
-      </p>
-    {% else %}
-      <p>No transactions yet.</p>
-    {% endif %}
-  </article>
-
-  <article>
-    <h2>Income vs. expense by year</h2>
-    {% if bar_chart.has_data %}
-      <p class="chart-legend">
-        <span class="chart-legend-swatch bar-income"></span> Income
-        <span class="chart-legend-swatch bar-expense"></span> Expense
-      </p>
-      <svg viewBox="0 0 {{ bar_chart.width }} {{ bar_chart.height }}" class="net-worth-chart"
-           role="img" aria-label="Income vs. expense by year">
-        {% for tick in bar_chart.y_ticks %}
-          <line x1="{{ bar_chart.plot_left }}" y1="{{ tick.y }}" x2="{{ bar_chart.plot_right }}" y2="{{ tick.y }}"
-                class="chart-gridline"/>
-          <text x="{{ bar_chart.plot_left - 8 }}" y="{{ tick.y }}" class="chart-axis-label"
-                text-anchor="end" dominant-baseline="middle">{{ tick.label }}</text>
-        {% endfor %}
-        {% for bar in bar_chart.bars %}
+        <line x1="{{ chart.plot_left }}" y1="{{ chart.zero_y }}" x2="{{ chart.plot_right }}" y2="{{ chart.zero_y }}"
+              class="chart-zero-line"/>
+        {% for bar in chart.bars %}
           <rect x="{{ bar.income_x }}" y="{{ bar.income_y }}" width="{{ bar.bar_width }}"
                 height="{{ bar.income_h }}" class="bar-income">
             <title>{{ bar.label }} income: {{ bar.income_label }}</title>
@@ -58,10 +30,18 @@
                 height="{{ bar.expense_h }}" class="bar-expense">
             <title>{{ bar.label }} expense: {{ bar.expense_label }}</title>
           </rect>
-          <text x="{{ bar.label_x }}" y="{{ bar_chart.plot_bottom + 16 }}" class="chart-axis-label"
-                text-anchor="middle">{{ bar.label }}</text>
+        {% endfor %}
+        <path d="{{ chart.path_d }}" class="chart-line"/>
+        {% for x, y in chart.coords %}
+          <circle cx="{{ x }}" cy="{{ y }}" r="3" class="chart-point">
+            <title>{{ chart.labels[loop.index0] }} net worth: {{ chart.net_worth_labels[loop.index0] }}</title>
+          </circle>
         {% endfor %}
       </svg>
+      <p class="chart-range muted">
+        <span>{{ chart.labels[0] }}: {{ chart.net_worth_labels[0] }}</span>
+        <span>{{ chart.labels[-1] }}: {{ chart.net_worth_labels[-1] }}</span>
+      </p>
     {% else %}
       <p>No transactions yet.</p>
     {% endif %}

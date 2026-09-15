@@ -927,6 +927,11 @@ fieldset legend {
   background-color: var(--pico-del-color);
 }
 
+.chart-legend-swatch.line-net-worth {
+  background-color: var(--pico-primary);
+  border-radius: 50%;
+}
+
 .chart-range {
   display: flex;
   justify-content: space-between;

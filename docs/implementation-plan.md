@@ -701,21 +701,28 @@ unit-testable without touching disk. `routers/` stays thin — HTTP/HTMX glue on
   needed the way `group_by_month_and_type`'s `net_total` needs for its per-type subtotals.
   MoM/YoY comparisons are at the category level only, not subcategory (a deliberate scope cut
   from the PRD's literal "category and subcategory" wording, to avoid a second nested comparison
-  pass for comparatively little value). Follow-up polish in the same phase: the net worth chart
-  gained a proper value axis (three gridlines at max/mid/min with tick labels via
-  `_svg_line_chart`'s `y_ticks`, rather than only the first/last text line below the chart), and a
-  second chart — `_svg_bar_chart` — was added for a paired income/expense-by-year comparison,
-  reusing `yearly_totals_with_yoy`'s data on the same overview page rather than a new aggregation
-  function; both totals plot as magnitudes rising from a shared zero baseline (mixing a signed
-  expense total with an unsigned bar height would read wrong) and share the same green/red
-  (`--pico-ins-color`/`--pico-del-color`) convention as `.amount-positive`/`.amount-negative`
-  everywhere else in the app. *Verified*: 28 new aggregation unit tests (YoY/MoM delta computation
-  including the December→January boundary case, category/subcategory grouping and sorting,
-  transfer-leg cancellation in the net worth series) and 8 new router integration tests including
-  the axis/bar-chart geometry (`tests/unit/test_aggregation.py`,
-  `tests/integration/test_reports_router.py`); full suite 287 passing; a live manual check against
-  a throwaway isolated ledger (never the real project data) confirmed both charts' axes, bars, and
-  the annual/year drill-down tables all rendered correctly.
+  pass for comparatively little value). Follow-up polish in the same phase, landed in two rounds:
+  a standalone yearly income/expense bar chart was tried first, then **merged into the net worth
+  chart itself** on request — one combined chart (`app.routers.reports._svg_net_worth_chart`)
+  with monthly income/expense bars (magnitudes rising from a shared zero baseline — mixing a
+  signed expense total with an unsigned bar height would read wrong) sitting behind the net worth
+  line, all on one shared axis, since a separate yearly-granularity chart didn't line up with the
+  line's monthly x-axis. The axis itself is fixed at every 5,000 starting from 0
+  (`_tick_bounds`), not a data-driven min/max range, per explicit request — round numbers readable
+  at a glance rather than values that happen to line up with the data. Bars and line share the
+  same green/red/`--pico-primary` convention as `.amount-positive`/`.amount-negative` elsewhere.
+  Separately, the year-detail category breakdown tables gained each category/subcategory's
+  configured icon (`app.routers.reports._category_icons`, looked up from
+  `config/categories.toml` since the pure ledger aggregation has no knowledge of category
+  config), reusing the transactions list's compact inline `.cat-cell-icon`/`category_icon()`
+  convention rather than the categories page's larger card-style glyph slot. *Verified*: 28 new
+  aggregation unit tests (YoY/MoM delta computation including the December→January boundary case,
+  category/subcategory grouping and sorting, transfer-leg cancellation in the net worth series)
+  and 10 new router integration tests including the combined chart's axis/bar geometry and the
+  category-icon lookup (`tests/unit/test_aggregation.py`, `tests/integration/
+  test_reports_router.py`); full suite 289 passing; a live manual check against a throwaway
+  isolated ledger (never the real project data) confirmed the combined chart's axis, bars, and
+  line, plus the annual/year drill-down tables and icons, all rendered correctly.
 
 - [ ] **Phase 6 — Launcher & polish**: `scripts/launch.py` (starts uvicorn bound to
   `127.0.0.1`, waits for readiness, opens browser via `webbrowser`), error-handling pass across
