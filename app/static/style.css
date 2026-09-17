@@ -1048,3 +1048,92 @@ fieldset legend {
   z-index: 1;
   white-space: nowrap;
 }
+
+/* Month drill-down: spending pie chart, plain inline SVG (see
+ * app/routers/reports.py's _svg_pie_chart — same "no vendored JS
+ * charting library" reasoning as the net worth chart above). Fixed
+ * hex colors per slot (not Pico variables — Pico only exposes a
+ * positive/negative pair, not ten-plus distinct categorical hues) in
+ * a fixed order, same "assign identity by fixed order" convention as
+ * any categorical series; "Other" gets its own muted gray. Every
+ * slice is also named in the legend list and via its own <title>
+ * tooltip, so identity never depends on telling two similar hues
+ * apart by eye alone. */
+.pie-chart-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2rem;
+}
+
+.pie-chart {
+  width: min(100%, 360px);
+  height: auto;
+  aspect-ratio: 1 / 1;
+  flex: 0 0 auto;
+}
+
+.pie-chart path {
+  stroke: var(--pico-background-color);
+  stroke-width: 2;
+}
+
+.pie-slice-label {
+  fill: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  text-anchor: middle;
+  dominant-baseline: middle;
+  pointer-events: none;
+}
+
+.pie-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.pie-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pie-legend-swatch {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 0.8rem;
+  height: 0.8rem;
+  border-radius: 2px;
+}
+
+.pie-legend-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pie-legend-value {
+  flex: 0 0 auto;
+  color: var(--pico-muted-color);
+  font-size: 0.9rem;
+}
+
+.pie-slice-0, .pie-legend-swatch.pie-slice-0 { fill: #2a78d6; background-color: #2a78d6; }
+.pie-slice-1, .pie-legend-swatch.pie-slice-1 { fill: #eb6834; background-color: #eb6834; }
+.pie-slice-2, .pie-legend-swatch.pie-slice-2 { fill: #1baf7a; background-color: #1baf7a; }
+.pie-slice-3, .pie-legend-swatch.pie-slice-3 { fill: #eda100; background-color: #eda100; }
+.pie-slice-4, .pie-legend-swatch.pie-slice-4 { fill: #e87ba4; background-color: #e87ba4; }
+.pie-slice-5, .pie-legend-swatch.pie-slice-5 { fill: #008300; background-color: #008300; }
+.pie-slice-6, .pie-legend-swatch.pie-slice-6 { fill: #4a3aa7; background-color: #4a3aa7; }
+.pie-slice-7, .pie-legend-swatch.pie-slice-7 { fill: #e34948; background-color: #e34948; }
+.pie-slice-8, .pie-legend-swatch.pie-slice-8 { fill: #0d366b; background-color: #0d366b; }
+.pie-slice-9, .pie-legend-swatch.pie-slice-9 { fill: #7a4b1e; background-color: #7a4b1e; }
+.pie-slice-other, .pie-legend-swatch.pie-slice-other { fill: var(--pico-muted-border-color); background-color: var(--pico-muted-border-color); }

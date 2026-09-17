@@ -16,10 +16,10 @@ this function and the template, not ``services.aggregation``'s data.
 """
 
 import math
-from calendar import month_abbr
+from calendar import month_abbr, month_name
 from decimal import Decimal
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
 from app.models.category import CategoriesByType
@@ -28,6 +28,7 @@ from app.services.aggregation import (
     CategoryTotal,
     category_breakdown,
     category_monthly_totals,
+    category_totals_for_month,
     monthly_totals_with_mom,
     net_worth_by_month,
     subcategory_monthly_totals,
@@ -334,6 +335,119 @@ def _svg_net_worth_chart(
     }
 
 
+# Fixed-order categorical colors for the spending pie chart's top slices —
+# same "assign identity by fixed order, never cycle" convention as any
+# other categorical series in the app. "Other" (the collapsed tail past
+# the top-N slices) always gets its own muted gray instead of the next
+# hue in line, since it isn't one category's identity. Every slice is
+# also named in the accompanying legend and via an SVG <title> tooltip,
+# so identity never depends on telling two similar hues apart by eye
+# alone.
+_PIE_SLICE_COLORS = [
+    "#2a78d6",  # blue
+    "#eb6834",  # orange
+    "#1baf7a",  # aqua
+    "#eda100",  # yellow
+    "#e87ba4",  # magenta
+    "#008300",  # green
+    "#4a3aa7",  # violet
+    "#e34948",  # red
+    "#0d366b",  # deep blue
+    "#7a4b1e",  # brown
+]
+
+
+def _svg_pie_chart(
+    items: list[tuple[str, Decimal]], *, limit: int = 10, size: int = 220
+) -> dict:
+    """Return template-ready SVG geometry for a top-``limit``-plus-"Other" pie chart.
+
+    ``items`` is ``(category_name, amount)`` pairs, already sorted by
+    amount descending (as ``category_totals_for_month`` returns them) —
+    magnitudes, not signed, same convention as the rest of the category
+    breakdown views. Categories past ``limit`` are collapsed into one
+    "Other" slice rather than growing the palette indefinitely (a 15th
+    distinct hue stops being reliably distinguishable at a glance either
+    way — see ``_PIE_SLICE_COLORS``). Returns ``{"has_data": False}`` for
+    no data or a zero total. A lone 100% slice is drawn as two joined
+    semicircle arcs, since a single SVG arc command can't describe a
+    full circle (its start and end point would coincide).
+    """
+    items = [(name, amount) for name, amount in items if amount > 0]
+    if not items:
+        return {"has_data": False}
+
+    top = items[:limit]
+    rest = items[limit:]
+    if rest:
+        top.append(("Other", sum((amount for _, amount in rest), Decimal("0"))))
+
+    total = sum((amount for _, amount in top), Decimal("0"))
+    if total <= 0:
+        return {"has_data": False}
+
+    cx = cy = size / 2
+    radius = size / 2 - 4
+
+    def point(angle_deg: float) -> tuple[float, float]:
+        angle = math.radians(angle_deg)
+        return cx + radius * math.cos(angle), cy + radius * math.sin(angle)
+
+    slices = []
+    angle = -90.0  # 12 o'clock, sweeping clockwise
+    for index, (name, amount) in enumerate(top):
+        fraction = float(amount / total)
+        end_angle = angle + fraction * 360
+        is_other = rest and name == "Other"
+        css_class = (
+            "pie-slice-other"
+            if is_other
+            else f"pie-slice-{index % len(_PIE_SLICE_COLORS)}"
+        )
+
+        if len(top) == 1:
+            mid = angle + 180
+            x1, y1 = point(angle)
+            xm, ym = point(mid)
+            x2, y2 = point(end_angle)
+            path_d = (
+                f"M {cx:.2f},{cy:.2f} L {x1:.2f},{y1:.2f} "
+                f"A {radius:.2f},{radius:.2f} 0 1 1 {xm:.2f},{ym:.2f} "
+                f"A {radius:.2f},{radius:.2f} 0 1 1 {x2:.2f},{y2:.2f} Z"
+            )
+        else:
+            x1, y1 = point(angle)
+            x2, y2 = point(end_angle)
+            large_arc = 1 if (end_angle - angle) > 180 else 0
+            path_d = (
+                f"M {cx:.2f},{cy:.2f} L {x1:.2f},{y1:.2f} "
+                f"A {radius:.2f},{radius:.2f} 0 {large_arc} 1 {x2:.2f},{y2:.2f} Z"
+            )
+
+        pct = fraction * 100
+        label_x, label_y = point((angle + end_angle) / 2) if fraction < 1 else (cx, cy)
+        # Blend label point 65% of the way from center to the slice's own
+        # arc point, so the percentage sits inside the wedge, not on its edge.
+        label_x = cx + (label_x - cx) * 0.65
+        label_y = cy + (label_y - cy) * 0.65
+
+        slices.append(
+            {
+                "path_d": path_d,
+                "css_class": css_class,
+                "label": name,
+                "amount": amount,
+                "pct_label": f"{pct:.0f}%",
+                "show_label": pct >= 6,
+                "label_x": label_x,
+                "label_y": label_y,
+            }
+        )
+        angle = end_angle
+
+    return {"has_data": True, "size": size, "slices": slices, "total": total}
+
+
 @router.get("", response_class=HTMLResponse)
 def reports_overview(request: Request) -> HTMLResponse:
     """Render the reports landing page: net worth chart + annual summary."""
@@ -414,5 +528,38 @@ def year_detail(request: Request, year: int) -> HTMLResponse:
                 expense_config,
                 month_keys,
             ),
+        },
+    )
+
+
+@router.get("/{year}/{month}", response_class=HTMLResponse)
+def month_detail(request: Request, year: int, month: int) -> HTMLResponse:
+    """Render one month's spending pie chart and income/expense category breakdown."""
+    if not 1 <= month <= 12:
+        raise HTTPException(status_code=404, detail="Invalid month")
+
+    transactions = read_ledger()
+    categories = read_categories()
+    expense_breakdown = category_totals_for_month(
+        transactions, year, month, TransactionType.EXPENSE
+    )
+    income_breakdown = category_totals_for_month(
+        transactions, year, month, TransactionType.INCOME
+    )
+    spending_pie = _svg_pie_chart([(cat.name, cat.total) for cat in expense_breakdown])
+    income_config = _category_config(categories, TransactionType.INCOME)
+    expense_config = _category_config(categories, TransactionType.EXPENSE)
+    return templates.TemplateResponse(
+        request,
+        "reports/month.html",
+        {
+            "year": year,
+            "month": month,
+            "label": f"{month_name[month]} {year}",
+            "spending_pie": spending_pie,
+            "income_breakdown": income_breakdown,
+            "expense_breakdown": expense_breakdown,
+            "income_config": income_config,
+            "expense_config": expense_config,
         },
     )

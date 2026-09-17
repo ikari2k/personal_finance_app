@@ -384,6 +384,75 @@ def category_breakdown(
     return sorted(result, key=lambda c: c.total, reverse=True)
 
 
+def _category_totals_for_month(
+    transactions: Iterable[Transaction],
+    year: int,
+    month: int,
+    txn_type: TransactionType,
+) -> dict[str, dict[str, _CategoryAccumulator]]:
+    """Return ``{category: {subcategory: accumulator}}`` for one month and type."""
+    totals: dict[str, dict[str, _CategoryAccumulator]] = defaultdict(
+        lambda: defaultdict(_CategoryAccumulator)
+    )
+    for transaction in transactions:
+        if (
+            transaction.type is not txn_type
+            or transaction.date.year != year
+            or transaction.date.month != month
+        ):
+            continue
+        bucket = totals[transaction.category][transaction.subcategory]
+        bucket.total += abs(transaction.amount)
+        bucket.count += 1
+    return totals
+
+
+def category_totals_for_month(
+    transactions: Iterable[Transaction],
+    year: int,
+    month: int,
+    txn_type: TransactionType,
+) -> list[CategoryTotal]:
+    """Return one calendar month's ``txn_type`` transactions broken down by category.
+
+    The month-scoped counterpart to ``category_breakdown`` — same shape
+    (sorted by total descending, each category carrying its own
+    subcategory breakdown), but for one month instead of a year and with
+    no prior-period comparison (``yoy_delta`` is always ``None`` — a
+    month drill-down has nothing analogous to "same month last year"
+    computed yet). Backs the ``/reports/{year}/{month}`` drill-down's
+    spending pie chart and its income/expense-by-category tables. Raises
+    on ``TRANSFER``, same as ``category_breakdown``.
+    """
+    if txn_type is TransactionType.TRANSFER:
+        raise ValueError("transfers have no category breakdown")
+
+    totals = _category_totals_for_month(transactions, year, month, txn_type)
+    result = []
+    for category, subs in totals.items():
+        total = sum((bucket.total for bucket in subs.values()), Decimal("0"))
+        count = sum(bucket.count for bucket in subs.values())
+        subcategories = sorted(
+            (
+                SubcategoryTotal(name=name, total=bucket.total, count=bucket.count)
+                for name, bucket in subs.items()
+                if name
+            ),
+            key=lambda s: s.total,
+            reverse=True,
+        )
+        result.append(
+            CategoryTotal(
+                name=category,
+                total=total,
+                count=count,
+                yoy_delta=None,
+                subcategories=subcategories,
+            )
+        )
+    return sorted(result, key=lambda c: c.total, reverse=True)
+
+
 def category_monthly_totals(
     transactions: Iterable[Transaction], year: int, txn_type: TransactionType
 ) -> dict[str, dict[str, Decimal]]:

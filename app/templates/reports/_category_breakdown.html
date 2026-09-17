@@ -1,9 +1,9 @@
 {% from "_category_icons.html" import category_icon %}
-{% macro breakdown_table(breakdown, config, txn_type) %}
+{% macro breakdown_table(breakdown, config, txn_type, delta_label=none) %}
   {% if breakdown %}
     <div class="table-scroll">
       <table class="breakdown-table">
-        <thead><tr><th>Category</th><th>Total</th><th># Txns</th><th>vs. prior year</th></tr></thead>
+        <thead><tr><th>Category</th><th>Total</th><th># Txns</th>{% if delta_label %}<th>{{ delta_label }}</th>{% endif %}</tr></thead>
         <tbody>
           {% for cat in breakdown %}
             {% set cat_icon = config.get(cat.name, {}).get('icon', '') %}
@@ -16,15 +16,17 @@
               </td>
               <td>{{ "%.2f"|format(cat.total) }}</td>
               <td>{{ cat.count }}</td>
-              <td>
-                {% if cat.yoy_delta is not none %}
-                  <span class="{{ 'amount-negative' if cat.yoy_delta < 0 else 'amount-positive' }}">
-                    {{ '+' if cat.yoy_delta >= 0 else '' }}{{ "%.2f"|format(cat.yoy_delta) }}
-                  </span>
-                {% else %}
-                  —
-                {% endif %}
-              </td>
+              {% if delta_label %}
+                <td>
+                  {% if cat.yoy_delta is not none %}
+                    <span class="{{ 'amount-negative' if cat.yoy_delta < 0 else 'amount-positive' }}">
+                      {{ '+' if cat.yoy_delta >= 0 else '' }}{{ "%.2f"|format(cat.yoy_delta) }}
+                    </span>
+                  {% else %}
+                    —
+                  {% endif %}
+                </td>
+              {% endif %}
             </tr>
             {% for sub in cat.subcategories %}
               {% set sub_icon = config.get(cat.name, {}).get('subcategories', {}).get(sub.name, {}).get('icon', '') %}
@@ -37,12 +39,40 @@
                 </td>
                 <td>{{ "%.2f"|format(sub.total) }}</td>
                 <td>{{ sub.count }}</td>
-                <td></td>
+                {% if delta_label %}<td></td>{% endif %}
               </tr>
             {% endfor %}
           {% endfor %}
         </tbody>
       </table>
+    </div>
+  {% else %}
+    <p>No data.</p>
+  {% endif %}
+{% endmacro %}
+
+{% macro pie_chart(chart) %}
+  {% if chart.has_data %}
+    <div class="pie-chart-wrap">
+      <svg viewBox="0 0 {{ chart.size }} {{ chart.size }}" class="pie-chart" role="img" aria-label="Category breakdown pie chart">
+        {% for slice in chart.slices %}
+          <path d="{{ slice.path_d }}" class="{{ slice.css_class }}">
+            <title>{{ slice.label }}: {{ "%.2f"|format(slice.amount) }} ({{ slice.pct_label }})</title>
+          </path>
+          {% if slice.show_label %}
+            <text x="{{ slice.label_x }}" y="{{ slice.label_y }}" class="pie-slice-label">{{ slice.pct_label }}</text>
+          {% endif %}
+        {% endfor %}
+      </svg>
+      <ul class="pie-legend">
+        {% for slice in chart.slices %}
+          <li class="pie-legend-item">
+            <span class="pie-legend-swatch {{ slice.css_class }}"></span>
+            <span class="pie-legend-label">{{ slice.label }}</span>
+            <span class="pie-legend-value">{{ "%.2f"|format(slice.amount) }} ({{ slice.pct_label }})</span>
+          </li>
+        {% endfor %}
+      </ul>
     </div>
   {% else %}
     <p>No data.</p>

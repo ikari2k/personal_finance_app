@@ -15,7 +15,7 @@
         <tbody>
           {% for m in months %}
             <tr>
-              <td>{{ m.label }}</td>
+              <td><a href="/reports/{{ year }}/{{ (m.key.split('-')[1])|int }}">{{ m.label }}</a></td>
               <td class="amount-positive">{{ "%.2f"|format(m.income_total) }}</td>
               <td class="amount-negative">{{ "%.2f"|format(m.expense_total) }}</td>
               <td class="{{ 'amount-negative' if m.net_total < 0 else 'amount-positive' }}">
@@ -42,11 +42,11 @@
   <div class="report-columns">
     <div>
       <h2>Income by category</h2>
-      {{ breakdown_table(income_breakdown, income_config, "income") }}
+      {{ breakdown_table(income_breakdown, income_config, "income", "vs. prior year") }}
     </div>
     <div>
       <h2>Expense by category</h2>
-      {{ breakdown_table(expense_breakdown, expense_config, "expense") }}
+      {{ breakdown_table(expense_breakdown, expense_config, "expense", "vs. prior year") }}
     </div>
   </div>
 
