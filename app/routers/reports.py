@@ -448,12 +448,32 @@ def _svg_pie_chart(
     return {"has_data": True, "size": size, "slices": slices, "total": total}
 
 
+def _filter_by_account(transactions: list, account_id: str) -> list:
+    """Filter the ledger to one account before aggregating, or return it unchanged.
+
+    Same "filter before aggregating" convention as the transactions
+    list's own account filter (CLAUDE.md) — every figure on a report
+    page should reflect just the filtered account's activity, not the
+    whole ledger with irrelevant rows hidden after the fact. Transfer
+    legs are kept, not excluded — a transfer leg still moves money into
+    or out of the filtered account, so it belongs in that account's own
+    net worth/income/expense figures even though it nets to zero
+    combined across every account.
+    """
+    if not account_id:
+        return transactions
+    return [t for t in transactions if t.account_id == account_id]
+
+
 @router.get("", response_class=HTMLResponse)
-def reports_overview(request: Request) -> HTMLResponse:
+def reports_overview(request: Request, account_id: str = "") -> HTMLResponse:
     """Render the reports landing page: net worth chart + annual summary."""
-    transactions = read_ledger()
     accounts = read_accounts()
-    net_worth_points = net_worth_by_month(transactions, accounts)
+    transactions = _filter_by_account(read_ledger(), account_id)
+    net_worth_accounts = (
+        [a for a in accounts if a.id == account_id] if account_id else accounts
+    )
+    net_worth_points = net_worth_by_month(transactions, net_worth_accounts)
     monthly_totals = {
         month.key: month for month in monthly_totals_with_mom(transactions)
     }
@@ -470,14 +490,22 @@ def reports_overview(request: Request) -> HTMLResponse:
     )
     years = yearly_totals_with_yoy(transactions)
     return templates.TemplateResponse(
-        request, "reports/list.html", {"years": years, "chart": chart}
+        request,
+        "reports/list.html",
+        {
+            "years": years,
+            "chart": chart,
+            "accounts": accounts,
+            "account_id": account_id,
+        },
     )
 
 
 @router.get("/{year}", response_class=HTMLResponse)
-def year_detail(request: Request, year: int) -> HTMLResponse:
+def year_detail(request: Request, year: int, account_id: str = "") -> HTMLResponse:
     """Render one year's monthly breakdown and income/expense category drill-down."""
-    transactions = read_ledger()
+    accounts = read_accounts()
+    transactions = _filter_by_account(read_ledger(), account_id)
     categories = read_categories()
     income_breakdown = category_breakdown(transactions, year, TransactionType.INCOME)
     expense_breakdown = category_breakdown(transactions, year, TransactionType.EXPENSE)
@@ -508,6 +536,8 @@ def year_detail(request: Request, year: int) -> HTMLResponse:
         "reports/year.html",
         {
             "year": year,
+            "accounts": accounts,
+            "account_id": account_id,
             "months": months,
             "month_labels": month_labels,
             "income_breakdown": income_breakdown,
@@ -533,12 +563,15 @@ def year_detail(request: Request, year: int) -> HTMLResponse:
 
 
 @router.get("/{year}/{month}", response_class=HTMLResponse)
-def month_detail(request: Request, year: int, month: int) -> HTMLResponse:
+def month_detail(
+    request: Request, year: int, month: int, account_id: str = ""
+) -> HTMLResponse:
     """Render one month's spending pie chart and income/expense category breakdown."""
     if not 1 <= month <= 12:
         raise HTTPException(status_code=404, detail="Invalid month")
 
-    transactions = read_ledger()
+    accounts = read_accounts()
+    transactions = _filter_by_account(read_ledger(), account_id)
     categories = read_categories()
     expense_breakdown = category_totals_for_month(
         transactions, year, month, TransactionType.EXPENSE
@@ -555,6 +588,8 @@ def month_detail(request: Request, year: int, month: int) -> HTMLResponse:
         {
             "year": year,
             "month": month,
+            "accounts": accounts,
+            "account_id": account_id,
             "label": f"{month_name[month]} {year}",
             "spending_pie": spending_pie,
             "income_breakdown": income_breakdown,

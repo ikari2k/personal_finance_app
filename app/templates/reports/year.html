@@ -1,9 +1,11 @@
 {% extends "base.html" %}
 {% from "reports/_category_breakdown.html" import breakdown_table, month_matrix_table %}
+{% from "reports/_account_filter.html" import account_filter %}
 {% block title %}{{ year }} — Reports — Finance Tracker{% endblock %}
 {% block content %}
-  <p><a href="/reports">&larr; Back to reports</a></p>
+  <p><a href="/reports{{ '?account_id=' + account_id if account_id }}">&larr; Back to reports</a></p>
   <h1>{{ year }}</h1>
+  {{ account_filter(accounts, account_id) }}
 
   <h2>Monthly breakdown</h2>
   {% if months %}
@@ -15,7 +17,7 @@
         <tbody>
           {% for m in months %}
             <tr>
-              <td><a href="/reports/{{ year }}/{{ (m.key.split('-')[1])|int }}">{{ m.label }}</a></td>
+              <td><a href="/reports/{{ year }}/{{ (m.key.split('-')[1])|int }}{{ '?account_id=' + account_id if account_id }}">{{ m.label }}</a></td>
               <td class="amount-positive">{{ "%.2f"|format(m.income_total) }}</td>
               <td class="amount-negative">{{ "%.2f"|format(m.expense_total) }}</td>
               <td class="{{ 'amount-negative' if m.net_total < 0 else 'amount-positive' }}">

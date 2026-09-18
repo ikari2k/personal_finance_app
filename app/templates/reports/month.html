@@ -1,9 +1,11 @@
 {% extends "base.html" %}
 {% from "reports/_category_breakdown.html" import breakdown_table, pie_chart %}
+{% from "reports/_account_filter.html" import account_filter %}
 {% block title %}{{ label }} — Reports — Finance Tracker{% endblock %}
 {% block content %}
-  <p><a href="/reports/{{ year }}">&larr; Back to {{ year }}</a></p>
+  <p><a href="/reports/{{ year }}{{ '?account_id=' + account_id if account_id }}">&larr; Back to {{ year }}</a></p>
   <h1>{{ label }}</h1>
+  {{ account_filter(accounts, account_id) }}
 
   <h2>Top spending categories</h2>
   {{ pie_chart(spending_pie) }}

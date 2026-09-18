@@ -1,7 +1,9 @@
 {% extends "base.html" %}
+{% from "reports/_account_filter.html" import account_filter %}
 {% block title %}Reports — Finance Tracker{% endblock %}
 {% block content %}
   <h1>Reports</h1>
+  {{ account_filter(accounts, account_id) }}
 
   <article>
     <h2>Net worth over time</h2>
@@ -57,7 +59,7 @@
         <tbody>
           {% for y in years %}
             <tr>
-              <td><a href="/reports/{{ y.year }}">{{ y.year }}</a></td>
+              <td><a href="/reports/{{ y.year }}{{ '?account_id=' + account_id if account_id }}">{{ y.year }}</a></td>
               <td class="amount-positive">{{ "%.2f"|format(y.income_total) }}</td>
               <td class="amount-negative">{{ "%.2f"|format(y.expense_total) }}</td>
               <td class="{{ 'amount-negative' if y.net_total < 0 else 'amount-positive' }}">
