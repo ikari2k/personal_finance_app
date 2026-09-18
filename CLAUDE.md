@@ -120,8 +120,33 @@ the annual breakdown table — a large total from many small transactions reads 
 from the same total via one big one. That table's Category column also gets `white-space:
 nowrap` (`.breakdown-table th/td:first-child`) since it sits in a half-width `.report-columns`
 cell narrow enough that a long name would otherwise wrap; wrapped in `.table-scroll` so the whole
-table scrolls horizontally instead if it doesn't fit. See `docs/implementation-plan.md` for the
-full phased plan, finalized schemas, and per-phase status checkboxes/implementation notes.
+table scrolls horizontally instead if it doesn't fit. Two more post-Phase-5 addenda followed. A
+`/reports/{year}/{month}` drill-down (reached by clicking a month name in the year page's Monthly
+breakdown table) adds a spending pie chart — the month's top 10 expense categories, everything past
+that folded into one "Other" slice — plus Income-by-category/Expense-by-category tables for that
+month, via a new `services.aggregation.category_totals_for_month` and an inline-SVG
+`_svg_pie_chart` in `app.routers.reports` (same no-JS-library convention as the net worth chart).
+All three report views (`/reports`, `/reports/{year}`, `/reports/{year}/{month}`) also gained an
+`account_id` query-param filter (filtering the ledger before aggregating, same convention as the
+transactions list's own account filter) via a plain GET form — not htmx, since picking an account
+reshapes the whole page rather than one fragment — whose selection propagates through every link
+between the three views. Separately, transfer detection: an optional
+`counterparty_account`/`counterparty_account_fallback` import-mapping column pair (see "Core
+architecture" below) captures a bank's own counterparty-account-number column at import time, and a
+new `/import` "Detect transfers" preview-then-apply dialog cross-references that against the user's
+registered accounts to find existing income/expense row pairs that are secretly a transfer between
+two of the user's own accounts, merging a user-confirmed subset into proper linked transfer pairs
+(`services.transactions.find_transfer_matches`/`merge_into_transfer`/`apply_transfer_matches`) — see
+the "Imported CSV rows..." invariant below for why this is trusted enough to automate where a plain
+amount/date guess still isn't. A follow-up addendum then surfaced transfer activity on the reports
+pages themselves: the annual summary (`/reports`) and monthly breakdown (`/reports/{year}`) tables
+each gained a "Transfers" column — `YearlyTotal`/`MonthlyTotal` (`services.aggregation`) now also
+carry `transfer_volume`, the same "total volume moved" magnitude convention as
+`TypeGroup.subtotal`'s transfer handling elsewhere (`sum(abs(amount)) / 2`), purely informational
+and never folded into `income_total`/`expense_total`/`net_total` or their YoY/MoM deltas. A year
+with transfers but no income/expense now gets a row too (previously dropped entirely), so its volume
+has somewhere to show. See `docs/implementation-plan.md` for the full phased plan, finalized
+schemas, and per-phase status checkboxes/implementation notes.
 
 **Work proceeds one phase at a time.** Each phase in `docs/implementation-plan.md` is a discrete,
 separately-reviewable unit — implement it, verify it, stop, and update docs (this file plus the
@@ -423,19 +448,28 @@ module itself.
   .new_transfer_pair`). Editable by hand, via settings UI, or on the fly during transaction
   entry/import (`services.transactions.ensure_category` adds to the correct bucket by type,
   starting with no icon/budget). No automatic dedup — the app does not tidy this up.
-- `data/ledger.csv` — single flat file, one row per transaction, columns (finalized order):
-  `id, date, account_id, category, subcategory, description, amount, type, transfer_id, notes`.
-  `amount` is a signed decimal string; `type` ∈ `income|expense|transfer`. This is the one file
-  the whole app revolves around.
+- `data/ledger.csv` — single flat file, one row per transaction, columns (finalized order, plus
+  one post-Phase-5 addendum column appended at the end so older files still read back fine —
+  see `storage.ledger._from_row`):
+  `id, date, account_id, category, subcategory, description, amount, type, transfer_id, notes,
+  counterparty_account`. `amount` is a signed decimal string; `type` ∈ `income|expense|transfer`.
+  `counterparty_account` is a raw, normalized bank account number captured at CSV-import time when
+  the bank's export names the other party (blank otherwise — manual entries never set it); see
+  `services.transactions.find_transfer_matches` below. This is the one file the whole app revolves
+  around.
 - `config/import_mappings/<bank_slug>.toml` (one file per bank, filename slugified from the
   `bank` field) — `bank, delimiter, encoding, date_format, decimal_separator`, plus `columns`:
   ledger field name → **0-based column index**, not column name (real bank exports can have
   duplicate header names — see `app.models.import_mapping`'s docstring). Required keys: `date`,
   `description`, `amount`; optional: `account_number` (filters a multi-account export down to the
-  destination account, matched against `Account.number`) and `description_fallback` (used only
-  when the primary `description` column is blank for a row). Captured once via the `/import`
-  setup wizard, reused automatically on every later import from that bank; viewable/editable/
-  deletable via `/import/mappings`.
+  destination account, matched against `Account.number`), `description_fallback` (used only
+  when the primary `description` column is blank for a row), and `counterparty_account`/
+  `counterparty_account_fallback` (same primary+fallback shape as `description_fallback` — a bank
+  typically splits sender vs. recipient account into two mutually-exclusive columns depending on
+  transaction direction; captured onto `Transaction.counterparty_account`, consumed later by
+  `services.transactions.find_transfer_matches`, never at import time itself). Captured once via
+  the `/import` setup wizard, reused automatically on every later import from that bank;
+  viewable/editable/deletable via `/import/mappings`.
 - `data/import_history.toml` — `[[imports]]` tables, one per confirmed import:
   `timestamp, bank, account_id, account_name, new_count, duplicate_count, filtered_count`.
   Append-only activity log, not configuration (hence `data/`, not `config/`) — each entry is an
@@ -463,12 +497,23 @@ module itself.
   automatically (non-blocking, warnings-only) on every startup. The on-demand "Check consistency"
   action still needs a router + UI — add it once a settings/reports router exists. Any change to
   transfer or account-reference logic should keep this check in mind.
-- **Imported CSV rows are always income or expense, never a transfer** — a bank export has no
-  reliable signal for "this outflow and that inflow are the same transfer" beyond amount/date
-  proximity, too fragile to guess automatically (`services.importer`'s module docstring). A
-  transfer between the user's own accounts simply imports as two independent rows. Amount sign
-  (negative/positive) maps directly to expense/income with no flipping — unlike manual entry,
-  which takes an unsigned magnitude plus an explicit type.
+- **Imported CSV rows are always income or expense at import time, never a transfer** — amount/date
+  proximity alone remains too fragile to guess a transfer pairing from automatically
+  (`services.importer`'s module docstring). Amount sign (negative/positive) maps directly to
+  expense/income with no flipping — unlike manual entry, which takes an unsigned magnitude plus an
+  explicit type. A transfer between the user's own accounts imports as two independent rows, exactly
+  as before — **but** a mapping can now optionally capture the bank's own counterparty-account-number
+  column (`counterparty_account`/`counterparty_account_fallback`), carried onto
+  `Transaction.counterparty_account` unchanged. A *separate*, explicitly-triggered, always-previewed
+  step — `services.transactions.find_transfer_matches`/`merge_into_transfer`/
+  `apply_transfer_matches`, behind `/import`'s "Detect transfers" dialog
+  (`app.routers.import_.preview_transfer_matches`/`apply_transfer_matches_route`) — cross-references
+  that captured number against every *registered* `Account.number` to find existing income/expense
+  row pairs that are secretly a transfer, and merges a user-confirmed subset of them (checkbox
+  per pair — a wrongly-merged transfer has no "split back apart" UI yet, so exclusion happens before
+  anything is written) into a proper linked transfer pair. This is a real account-number reference
+  the bank recorded, not an amount/date guess, which is why it's trusted enough to automate at all;
+  it never runs at import time itself, only afterward, on demand.
 - **Regex rules must fail loudly** on invalid patterns — compile-check at save time, never
   silently match zero rows at apply time. Implemented so far in `services.categorizer._compile`
   (raises on an invalid pattern when applying rules at import time); the save-time check belongs

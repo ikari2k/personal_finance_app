@@ -177,14 +177,23 @@ class YearlyTotal:
 
     ``income_total``/``expense_total`` are signed (income positive,
     expense negative — the app's own convention), so ``net_total`` is
-    their plain sum. ``yoy_delta`` compares ``net_total`` against the
-    previous calendar year's; ``None`` for the earliest year present
-    (nothing to compare against).
+    their plain sum — transfers contribute to neither (same reasoning as
+    ``group_by_month_and_type``'s ``net_total``: they move money between
+    the user's own accounts rather than gaining or losing it).
+    ``transfer_volume`` is a separate, purely informational figure — the
+    total amount moved via transfers that year, magnitude not signed,
+    same "total volume moved" convention as ``TypeGroup.subtotal`` for
+    transfers (``sum(abs(amount)) / 2``, halved to avoid double-counting
+    each pair's two legs). ``yoy_delta`` compares ``net_total`` against
+    the previous calendar year's; ``None`` for the earliest year present
+    (nothing to compare against) — never computed against
+    ``transfer_volume``, which isn't a gain/loss figure to begin with.
     """
 
     year: int
     income_total: Decimal
     expense_total: Decimal
+    transfer_volume: Decimal
     net_total: Decimal
     yoy_delta: Decimal | None
 
@@ -192,14 +201,14 @@ class YearlyTotal:
 def yearly_totals_with_yoy(transactions: Iterable[Transaction]) -> list[YearlyTotal]:
     """Return one ``YearlyTotal`` per year with activity, newest first.
 
-    Transfers are excluded — they move money between the user's own
-    accounts rather than gaining or losing it (same reasoning as
-    ``group_by_month_and_type``'s ``net_total``).
+    "Activity" now includes a year with transfers but no income/expense
+    at all — such a year still gets a row (income/expense/net all zero)
+    so its ``transfer_volume`` has somewhere to show; a year that
+    genuinely has no transactions of any kind still doesn't appear.
     """
     by_year: dict[int, list[Transaction]] = defaultdict(list)
     for transaction in transactions:
-        if transaction.type is not TransactionType.TRANSFER:
-            by_year[transaction.date.year].append(transaction)
+        by_year[transaction.date.year].append(transaction)
 
     results = []
     previous_net: Decimal | None = None
@@ -213,6 +222,17 @@ def yearly_totals_with_yoy(transactions: Iterable[Transaction]) -> list[YearlyTo
             (t.amount for t in year_transactions if t.type is TransactionType.EXPENSE),
             Decimal("0"),
         )
+        transfer_volume = (
+            sum(
+                (
+                    abs(t.amount)
+                    for t in year_transactions
+                    if t.type is TransactionType.TRANSFER
+                ),
+                Decimal("0"),
+            )
+            / 2
+        )
         net_total = income_total + expense_total
         yoy_delta = net_total - previous_net if previous_net is not None else None
         results.append(
@@ -220,6 +240,7 @@ def yearly_totals_with_yoy(transactions: Iterable[Transaction]) -> list[YearlyTo
                 year=year,
                 income_total=income_total,
                 expense_total=expense_total,
+                transfer_volume=transfer_volume,
                 net_total=net_total,
                 yoy_delta=yoy_delta,
             )
@@ -235,13 +256,16 @@ class MonthlyTotal:
     ``mom_delta`` compares ``net_total`` against the *chronologically*
     previous month across the whole ledger, not just within one
     calendar year — so January's delta is computed against the prior
-    December, not left blank at a year boundary.
+    December, not left blank at a year boundary. ``transfer_volume`` is
+    purely informational (same "total volume moved" convention as
+    ``YearlyTotal``'s) — never folded into ``net_total`` or ``mom_delta``.
     """
 
     key: str
     label: str
     income_total: Decimal
     expense_total: Decimal
+    transfer_volume: Decimal
     net_total: Decimal
     mom_delta: Decimal | None
 
@@ -261,6 +285,10 @@ def monthly_totals_with_mom(transactions: Iterable[Transaction]) -> list[Monthly
             (g.subtotal for g in month.groups if g.type is TransactionType.EXPENSE),
             Decimal("0"),
         )
+        transfer_volume = next(
+            (g.subtotal for g in month.groups if g.type is TransactionType.TRANSFER),
+            Decimal("0"),
+        )
         mom_delta = month.net_total - previous_net if previous_net is not None else None
         results.append(
             MonthlyTotal(
@@ -268,6 +296,7 @@ def monthly_totals_with_mom(transactions: Iterable[Transaction]) -> list[Monthly
                 label=month.label,
                 income_total=income_total,
                 expense_total=expense_total,
+                transfer_volume=transfer_volume,
                 net_total=month.net_total,
                 mom_delta=mom_delta,
             )

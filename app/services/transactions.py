@@ -6,12 +6,16 @@ build and validate new rows, and write the result back afterward.
 """
 
 import uuid
+from collections import defaultdict
 from collections.abc import Iterable
+from dataclasses import dataclass
 from datetime import date as date_
 from decimal import Decimal
 
+from app.models.account import Account
 from app.models.category import CategoriesByType
 from app.models.transaction import Transaction, TransactionType
+from app.services.importer import normalize_account_number
 
 
 def ensure_category(
@@ -304,3 +308,175 @@ def new_transfer_pair(
         notes=notes,
     )
     return outflow, inflow
+
+
+@dataclass
+class TransferMatch:
+    """One candidate pair of existing income/expense rows that look like a transfer.
+
+    Found by ``find_transfer_matches`` cross-referencing a row's
+    ``counterparty_account`` (a raw account number captured at CSV-import
+    time — see ``Transaction``'s docstring) against every *registered*
+    account's own ``Account.number`` — a specific, explicit reference the
+    bank itself recorded, not a guess. Both ids keep their original
+    ``Transaction.id`` unchanged; ``merge_into_transfer``/
+    ``apply_transfer_matches`` are what actually rewrite the ledger.
+    """
+
+    from_transaction_id: str
+    to_transaction_id: str
+    date: date_
+    from_account_id: str
+    to_account_id: str
+    amount: Decimal
+    from_description: str
+    to_description: str
+
+
+def find_transfer_matches(
+    transactions: Iterable[Transaction],
+    accounts: Iterable[Account],
+    *,
+    max_day_gap: int = 3,
+) -> list[TransferMatch]:
+    """Find existing income/expense row pairs that are secretly a transfer.
+
+    A row is a match *anchor* when its ``counterparty_account`` normalizes
+    (see ``app.services.importer.normalize_account_number``) to another
+    registered account's own ``Account.number`` — narrowing the search to
+    one specific counterparty account. Pairing to one specific row on
+    that account still needs an equal-and-opposite amount within
+    ``max_day_gap`` days of the anchor's own date (a transfer's two legs
+    routinely post a day or two apart on each side) — the *partner* row
+    doesn't need its own ``counterparty_account`` set, since only one
+    side of a real-world export reliably names the other account. Ties
+    (more than one same-amount row within the window) are broken by the
+    closest date. Already-linked transfer rows are never candidates
+    either as anchor or partner; each transaction is matched at most
+    once, processed in ``(date, id)`` order for determinism. Purely
+    additive to ``app.services.importer``'s "imported rows are always
+    income or expense" invariant — this runs as a separate, explicit,
+    always-previewed step against the ledger as it already stands, never
+    at import time.
+    """
+    account_by_number = {
+        normalize_account_number(account.number): account.id
+        for account in accounts
+        if account.number
+    }
+    non_transfer = [t for t in transactions if t.type is not TransactionType.TRANSFER]
+    by_account: dict[str, list[Transaction]] = defaultdict(list)
+    for txn in non_transfer:
+        by_account[txn.account_id].append(txn)
+
+    anchors = sorted(
+        (
+            txn
+            for txn in non_transfer
+            if txn.counterparty_account
+            and txn.counterparty_account in account_by_number
+        ),
+        key=lambda t: (t.date, t.id),
+    )
+
+    matched_ids: set[str] = set()
+    matches: list[TransferMatch] = []
+    for anchor in anchors:
+        if anchor.id in matched_ids:
+            continue
+        counterparty_account_id = account_by_number[anchor.counterparty_account]
+        if counterparty_account_id == anchor.account_id:
+            continue
+        best: Transaction | None = None
+        best_gap = None
+        for other in by_account.get(counterparty_account_id, []):
+            if other.id in matched_ids or other.id == anchor.id:
+                continue
+            if other.amount != -anchor.amount:
+                continue
+            gap = abs((other.date - anchor.date).days)
+            if gap > max_day_gap:
+                continue
+            if best is None or gap < best_gap:
+                best, best_gap = other, gap
+        if best is None:
+            continue
+        matched_ids.add(anchor.id)
+        matched_ids.add(best.id)
+        outflow, inflow = (anchor, best) if anchor.amount < 0 else (best, anchor)
+        matches.append(
+            TransferMatch(
+                from_transaction_id=outflow.id,
+                to_transaction_id=inflow.id,
+                date=outflow.date,
+                from_account_id=outflow.account_id,
+                to_account_id=inflow.account_id,
+                amount=-outflow.amount,
+                from_description=outflow.description,
+                to_description=inflow.description,
+            )
+        )
+    return matches
+
+
+def merge_into_transfer(
+    transactions: list[Transaction],
+    match: TransferMatch,
+    *,
+    category: str = "Transfer",
+    subcategory: str = "",
+) -> list[Transaction]:
+    """Return ``transactions`` with ``match``'s two rows linked into one transfer.
+
+    Each row keeps its own ``id``, ``date``, ``account_id``, ``amount``,
+    and ``description`` — only ``type``, ``category``/``subcategory``,
+    and the new shared ``transfer_id`` change. Raises ``ValueError`` if
+    either row no longer exists or is already a transfer leg (deleted or
+    merged since the match was computed — mirrors
+    ``update_transfer_pair``'s same guard).
+    """
+    by_id = {t.id: t for t in transactions}
+    outflow = by_id.get(match.from_transaction_id)
+    inflow = by_id.get(match.to_transaction_id)
+    if outflow is None or inflow is None:
+        raise ValueError(
+            "transfer match references a transaction that no longer exists"
+        )
+    if (
+        outflow.type is TransactionType.TRANSFER
+        or inflow.type is TransactionType.TRANSFER
+    ):
+        raise ValueError("transfer match references a row that's already a transfer")
+
+    transfer_id = uuid.uuid4().hex
+    updates = {
+        "type": TransactionType.TRANSFER,
+        "category": category,
+        "subcategory": subcategory,
+        "transfer_id": transfer_id,
+    }
+    replacements = {
+        outflow.id: outflow.model_copy(update=updates),
+        inflow.id: inflow.model_copy(update=updates),
+    }
+    return [replacements.get(t.id, t) for t in transactions]
+
+
+def apply_transfer_matches(
+    transactions: list[Transaction], matches: Iterable[TransferMatch]
+) -> list[Transaction]:
+    """Return ``transactions`` with every one of ``matches`` merged into a transfer.
+
+    Applies ``merge_into_transfer`` one match at a time; a match
+    referencing a row that's been deleted or already merged since
+    preview is silently skipped rather than failing the whole batch
+    (mirrors ``apply_reclassification``'s same stale-reference
+    tolerance).
+    """
+    result = list(transactions)
+    for match in matches:
+        try:
+            result = merge_into_transfer(result, match)
+        except ValueError:
+            continue
+    return result

@@ -5,9 +5,14 @@ from decimal import Decimal
 
 import pytest
 
+from app.models.account import Account
 from app.models.transaction import Transaction, TransactionType
 from app.services.transactions import (
+    TransferMatch,
+    apply_transfer_matches,
     ensure_category,
+    find_transfer_matches,
+    merge_into_transfer,
     new_transaction,
     new_transfer_pair,
     remove_transaction,
@@ -463,3 +468,217 @@ def test_update_transfer_pair_rejects_non_positive_amount():
             date=date(2026, 1, 1),
             amount=Decimal("0"),
         )
+
+
+ACCOUNTS = [
+    Account(id="chk", name="Checking", number="111 222", starting_balance=Decimal("0")),
+    Account(id="sav", name="Savings", number="333 444", starting_balance=Decimal("0")),
+    Account(id="cc", name="Card", number="555 666", starting_balance=Decimal("0")),
+]
+
+
+def test_find_transfer_matches_pairs_by_counterparty_account():
+    out = _txn(
+        id="a",
+        account_id="chk",
+        amount=Decimal("-50"),
+        counterparty_account="333444",
+    )
+    inn = _txn(id="b", account_id="sav", amount=Decimal("50"))
+
+    [match] = find_transfer_matches([out, inn], ACCOUNTS)
+
+    assert match.from_transaction_id == "a"
+    assert match.to_transaction_id == "b"
+    assert match.from_account_id == "chk"
+    assert match.to_account_id == "sav"
+    assert match.amount == Decimal("50")
+
+
+def test_find_transfer_matches_respects_max_day_gap():
+    out = _txn(
+        id="a",
+        account_id="chk",
+        date=date(2026, 1, 1),
+        amount=Decimal("-50"),
+        counterparty_account="333444",
+    )
+    inn = _txn(id="b", account_id="sav", date=date(2026, 1, 10), amount=Decimal("50"))
+
+    assert find_transfer_matches([out, inn], ACCOUNTS) == []
+    [match] = find_transfer_matches([out, inn], ACCOUNTS, max_day_gap=30)
+    assert match.from_transaction_id == "a"
+
+
+def test_find_transfer_matches_ignores_unregistered_counterparty():
+    out = _txn(
+        id="a", account_id="chk", amount=Decimal("-50"), counterparty_account="999999"
+    )
+    inn = _txn(id="b", account_id="sav", amount=Decimal("50"))
+
+    assert find_transfer_matches([out, inn], ACCOUNTS) == []
+
+
+def test_find_transfer_matches_skips_existing_transfer_rows():
+    out = _txn(
+        id="a",
+        account_id="chk",
+        amount=Decimal("-50"),
+        counterparty_account="333444",
+        type=TransactionType.TRANSFER,
+        transfer_id="existing",
+    )
+    inn = _txn(
+        id="b",
+        account_id="sav",
+        amount=Decimal("50"),
+        type=TransactionType.TRANSFER,
+        transfer_id="existing",
+    )
+
+    assert find_transfer_matches([out, inn], ACCOUNTS) == []
+
+
+def test_find_transfer_matches_does_not_pair_a_row_with_itself():
+    # counterparty_account happens to resolve to the row's own account.
+    solo = _txn(
+        id="a", account_id="chk", amount=Decimal("-50"), counterparty_account="111222"
+    )
+
+    assert find_transfer_matches([solo], ACCOUNTS) == []
+
+
+def test_find_transfer_matches_matches_each_row_at_most_once():
+    out = _txn(
+        id="a", account_id="chk", amount=Decimal("-50"), counterparty_account="333444"
+    )
+    inn1 = _txn(id="b", account_id="sav", amount=Decimal("50"))
+    inn2 = _txn(id="c", account_id="sav", amount=Decimal("50"))
+
+    matches = find_transfer_matches([out, inn1, inn2], ACCOUNTS)
+
+    assert len(matches) == 1
+    assert matches[0].to_transaction_id in {"b", "c"}
+
+
+def test_merge_into_transfer_links_both_rows_unchanged_otherwise():
+    out = _txn(
+        id="a",
+        account_id="chk",
+        date=date(2026, 1, 5),
+        amount=Decimal("-50"),
+        description="to savings",
+    )
+    inn = _txn(
+        id="b",
+        account_id="sav",
+        date=date(2026, 1, 6),
+        amount=Decimal("50"),
+        description="from checking",
+    )
+    match = TransferMatch(
+        from_transaction_id="a",
+        to_transaction_id="b",
+        date=date(2026, 1, 5),
+        from_account_id="chk",
+        to_account_id="sav",
+        amount=Decimal("50"),
+        from_description="to savings",
+        to_description="from checking",
+    )
+
+    [updated_out, updated_in] = merge_into_transfer([out, inn], match)
+
+    assert updated_out.id == "a"
+    assert updated_out.type is TransactionType.TRANSFER
+    assert updated_out.category == "Transfer"
+    assert updated_out.transfer_id == updated_in.transfer_id
+    assert updated_out.amount == Decimal("-50")
+    assert updated_out.description == "to savings"
+    assert updated_in.id == "b"
+    assert updated_in.type is TransactionType.TRANSFER
+    assert updated_in.amount == Decimal("50")
+
+
+def test_merge_into_transfer_raises_for_missing_transaction():
+    out = _txn(id="a", account_id="chk", amount=Decimal("-50"))
+    match = TransferMatch(
+        from_transaction_id="a",
+        to_transaction_id="ghost",
+        date=date(2026, 1, 5),
+        from_account_id="chk",
+        to_account_id="sav",
+        amount=Decimal("50"),
+        from_description="",
+        to_description="",
+    )
+
+    with pytest.raises(ValueError):
+        merge_into_transfer([out], match)
+
+
+def test_merge_into_transfer_raises_if_already_a_transfer():
+    out = _txn(
+        id="a",
+        account_id="chk",
+        amount=Decimal("-50"),
+        type=TransactionType.TRANSFER,
+        transfer_id="x",
+    )
+    inn = _txn(
+        id="b",
+        account_id="sav",
+        amount=Decimal("50"),
+        type=TransactionType.TRANSFER,
+        transfer_id="x",
+    )
+    match = TransferMatch(
+        from_transaction_id="a",
+        to_transaction_id="b",
+        date=date(2026, 1, 5),
+        from_account_id="chk",
+        to_account_id="sav",
+        amount=Decimal("50"),
+        from_description="",
+        to_description="",
+    )
+
+    with pytest.raises(ValueError):
+        merge_into_transfer([out, inn], match)
+
+
+def test_apply_transfer_matches_merges_every_match():
+    out = _txn(id="a", account_id="chk", amount=Decimal("-50"))
+    inn = _txn(id="b", account_id="sav", amount=Decimal("50"))
+    match = TransferMatch(
+        from_transaction_id="a",
+        to_transaction_id="b",
+        date=date(2026, 1, 5),
+        from_account_id="chk",
+        to_account_id="sav",
+        amount=Decimal("50"),
+        from_description="",
+        to_description="",
+    )
+
+    result = apply_transfer_matches([out, inn], [match])
+
+    assert all(t.type is TransactionType.TRANSFER for t in result)
+
+
+def test_apply_transfer_matches_skips_stale_match():
+    out = _txn(id="a", account_id="chk", amount=Decimal("-50"))
+    match = TransferMatch(
+        from_transaction_id="a",
+        to_transaction_id="ghost",
+        date=date(2026, 1, 5),
+        from_account_id="chk",
+        to_account_id="sav",
+        amount=Decimal("50"),
+        from_description="",
+        to_description="",
+    )
+
+    result = apply_transfer_matches([out], [match])
+
+    assert result == [out]

@@ -25,6 +25,7 @@ LEDGER_FIELDNAMES = [
     "type",
     "transfer_id",
     "notes",
+    "counterparty_account",
 ]
 
 
@@ -41,11 +42,19 @@ def _to_row(transaction: Transaction) -> dict[str, str]:
         "type": transaction.type.value,
         "transfer_id": transaction.transfer_id or "",
         "notes": transaction.notes or "",
+        "counterparty_account": transaction.counterparty_account,
     }
 
 
 def _from_row(row: dict[str, str]) -> Transaction:
-    """Parse a CSV row (as produced by ``csv.DictReader``) into a ``Transaction``."""
+    """Parse a CSV row (as produced by ``csv.DictReader``) into a ``Transaction``.
+
+    ``counterparty_account`` uses ``.get`` with a blank default so a
+    ledger written before this column existed still reads back fine — a
+    missing column means "not captured", same as an explicit blank cell
+    (same tolerance already established for ``config/rules.toml``'s
+    amount/type bounds).
+    """
     return Transaction(
         id=row["id"],
         date=row["date"],
@@ -57,6 +66,7 @@ def _from_row(row: dict[str, str]) -> Transaction:
         type=row["type"],
         transfer_id=row["transfer_id"] or None,
         notes=row["notes"] or None,
+        counterparty_account=row.get("counterparty_account") or "",
     )
 
 

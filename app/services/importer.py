@@ -4,12 +4,16 @@ Pure functions over in-memory data — no file I/O, matching every other
 ``services`` module (the router reads the uploaded file's bytes and any
 existing ledger/mapping/rules via ``storage`` and passes them in here).
 
-Imported rows are always income or expense, never transfers: pairing one
-imported row with another as a linked transfer isn't attempted — a bank
-export has no reliable signal for "this outflow and that inflow are the
-same transfer" beyond amount/date proximity, which is too fragile to
-guess at automatically. A transfer between the user's own accounts will
-simply import as two independent rows.
+Imported rows are always income or expense, never transfers — pairing
+never happens here, at parse time. A mapping can optionally capture the
+bank's own counterparty-account-number column (``counterparty_account``/
+``counterparty_account_fallback``), which is carried onto each
+``Transaction`` unchanged; a *separate*, later, explicitly-triggered step
+(``app.services.transactions.find_transfer_matches``) is what
+cross-references that against the user's own registered accounts to spot
+rows that are secretly a transfer, always previewed before merging two
+rows into one. Plain amount/date proximity alone remains too fragile to
+guess a transfer from automatically — that's not what happens here.
 """
 
 import csv
@@ -37,6 +41,7 @@ class ParsedRow:
     description: str
     amount: Decimal
     account_number: str = ""
+    counterparty_account: str = ""
 
 
 def parse_amount(raw: str, decimal_separator: str) -> Decimal:
@@ -66,13 +71,16 @@ def parse_date(raw: str, date_format: str) -> date_:
         raise ValueError(f"invalid date '{raw}' for format '{date_format}'") from exc
 
 
-def _normalize_account_number(value: str) -> str:
+def normalize_account_number(value: str) -> str:
     """Strip all whitespace and case so account numbers compare reliably.
 
     Bank exports format IBANs with spacing that may not match how the
     user typed ``Account.number`` into this app (see
     ``app.models.import_mapping.ImportMapping``'s ``account_number``
-    column note).
+    column note). Shared with ``app.services.transactions
+    .find_transfer_matches``, which compares a captured
+    ``counterparty_account`` against every registered ``Account.number``
+    the same way.
     """
     return re.sub(r"\s+", "", value).upper()
 
@@ -92,6 +100,8 @@ def parse_rows(csv_text: str, mapping: ImportMapping) -> list[ParsedRow]:
     amount_idx = mapping.columns["amount"]
     account_idx = mapping.columns.get("account_number")
     description_fallback_idx = mapping.columns.get("description_fallback")
+    counterparty_idx = mapping.columns.get("counterparty_account")
+    counterparty_fallback_idx = mapping.columns.get("counterparty_account_fallback")
 
     parsed: list[ParsedRow] = []
     for row in rows[1:]:
@@ -115,6 +125,17 @@ def parse_rows(csv_text: str, mapping: ImportMapping) -> list[ParsedRow]:
         description = row[description_idx].strip()
         if not description and description_fallback_idx is not None:
             description = row[description_fallback_idx].strip()
+        # A bank export typically names the counterparty in one of two
+        # mutually-exclusive columns depending on transaction direction
+        # (e.g. Credit Agricole: "Rachunek nadawcy"/sender for an inbound
+        # row, "Rachunek odbiorcy"/recipient for an outbound one) — same
+        # primary+fallback collapse as description/description_fallback
+        # above, not a second value to append.
+        counterparty = (
+            row[counterparty_idx].strip() if counterparty_idx is not None else ""
+        )
+        if not counterparty and counterparty_fallback_idx is not None:
+            counterparty = row[counterparty_fallback_idx].strip()
         parsed.append(
             ParsedRow(
                 date=parse_date(row[date_idx], mapping.date_format),
@@ -122,6 +143,9 @@ def parse_rows(csv_text: str, mapping: ImportMapping) -> list[ParsedRow]:
                 amount=amount,
                 account_number=row[account_idx].strip()
                 if account_idx is not None
+                else "",
+                counterparty_account=normalize_account_number(counterparty)
+                if counterparty
                 else "",
             )
         )
@@ -163,17 +187,17 @@ def filter_by_account_number(
     that cell was blank) is always kept — there's nothing to filter it
     against, so excluding it would silently drop data rather than
     filtering it deliberately. Comparison is whitespace/case-insensitive
-    (see ``_normalize_account_number``).
+    (see ``normalize_account_number``).
     """
     if not account_number:
         return rows, 0
-    target = _normalize_account_number(account_number)
+    target = normalize_account_number(account_number)
     kept: list[ParsedRow] = []
     skipped = 0
     for row in rows:
         if (
             not row.account_number
-            or _normalize_account_number(row.account_number) == target
+            or normalize_account_number(row.account_number) == target
         ):
             kept.append(row)
         else:
@@ -235,6 +259,7 @@ def build_transactions(
                 type=txn_type,
                 transfer_id=None,
                 notes=None,
+                counterparty_account=row.counterparty_account,
             )
         )
     return transactions

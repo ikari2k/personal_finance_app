@@ -54,7 +54,7 @@
     <div class="table-scroll">
       <table>
         <thead>
-          <tr><th>Year</th><th>Income</th><th>Expense</th><th>Net</th><th>vs. prior year</th></tr>
+          <tr><th>Year</th><th>Income</th><th>Expense</th><th>Transfers</th><th>Net</th><th>vs. prior year</th></tr>
         </thead>
         <tbody>
           {% for y in years %}
@@ -62,6 +62,7 @@
               <td><a href="/reports/{{ y.year }}{{ '?account_id=' + account_id if account_id }}">{{ y.year }}</a></td>
               <td class="amount-positive">{{ "%.2f"|format(y.income_total) }}</td>
               <td class="amount-negative">{{ "%.2f"|format(y.expense_total) }}</td>
+              <td class="muted">{{ "%.2f"|format(y.transfer_volume) if y.transfer_volume else "—" }}</td>
               <td class="{{ 'amount-negative' if y.net_total < 0 else 'amount-positive' }}">
                 {{ "%.2f"|format(y.net_total) }}
               </td>

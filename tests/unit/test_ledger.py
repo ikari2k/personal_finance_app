@@ -66,3 +66,27 @@ def test_write_then_read_round_trips_notes_and_blank_fields(tmp_path):
     write_ledger([transaction], path)
 
     assert read_ledger(path) == [transaction]
+
+
+def test_write_then_read_round_trips_counterparty_account(tmp_path):
+    path = tmp_path / "ledger.csv"
+    transaction = _transaction(counterparty_account="85194010182000")
+
+    write_ledger([transaction], path)
+
+    assert read_ledger(path) == [transaction]
+
+
+def test_read_ledger_tolerates_a_file_written_before_counterparty_account_existed(
+    tmp_path,
+):
+    path = tmp_path / "ledger.csv"
+    path.write_text(
+        "id,date,account_id,category,subcategory,description,amount,type,"
+        "transfer_id,notes\n"
+        "t1,2026-01-15,chk,Groceries,Supermarket,Trader Joe's,-42.17,expense,,\n"
+    )
+
+    [transaction] = read_ledger(path)
+
+    assert transaction.counterparty_account == ""

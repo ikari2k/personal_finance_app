@@ -53,7 +53,12 @@ from app.services.importer import (
     parse_date,
     parse_rows,
 )
-from app.services.transactions import ensure_category
+from app.services.transactions import (
+    TransferMatch,
+    apply_transfer_matches,
+    ensure_category,
+    find_transfer_matches,
+)
 from app.storage.accounts import read_accounts
 from app.storage.categories import read_categories, write_categories
 from app.storage.import_history import append_history_entry, read_history
@@ -87,6 +92,23 @@ def _decode(content: bytes, encoding: str) -> str | None:
 def _to_column_index(value: str) -> int | None:
     """Parse a submitted column-index form value; blank/missing means "none"."""
     return int(value) if value.strip().isdigit() else None
+
+
+def _set_counterparty_columns(
+    columns: dict[str, int], counterparty: str, counterparty_fallback: str
+) -> None:
+    """Add the optional ``counterparty_account``/``_fallback`` keys, if set.
+
+    Shared by every place a mapping gets built from submitted form
+    fields (setup save, edit save, edit dry-run) — same primary+fallback
+    shape as ``description_fallback``, see ``app.models.import_mapping``.
+    """
+    idx = _to_column_index(counterparty)
+    if idx is not None:
+        columns["counterparty_account"] = idx
+    fallback_idx = _to_column_index(counterparty_fallback)
+    if fallback_idx is not None:
+        columns["counterparty_account_fallback"] = fallback_idx
 
 
 # ---------------------------------------------------------------------------
@@ -213,6 +235,8 @@ def _render_mapping_setup(
     selected_description_fallback_column: int | None = None,
     selected_amount_column: int | None = None,
     selected_account_number_column: int | None = None,
+    selected_counterparty_account_column: int | None = None,
+    selected_counterparty_account_fallback_column: int | None = None,
 ) -> HTMLResponse:
     """Render the mapping-setup fragment: settings plus a column-picker preview.
 
@@ -314,6 +338,12 @@ def _render_mapping_setup(
             ),
             "selected_amount_column": selected_amount_column,
             "selected_account_number_column": selected_account_number_column,
+            "selected_counterparty_account_column": (
+                selected_counterparty_account_column
+            ),
+            "selected_counterparty_account_fallback_column": (
+                selected_counterparty_account_fallback_column
+            ),
             "date_preview": date_preview,
             "amount_preview": amount_preview,
             "error": error,
@@ -337,6 +367,8 @@ def reparse_mapping_setup(
     description_fallback_column: str = Form(""),
     amount_column: str = Form(""),
     account_number_column: str = Form(""),
+    counterparty_account_column: str = Form(""),
+    counterparty_account_fallback_column: str = Form(""),
 ) -> HTMLResponse:
     """Re-render mapping setup after the user changes a setting or column pick."""
     return _render_mapping_setup(
@@ -357,6 +389,12 @@ def reparse_mapping_setup(
         ),
         selected_amount_column=_to_column_index(amount_column),
         selected_account_number_column=_to_column_index(account_number_column),
+        selected_counterparty_account_column=_to_column_index(
+            counterparty_account_column
+        ),
+        selected_counterparty_account_fallback_column=_to_column_index(
+            counterparty_account_fallback_column
+        ),
     )
 
 
@@ -376,6 +414,8 @@ def save_mapping_setup(
     description_fallback_column: str = Form(""),
     amount_column: int = Form(...),
     account_number_column: str = Form(""),
+    counterparty_account_column: str = Form(""),
+    counterparty_account_fallback_column: str = Form(""),
 ) -> HTMLResponse:
     """Validate the mapping against the file, then save it and show the preview.
 
@@ -403,6 +443,9 @@ def save_mapping_setup(
     )
     if description_fallback_idx is not None:
         columns["description_fallback"] = description_fallback_idx
+    _set_counterparty_columns(
+        columns, counterparty_account_column, counterparty_account_fallback_column
+    )
     mapping = ImportMapping(
         bank=bank,
         delimiter=delimiter,
@@ -432,6 +475,12 @@ def save_mapping_setup(
             selected_description_fallback_column=description_fallback_idx,
             selected_amount_column=amount_column,
             selected_account_number_column=account_number_idx,
+            selected_counterparty_account_column=_to_column_index(
+                counterparty_account_column
+            ),
+            selected_counterparty_account_fallback_column=_to_column_index(
+                counterparty_account_fallback_column
+            ),
         )
     write_mapping(mapping)
     return _render_preview(
@@ -487,6 +536,7 @@ def _render_preview(
                 "amount": str(txn.amount),
                 "category": txn.category,
                 "subcategory": txn.subcategory,
+                "counterparty_account": txn.counterparty_account,
             }
             for txn in transactions
         ]
@@ -544,6 +594,7 @@ def confirm(
                 type=txn_type,
                 transfer_id=None,
                 notes=None,
+                counterparty_account=row.get("counterparty_account", ""),
             )
         )
     write_categories(categories)
@@ -671,6 +722,8 @@ def _mapping_from_edit_form(
     description_fallback_column: str,
     amount_column: int,
     account_number_column: str,
+    counterparty_account_column: str = "",
+    counterparty_account_fallback_column: str = "",
 ) -> ImportMapping:
     columns = {
         "date": date_column,
@@ -681,6 +734,9 @@ def _mapping_from_edit_form(
         columns["account_number"] = int(account_number_column)
     if description_fallback_column.strip():
         columns["description_fallback"] = int(description_fallback_column)
+    _set_counterparty_columns(
+        columns, counterparty_account_column, counterparty_account_fallback_column
+    )
     return ImportMapping(
         bank=bank,
         delimiter=delimiter,
@@ -704,6 +760,8 @@ def save_edited_mapping(
     description_fallback_column: str = Form(""),
     amount_column: int = Form(...),
     account_number_column: str = Form(""),
+    counterparty_account_column: str = Form(""),
+    counterparty_account_fallback_column: str = Form(""),
 ) -> HTMLResponse:
     """Save the edited settings directly — no file, no parse validation.
 
@@ -721,6 +779,8 @@ def save_edited_mapping(
         description_fallback_column=description_fallback_column,
         amount_column=amount_column,
         account_number_column=account_number_column,
+        counterparty_account_column=counterparty_account_column,
+        counterparty_account_fallback_column=counterparty_account_fallback_column,
     )
     write_mapping(mapping)
     return _render_edit_form(request, mapping, headers=toast("Mapping saved"))
@@ -741,6 +801,8 @@ async def dry_run_mapping(
     description_fallback_column: str = Form(""),
     amount_column: int = Form(...),
     account_number_column: str = Form(""),
+    counterparty_account_column: str = Form(""),
+    counterparty_account_fallback_column: str = Form(""),
 ) -> HTMLResponse:
     """Parse a file against the (possibly unsaved) edited settings, read-only.
 
@@ -760,6 +822,8 @@ async def dry_run_mapping(
         description_fallback_column=description_fallback_column,
         amount_column=amount_column,
         account_number_column=account_number_column,
+        counterparty_account_column=counterparty_account_column,
+        counterparty_account_fallback_column=counterparty_account_fallback_column,
     )
     if file is None or not file.filename:
         return _render_edit_form(
@@ -773,4 +837,90 @@ async def dry_run_mapping(
         content,
         restart_url=f"/import/mappings/{quote(bank, safe='')}/edit",
         dry_run=True,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Detect transfers: match existing income/expense rows into linked transfers
+# ---------------------------------------------------------------------------
+
+
+@router.get("/detect-transfers/preview", response_class=HTMLResponse)
+def preview_transfer_matches(request: Request) -> HTMLResponse:
+    """Compute and render candidate transfer pairs against the whole ledger.
+
+    Read-only, per CLAUDE.md's "bulk [changes] always preview first"
+    invariant, extended here to transfer detection. The match list is
+    threaded to the apply step as a hidden JSON field, same
+    no-server-session pattern as the reclassify preview and the import
+    wizard's own ``rows_payload``.
+    """
+    accounts_list = read_accounts()
+    accounts = {account.id: account for account in accounts_list}
+    matches = find_transfer_matches(read_ledger(), accounts_list)
+    matches_payload = json.dumps(
+        [
+            {
+                "from_transaction_id": match.from_transaction_id,
+                "to_transaction_id": match.to_transaction_id,
+                "date": match.date.isoformat(),
+                "from_account_id": match.from_account_id,
+                "to_account_id": match.to_account_id,
+                "amount": str(match.amount),
+                "from_description": match.from_description,
+                "to_description": match.to_description,
+            }
+            for match in matches
+        ]
+    )
+    return templates.TemplateResponse(
+        request,
+        "import/_detect_transfers_preview.html",
+        {"matches": matches, "accounts": accounts, "matches_payload": matches_payload},
+    )
+
+
+@router.post("/detect-transfers/apply", response_class=HTMLResponse)
+def apply_transfer_matches_route(
+    request: Request,
+    matches_payload: str = Form(...),
+    selected: list[str] = Form([]),
+) -> HTMLResponse:
+    """Merge the checked subset of previewed matches into linked transfers.
+
+    Rebuilds ``TransferMatch`` objects from the previewed payload (never
+    recomputed) so what gets written can't disagree with what the user
+    saw — same discipline as ``apply_reclassification_route``. Only
+    matches whose checkbox (keyed by ``from_transaction_id``, the one
+    stable id per row in the preview table) is present in ``selected``
+    are applied; unlike reclassification, a wrongly-merged transfer has
+    no dedicated "split back apart" UI yet, so letting the user exclude
+    an individual pair before it's ever written is worth the extra
+    control.
+    """
+    raw_matches = json.loads(matches_payload)
+    selected_ids = set(selected)
+    matches = [
+        TransferMatch(
+            from_transaction_id=raw["from_transaction_id"],
+            to_transaction_id=raw["to_transaction_id"],
+            date=date_.fromisoformat(raw["date"]),
+            from_account_id=raw["from_account_id"],
+            to_account_id=raw["to_account_id"],
+            amount=Decimal(raw["amount"]),
+            from_description=raw["from_description"],
+            to_description=raw["to_description"],
+        )
+        for raw in raw_matches
+        if raw["from_transaction_id"] in selected_ids
+    ]
+    write_ledger(apply_transfer_matches(read_ledger(), matches))
+
+    count = len(matches)
+    noun = "pair" if count == 1 else "pairs"
+    return HTMLResponse(
+        "",
+        headers=toast(
+            f"Merged {count} transaction {noun} into transfers", close_dialog=True
+        ),
     )

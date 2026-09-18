@@ -225,6 +225,86 @@ def test_parse_rows_without_account_number_column_leaves_it_blank():
     assert rows[0].account_number == ""
 
 
+def test_parse_rows_extracts_and_normalizes_counterparty_account():
+    mapping = ImportMapping(
+        bank="Credit Agricole",
+        delimiter=";",
+        date_format="%d.%m.%Y",
+        decimal_separator=",",
+        columns={
+            "date": 3,
+            "description": 2,
+            "amount": 1,
+            "counterparty_account": 4,
+        },
+    )
+    csv_text = (
+        "account;amount;description;date;counterparty\n"
+        "45 1940 0000;-1,00 PLN;ZABKA;11.09.2026;85 1940 1018 2000\n"
+    )
+
+    rows = parse_rows(csv_text, mapping)
+
+    assert rows[0].counterparty_account == "85194010182000"
+
+
+def test_parse_rows_uses_counterparty_fallback_when_primary_is_blank():
+    mapping = ImportMapping(
+        bank="Credit Agricole",
+        delimiter=";",
+        date_format="%d.%m.%Y",
+        decimal_separator=",",
+        columns={
+            "date": 3,
+            "description": 2,
+            "amount": 1,
+            "counterparty_account": 4,
+            "counterparty_account_fallback": 5,
+        },
+    )
+    csv_text = (
+        "account;amount;description;date;recipient;sender\n"
+        "45 1940 0000;1,00 PLN;ZABKA;11.09.2026;;85 1940 1018 2000\n"
+    )
+
+    rows = parse_rows(csv_text, mapping)
+
+    assert rows[0].counterparty_account == "85194010182000"
+
+
+def test_parse_rows_prefers_primary_counterparty_over_fallback():
+    mapping = ImportMapping(
+        bank="Credit Agricole",
+        delimiter=";",
+        date_format="%d.%m.%Y",
+        decimal_separator=",",
+        columns={
+            "date": 3,
+            "description": 2,
+            "amount": 1,
+            "counterparty_account": 4,
+            "counterparty_account_fallback": 5,
+        },
+    )
+    csv_text = (
+        "account;amount;description;date;recipient;sender\n"
+        "45 1940 0000;1,00 PLN;ZABKA;11.09.2026;11 22;Should not be used\n"
+    )
+
+    rows = parse_rows(csv_text, mapping)
+
+    assert rows[0].counterparty_account == "1122"
+
+
+def test_parse_rows_without_counterparty_columns_leaves_it_blank():
+    rows = parse_rows(
+        "account;amount;description;date\n45 1940 0000;-1,00 PLN;ZABKA;11.09.2026\n",
+        CA_MAPPING,
+    )
+
+    assert rows[0].counterparty_account == ""
+
+
 def test_filter_by_account_number_keeps_matching_rows():
     rows = [
         ParsedRow(date(2026, 9, 1), "a", Decimal("-1"), "45 1940 0000"),

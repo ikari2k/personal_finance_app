@@ -380,17 +380,75 @@ def test_yearly_totals_with_yoy_computes_delta_against_prior_year():
     assert current.yoy_delta == Decimal("50")
 
 
-def test_yearly_totals_with_yoy_excludes_transfers():
+def test_yearly_totals_with_yoy_transfers_dont_affect_income_expense_net():
     txns = [
         _txn(
             id="t1",
             type=TransactionType.TRANSFER,
             category="Transfer",
+            amount=Decimal("-500"),
+            transfer_id="x1",
+        ),
+        _txn(
+            id="t2",
+            account_id="sav",
+            type=TransactionType.TRANSFER,
+            category="Transfer",
             amount=Decimal("500"),
+            transfer_id="x1",
+        ),
+    ]
+
+    [year] = yearly_totals_with_yoy(txns)
+
+    assert year.income_total == Decimal("0")
+    assert year.expense_total == Decimal("0")
+    assert year.net_total == Decimal("0")
+
+
+def test_yearly_totals_with_yoy_computes_transfer_volume():
+    txns = [
+        _txn(
+            id="t1",
+            type=TransactionType.TRANSFER,
+            category="Transfer",
+            amount=Decimal("-500"),
+            transfer_id="x1",
+        ),
+        _txn(
+            id="t2",
+            account_id="sav",
+            type=TransactionType.TRANSFER,
+            category="Transfer",
+            amount=Decimal("500"),
+            transfer_id="x1",
+        ),
+    ]
+
+    [year] = yearly_totals_with_yoy(txns)
+
+    assert year.transfer_volume == Decimal("500")
+
+
+def test_yearly_totals_with_yoy_a_transfer_only_year_still_appears():
+    """A year with only transfers now gets a row, so its volume can be shown."""
+    txns = [
+        _txn(
+            id="t1",
+            type=TransactionType.TRANSFER,
+            category="Transfer",
+            amount=Decimal("-500"),
+            transfer_id="x1",
         ),
     ]
 
     years = yearly_totals_with_yoy(txns)
+
+    assert len(years) == 1
+
+
+def test_yearly_totals_with_yoy_a_year_with_no_transactions_does_not_appear():
+    years = yearly_totals_with_yoy([])
 
     assert years == []
 
@@ -436,6 +494,32 @@ def test_monthly_totals_with_mom_delta_chains_across_a_year_boundary():
     january = next(m for m in months if m.key == "2026-01")
 
     assert january.mom_delta == Decimal("-15")
+
+
+def test_monthly_totals_with_mom_computes_transfer_volume():
+    txns = [
+        _txn(
+            id="t1",
+            type=TransactionType.TRANSFER,
+            category="Transfer",
+            amount=Decimal("-500"),
+            transfer_id="x1",
+        ),
+        _txn(
+            id="t2",
+            account_id="sav",
+            type=TransactionType.TRANSFER,
+            category="Transfer",
+            amount=Decimal("500"),
+            transfer_id="x1",
+        ),
+        _txn(id="t3", type=TransactionType.INCOME, amount=Decimal("100")),
+    ]
+
+    [month] = monthly_totals_with_mom(txns)
+
+    assert month.transfer_volume == Decimal("500")
+    assert month.net_total == Decimal("100")
 
 
 def test_category_breakdown_raises_for_transfer_type():

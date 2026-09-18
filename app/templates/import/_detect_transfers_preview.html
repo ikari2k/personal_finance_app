@@ -1,0 +1,51 @@
+<h2>Detect transfers</h2>
+{% if matches %}
+  <p>
+    Found {{ matches | length }} transaction pair{{ '' if matches | length == 1 else 's' }} that look
+    like a transfer between two of your own accounts, based on a counterparty account number
+    captured at import time. Uncheck any pair that isn't really a transfer before applying — merging
+    is not currently reversible from the UI.
+  </p>
+  <form hx-post="/import/detect-transfers/apply" hx-target="#detect-transfers-dialog-content" hx-swap="innerHTML">
+    <input type="hidden" name="matches_payload" value="{{ matches_payload }}">
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th></th><th>Date</th><th>From</th><th>To</th><th>Amount</th></tr>
+        </thead>
+        <tbody>
+          {% for match in matches %}
+            <tr>
+              <td><input type="checkbox" name="selected" value="{{ match.from_transaction_id }}" checked></td>
+              <td>{{ match.date }}</td>
+              <td>
+                {{ accounts[match.from_account_id].name if match.from_account_id in accounts else match.from_account_id }}
+                {% if match.from_description %} — {{ match.from_description }}{% endif %}
+              </td>
+              <td>
+                {{ accounts[match.to_account_id].name if match.to_account_id in accounts else match.to_account_id }}
+                {% if match.to_description %} — {{ match.to_description }}{% endif %}
+              </td>
+              <td>{{ "%.2f"|format(match.amount) }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <footer class="dialog-footer">
+      <button type="button" class="btn-outline"
+              onclick="document.getElementById('detect-transfers-dialog').close()">Cancel</button>
+      <button type="submit">Merge selected into transfers</button>
+    </footer>
+  </form>
+{% else %}
+  <p>
+    No candidate transfers found. This looks for rows whose counterparty account (captured at import
+    time — see a mapping's "Counterparty account column" setting) matches one of your own registered
+    accounts; if you haven't set that up yet for a bank's mapping, edit it below and re-import.
+  </p>
+  <footer class="dialog-footer">
+    <button type="button" class="btn-outline"
+            onclick="document.getElementById('detect-transfers-dialog').close()">Close</button>
+  </footer>
+{% endif %}

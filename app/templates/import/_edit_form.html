@@ -48,6 +48,18 @@
              value="{{ mapping.columns.account_number if mapping.columns.account_number is defined else '' }}">
     </label>
   </div>
+  <div class="form-grid-2">
+    <label title="The counterparty's account number for an outgoing/inbound row — used later to detect a transfer between two of your own accounts">
+      Counterparty account column (optional)
+      <input type="number" name="counterparty_account_column" min="0"
+             value="{{ mapping.columns.counterparty_account if mapping.columns.counterparty_account is defined else '' }}">
+    </label>
+    <label title="Used when the counterparty account column above is blank for a row">
+      Counterparty account fallback column (optional)
+      <input type="number" name="counterparty_account_fallback_column" min="0"
+             value="{{ mapping.columns.counterparty_account_fallback if mapping.columns.counterparty_account_fallback is defined else '' }}">
+    </label>
+  </div>
 
   <hr>
   <p class="muted">To dry-run against a file, pick the account it would import into and a sample file.</p>

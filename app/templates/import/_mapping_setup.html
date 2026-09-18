@@ -109,6 +109,26 @@
         </select>
       </label>
     </div>
+    <div class="form-grid-2">
+      <label title="The counterparty's account number for an outgoing/inbound row (e.g. a recipient-account column) — used later to detect a transfer between two of your own accounts">
+        Counterparty account column (optional)
+        <select name="counterparty_account_column">
+          <option value="" {{ 'selected' if selected_counterparty_account_column is none }}>— none —</option>
+          {% for col in columns %}
+            <option value="{{ col.index }}" {{ 'selected' if col.index == selected_counterparty_account_column }}>{{ col.index }}: {{ col.header }} ({{ col.sample }})</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label title="Used when the counterparty account column above is blank for a row — banks often split sender vs. recipient account into two separate columns depending on transaction direction">
+        Counterparty account fallback column (optional)
+        <select name="counterparty_account_fallback_column">
+          <option value="" {{ 'selected' if selected_counterparty_account_fallback_column is none }}>— none —</option>
+          {% for col in columns %}
+            <option value="{{ col.index }}" {{ 'selected' if col.index == selected_counterparty_account_fallback_column }}>{{ col.index }}: {{ col.header }} ({{ col.sample }})</option>
+          {% endfor %}
+        </select>
+      </label>
+    </div>
 
     <footer class="dialog-footer">
       <a hx-get="{{ restart_url }}" hx-target="#import-wizard" class="btn-outline" role="button">Start over</a>

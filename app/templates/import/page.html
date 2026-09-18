@@ -2,6 +2,31 @@
 {% block title %}Import — Finance Tracker{% endblock %}
 {% block content %}
   <h1>Import transactions</h1>
-  <p><a href="/import/new" role="button">+ Create new mapping</a></p>
+  <div class="cta-row">
+    <a href="/import/new" role="button">+ Create new mapping</a>
+    <button type="button" class="btn-outline" role="button"
+            hx-get="/import/detect-transfers/preview" hx-target="#detect-transfers-dialog-content"
+            hx-swap="innerHTML">
+      Detect transfers
+    </button>
+  </div>
+  <p class="muted">
+    "Detect transfers" scans your already-imported transactions for pairs that look like a transfer
+    between two of your own accounts — based on the counterparty account number a bank export
+    captured, not a guess — and previews them before merging any of them into a linked transfer.
+  </p>
   {% include "import/_mappings_content.html" %}
+
+  <dialog id="detect-transfers-dialog" hx-on:close-dialog="this.close()"
+          hx-on:click="if (event.target === this) this.close()">
+    <article>
+      <header>
+        <button aria-label="Close" rel="prev"
+                onclick="document.getElementById('detect-transfers-dialog').close()"></button>
+        <strong>Detect transfers</strong>
+      </header>
+      <div id="detect-transfers-dialog-content"
+           hx-on::after-swap="if (this.firstElementChild) { const d = this.closest('dialog'); if (!d.open) d.showModal(); }"></div>
+    </article>
+  </dialog>
 {% endblock %}
