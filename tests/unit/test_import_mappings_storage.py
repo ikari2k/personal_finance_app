@@ -6,7 +6,6 @@ from app.models.import_mapping import ImportMapping
 from app.storage.import_mappings import (
     delete_mapping,
     list_all_mappings,
-    list_banks,
     read_mapping,
     write_mapping,
 )
@@ -44,17 +43,6 @@ def test_bank_name_lookup_is_slug_insensitive_to_case_and_spacing(tmp_path):
 def test_write_mapping_rejects_blank_bank_name(tmp_path):
     with pytest.raises(ValueError):
         write_mapping(_mapping("   "), tmp_path)
-
-
-def test_list_banks_returns_display_names_sorted(tmp_path):
-    write_mapping(_mapping("Credit Agricole"), tmp_path)
-    write_mapping(_mapping("Chase"), tmp_path)
-
-    assert list_banks(tmp_path) == ["Chase", "Credit Agricole"]
-
-
-def test_list_banks_empty_when_directory_missing(tmp_path):
-    assert list_banks(tmp_path / "does-not-exist") == []
 
 
 def test_list_all_mappings_returns_full_objects_sorted(tmp_path):

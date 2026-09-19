@@ -19,6 +19,14 @@ def account_balance(account: Account, transactions: Iterable[Transaction]) -> De
 def all_balances(
     accounts: Iterable[Account], transactions: Iterable[Transaction]
 ) -> dict[str, Decimal]:
-    """Return a mapping of account id to current balance for every account."""
-    transactions = list(transactions)
-    return {account.id: account_balance(account, transactions) for account in accounts}
+    """Return a mapping of account id to current balance for every account.
+
+    One pass over ``transactions`` (bucketed by ``account_id``) rather
+    than calling ``account_balance`` once per account — that would be
+    O(accounts × transactions); this is O(accounts + transactions).
+    """
+    balances = {account.id: account.starting_balance for account in accounts}
+    for transaction in transactions:
+        if transaction.account_id in balances:
+            balances[transaction.account_id] += transaction.amount
+    return balances

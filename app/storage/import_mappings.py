@@ -82,14 +82,6 @@ def list_all_mappings(dir_path: Path | None = None) -> list[ImportMapping]:
     return sorted(mappings, key=lambda mapping: mapping.bank)
 
 
-def list_banks(dir_path: Path | None = None) -> list[str]:
-    """Return the display name of every bank with a saved mapping.
-
-    Sorted for a stable order in the import UI's bank picker.
-    """
-    return [mapping.bank for mapping in list_all_mappings(dir_path)]
-
-
 def delete_mapping(bank: str, dir_path: Path | None = None) -> None:
     """Delete the saved mapping for ``bank``, if one exists.
 

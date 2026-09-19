@@ -7,7 +7,7 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 
 from app.models.category import CategoriesByType
-from app.models.transaction import TransactionType
+from app.models.transaction import Transaction, TransactionType
 from app.routers.htmx_events import toast
 from app.services.aggregation import grouped_transaction_view
 from app.services.transactions import (
@@ -54,6 +54,25 @@ def _categories_grouped(categories: CategoriesByType) -> list[tuple[str, list[st
     return [(name, sorted(subs)) for name, subs in sorted(grouped.items())]
 
 
+def _filter_ledger(
+    ledger: list[Transaction], *, account_id: str, category: str, subcategory: str
+) -> list[Transaction]:
+    """Filter the ledger by account/category/subcategory (AND), each optional.
+
+    Shared by ``render_table`` and ``list_transactions`` — both apply the
+    exact same three optional equality filters to ``read_ledger()``'s
+    result before grouping. An empty string for any of the three means
+    "no filter on this field" (see ``list_transactions``'s docstring).
+    """
+    if account_id:
+        ledger = [t for t in ledger if t.account_id == account_id]
+    if category:
+        ledger = [t for t in ledger if t.category == category]
+    if subcategory:
+        ledger = [t for t in ledger if t.subcategory == subcategory]
+    return ledger
+
+
 def render_table(
     request: Request,
     *,
@@ -77,13 +96,9 @@ def render_table(
     account_id = request.cookies.get("account_id", "")
     category = request.cookies.get("category", "")
     subcategory = request.cookies.get("subcategory", "")
-    ledger = read_ledger()
-    if account_id:
-        ledger = [t for t in ledger if t.account_id == account_id]
-    if category:
-        ledger = [t for t in ledger if t.category == category]
-    if subcategory:
-        ledger = [t for t in ledger if t.subcategory == subcategory]
+    ledger = _filter_ledger(
+        read_ledger(), account_id=account_id, category=category, subcategory=subcategory
+    )
     accounts_list = read_accounts()
     categories_tree = read_categories()
     months = grouped_transaction_view(ledger, by_month=by_month, by_type=by_type)
@@ -157,13 +172,12 @@ def list_transactions(
         else request.cookies.get("subcategory", "")
     )
 
-    ledger = read_ledger()
-    if resolved_account_id:
-        ledger = [t for t in ledger if t.account_id == resolved_account_id]
-    if resolved_category:
-        ledger = [t for t in ledger if t.category == resolved_category]
-    if resolved_subcategory:
-        ledger = [t for t in ledger if t.subcategory == resolved_subcategory]
+    ledger = _filter_ledger(
+        read_ledger(),
+        account_id=resolved_account_id,
+        category=resolved_category,
+        subcategory=resolved_subcategory,
+    )
     accounts_list = read_accounts()
     categories_tree = read_categories()
     months = grouped_transaction_view(
