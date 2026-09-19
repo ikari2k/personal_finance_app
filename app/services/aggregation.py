@@ -9,8 +9,9 @@ file I/O.
 """
 
 from collections import defaultdict
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field, replace
+from datetime import date as date_
 from decimal import Decimal
 
 from app.models.account import Account
@@ -345,15 +346,24 @@ class _CategoryAccumulator:
     count: int = 0
 
 
-def _category_totals_for_year(
-    transactions: Iterable[Transaction], year: int, txn_type: TransactionType
+def _category_totals(
+    transactions: Iterable[Transaction],
+    txn_type: TransactionType,
+    matches_period: Callable[[date_], bool],
 ) -> dict[str, dict[str, _CategoryAccumulator]]:
-    """Return ``{category: {subcategory: accumulator}}`` for one year and type."""
+    """Return ``{category: {subcategory: accumulator}}`` for one period and type.
+
+    Shared by ``category_breakdown`` (year-scoped: ``matches_period``
+    checks ``d.year == year``) and ``category_totals_for_month``
+    (month-scoped: ``d.year == year and d.month == month``) — the two
+    previously duplicated this whole accumulation loop and differed only
+    in their date predicate.
+    """
     totals: dict[str, dict[str, _CategoryAccumulator]] = defaultdict(
         lambda: defaultdict(_CategoryAccumulator)
     )
     for transaction in transactions:
-        if transaction.type is not txn_type or transaction.date.year != year:
+        if transaction.type is not txn_type or not matches_period(transaction.date):
             continue
         bucket = totals[transaction.category][transaction.subcategory]
         bucket.total += abs(transaction.amount)
@@ -379,8 +389,8 @@ def category_breakdown(
         raise ValueError("transfers have no category breakdown")
 
     transactions = list(transactions)
-    current = _category_totals_for_year(transactions, year, txn_type)
-    previous = _category_totals_for_year(transactions, year - 1, txn_type)
+    current = _category_totals(transactions, txn_type, lambda d: d.year == year)
+    previous = _category_totals(transactions, txn_type, lambda d: d.year == year - 1)
     previous_category_totals = {
         name: sum((bucket.total for bucket in subs.values()), Decimal("0"))
         for name, subs in previous.items()
@@ -413,29 +423,6 @@ def category_breakdown(
     return sorted(result, key=lambda c: c.total, reverse=True)
 
 
-def _category_totals_for_month(
-    transactions: Iterable[Transaction],
-    year: int,
-    month: int,
-    txn_type: TransactionType,
-) -> dict[str, dict[str, _CategoryAccumulator]]:
-    """Return ``{category: {subcategory: accumulator}}`` for one month and type."""
-    totals: dict[str, dict[str, _CategoryAccumulator]] = defaultdict(
-        lambda: defaultdict(_CategoryAccumulator)
-    )
-    for transaction in transactions:
-        if (
-            transaction.type is not txn_type
-            or transaction.date.year != year
-            or transaction.date.month != month
-        ):
-            continue
-        bucket = totals[transaction.category][transaction.subcategory]
-        bucket.total += abs(transaction.amount)
-        bucket.count += 1
-    return totals
-
-
 def category_totals_for_month(
     transactions: Iterable[Transaction],
     year: int,
@@ -456,7 +443,9 @@ def category_totals_for_month(
     if txn_type is TransactionType.TRANSFER:
         raise ValueError("transfers have no category breakdown")
 
-    totals = _category_totals_for_month(transactions, year, month, txn_type)
+    totals = _category_totals(
+        transactions, txn_type, lambda d: d.year == year and d.month == month
+    )
     result = []
     for category, subs in totals.items():
         total = sum((bucket.total for bucket in subs.values()), Decimal("0"))
