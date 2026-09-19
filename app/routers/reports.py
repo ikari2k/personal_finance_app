@@ -17,6 +17,7 @@ this function and the template, not ``services.aggregation``'s data.
 
 import math
 from calendar import month_abbr, month_name
+from collections.abc import Callable
 from decimal import Decimal
 
 from fastapi import APIRouter, HTTPException, Request
@@ -357,6 +358,42 @@ _PIE_SLICE_COLORS = [
 ]
 
 
+def _pie_slice_path(
+    cx: float,
+    cy: float,
+    radius: float,
+    point: Callable[[float], tuple[float, float]],
+    angle: float,
+    end_angle: float,
+    *,
+    full_circle: bool,
+) -> str:
+    """Build one pie wedge's SVG path ``d=`` attribute, or a full circle.
+
+    A lone 100%-share slice (``full_circle=True``) needs two joined
+    semicircle arcs instead of the normal move-to-center/arc/close wedge
+    shape, since a single SVG arc command can't describe a full circle
+    (its start and end point would coincide).
+    """
+    if full_circle:
+        mid = angle + 180
+        x1, y1 = point(angle)
+        xm, ym = point(mid)
+        x2, y2 = point(end_angle)
+        return (
+            f"M {cx:.2f},{cy:.2f} L {x1:.2f},{y1:.2f} "
+            f"A {radius:.2f},{radius:.2f} 0 1 1 {xm:.2f},{ym:.2f} "
+            f"A {radius:.2f},{radius:.2f} 0 1 1 {x2:.2f},{y2:.2f} Z"
+        )
+    x1, y1 = point(angle)
+    x2, y2 = point(end_angle)
+    large_arc = 1 if (end_angle - angle) > 180 else 0
+    return (
+        f"M {cx:.2f},{cy:.2f} L {x1:.2f},{y1:.2f} "
+        f"A {radius:.2f},{radius:.2f} 0 {large_arc} 1 {x2:.2f},{y2:.2f} Z"
+    )
+
+
 def _svg_pie_chart(
     items: list[tuple[str, Decimal]], *, limit: int = 10, size: int = 220
 ) -> dict:
@@ -405,24 +442,9 @@ def _svg_pie_chart(
             else f"pie-slice-{index % len(_PIE_SLICE_COLORS)}"
         )
 
-        if len(top) == 1:
-            mid = angle + 180
-            x1, y1 = point(angle)
-            xm, ym = point(mid)
-            x2, y2 = point(end_angle)
-            path_d = (
-                f"M {cx:.2f},{cy:.2f} L {x1:.2f},{y1:.2f} "
-                f"A {radius:.2f},{radius:.2f} 0 1 1 {xm:.2f},{ym:.2f} "
-                f"A {radius:.2f},{radius:.2f} 0 1 1 {x2:.2f},{y2:.2f} Z"
-            )
-        else:
-            x1, y1 = point(angle)
-            x2, y2 = point(end_angle)
-            large_arc = 1 if (end_angle - angle) > 180 else 0
-            path_d = (
-                f"M {cx:.2f},{cy:.2f} L {x1:.2f},{y1:.2f} "
-                f"A {radius:.2f},{radius:.2f} 0 {large_arc} 1 {x2:.2f},{y2:.2f} Z"
-            )
+        path_d = _pie_slice_path(
+            cx, cy, radius, point, angle, end_angle, full_circle=len(top) == 1
+        )
 
         pct = fraction * 100
         label_x, label_y = point((angle + end_angle) / 2) if fraction < 1 else (cx, cy)

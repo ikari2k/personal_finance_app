@@ -104,6 +104,27 @@ def _toast_with_rule_count(base_message: str, rules_renamed: int) -> dict[str, s
     return toast(message, close_dialog=True)
 
 
+def _rename_in_rules(old_name: str, new_name: str, apply_rename) -> int:
+    """Propagate a category/subcategory rename into ``config/rules.toml``.
+
+    ``apply_rename`` is a ``rules -> renamed_rules`` callable (typically a
+    closure over ``rename_category_in_rules``/``rename_subcategory_in_rules``
+    with the rest of their args already bound) — shared by both the
+    category and subcategory rename routes, which previously duplicated
+    this whole read/compare/write block verbatim. A no-op rename
+    (``old_name == new_name``) skips the read entirely. Returns how many
+    rules actually changed, for the success toast.
+    """
+    if old_name == new_name:
+        return 0
+    rules = read_rules()
+    renamed_rules = apply_rename(rules)
+    if renamed_rules == rules:
+        return 0
+    write_rules(renamed_rules)
+    return sum(1 for old, new in zip(rules, renamed_rules) if old != new)
+
+
 def _render_form(
     request: Request,
     *,
@@ -261,15 +282,11 @@ def update_category_route(
         )
     write_categories(categories)
 
-    rules_renamed = 0
-    if name != category_name:
-        rules = read_rules()
-        renamed_rules = rename_category_in_rules(rules, category_name, name)
-        if renamed_rules != rules:
-            rules_renamed = sum(
-                1 for old, new in zip(rules, renamed_rules) if old != new
-            )
-            write_rules(renamed_rules)
+    rules_renamed = _rename_in_rules(
+        category_name,
+        name,
+        lambda rules: rename_category_in_rules(rules, category_name, name),
+    )
 
     return _render_tree(
         request,
@@ -424,17 +441,11 @@ def update_subcategory_route(
         )
     write_categories(categories)
 
-    rules_renamed = 0
-    if name != sub_name:
-        rules = read_rules()
-        renamed_rules = rename_subcategory_in_rules(
-            rules, category_name, sub_name, name
-        )
-        if renamed_rules != rules:
-            rules_renamed = sum(
-                1 for old, new in zip(rules, renamed_rules) if old != new
-            )
-            write_rules(renamed_rules)
+    rules_renamed = _rename_in_rules(
+        sub_name,
+        name,
+        lambda rules: rename_subcategory_in_rules(rules, category_name, sub_name, name),
+    )
 
     return _render_tree(
         request,

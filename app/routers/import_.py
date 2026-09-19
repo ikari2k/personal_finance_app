@@ -213,6 +213,82 @@ async def create_mapping_upload(
     )
 
 
+def _discover_columns(
+    text: str, delimiter: str
+) -> tuple[list[dict[str, int | str]], str | None]:
+    """Return ``(non-blank columns, error)`` for the mapping-setup column picker.
+
+    A column that's blank in every data row is left out entirely — see
+    ``_render_mapping_setup``'s docstring for why. Scans the whole file,
+    not just a preview sample, since a column could be blank in the
+    first few rows but populated later.
+    """
+    rows = list(csv.reader(io.StringIO(text), delimiter=delimiter))
+    if len(rows) < 2:
+        return [], "Couldn't find any data rows with this delimiter."
+    header_row, data_rows = rows[0], rows[1:]
+    columns: list[dict[str, int | str]] = []
+    for i, name in enumerate(header_row):
+        sample = next(
+            (r[i].strip() for r in data_rows if i < len(r) and r[i].strip()), None
+        )
+        if sample is not None:
+            columns.append({"index": i, "header": name, "sample": sample})
+    if not columns:
+        return [], "No non-empty columns found — check the delimiter."
+    return columns, None
+
+
+def _column_live_preview(
+    *,
+    text: str,
+    delimiter: str,
+    sample_by_index: dict[int, str],
+    selected_date_column: int | None,
+    date_format: str,
+    selected_amount_column: int | None,
+    decimal_separator: str,
+) -> tuple[str | None, str | None]:
+    """Return ``(date_preview, amount_preview)`` hint strings for the selected columns.
+
+    Live-parses the currently-selected date/amount column's sample value
+    against the current ``date_format``/``decimal_separator``, plus a
+    blank-count warning — the wrong column or the wrong format string is
+    by far the most common way mapping setup fails, caught here before
+    "Save mapping" instead of after.
+    """
+
+    def _blank_warning(column_index: int) -> str:
+        blank, total = count_blank_column_values(text, delimiter, column_index)
+        if not blank:
+            return ""
+        return f"⚠ blank in {blank} of {total} rows (those rows are skipped). "
+
+    date_preview: str | None = None
+    if selected_date_column in sample_by_index:
+        sample = sample_by_index[selected_date_column]
+        try:
+            parsed_date = parse_date(sample, date_format)
+        except ValueError:
+            date_preview = f"✗ “{sample}” doesn't match this format"
+        else:
+            date_preview = f"✓ parses as {parsed_date.isoformat()}"
+        date_preview = _blank_warning(selected_date_column) + date_preview
+
+    amount_preview: str | None = None
+    if selected_amount_column in sample_by_index:
+        sample = sample_by_index[selected_amount_column]
+        try:
+            parsed_amount = parse_amount(sample, decimal_separator)
+        except ValueError:
+            amount_preview = f"✗ “{sample}” doesn't parse as an amount"
+        else:
+            amount_preview = f"✓ parses as {parsed_amount}"
+        amount_preview = _blank_warning(selected_amount_column) + amount_preview
+
+    return date_preview, amount_preview
+
+
 def _render_mapping_setup(
     request: Request,
     *,
@@ -266,51 +342,21 @@ def _render_mapping_setup(
             error or f"Could not decode the file as {encoding}. Try another encoding."
         )
     else:
-        rows = list(csv.reader(io.StringIO(text), delimiter=delimiter))
-        if len(rows) < 2:
-            error = error or "Couldn't find any data rows with this delimiter."
-        else:
-            header_row, data_rows = rows[0], rows[1:]
-            for i, name in enumerate(header_row):
-                sample = next(
-                    (r[i].strip() for r in data_rows if i < len(r) and r[i].strip()),
-                    None,
-                )
-                if sample is not None:
-                    columns.append({"index": i, "header": name, "sample": sample})
-            if not columns:
-                error = error or "No non-empty columns found — check the delimiter."
+        columns, discover_error = _discover_columns(text, delimiter)
+        error = error or discover_error
 
     sample_by_index: dict[int, str] = {
         int(c["index"]): str(c["sample"]) for c in columns
     }
-
-    def _blank_warning(column_index: int) -> str:
-        blank, total = count_blank_column_values(text or "", delimiter, column_index)
-        if not blank:
-            return ""
-        return f"⚠ blank in {blank} of {total} rows (those rows are skipped). "
-
-    date_preview: str | None = None
-    if selected_date_column in sample_by_index:
-        sample = sample_by_index[selected_date_column]
-        try:
-            parsed_date = parse_date(sample, date_format)
-        except ValueError:
-            date_preview = f"✗ “{sample}” doesn't match this format"
-        else:
-            date_preview = f"✓ parses as {parsed_date.isoformat()}"
-        date_preview = _blank_warning(selected_date_column) + date_preview
-    amount_preview: str | None = None
-    if selected_amount_column in sample_by_index:
-        sample = sample_by_index[selected_amount_column]
-        try:
-            parsed_amount = parse_amount(sample, decimal_separator)
-        except ValueError:
-            amount_preview = f"✗ “{sample}” doesn't parse as an amount"
-        else:
-            amount_preview = f"✓ parses as {parsed_amount}"
-        amount_preview = _blank_warning(selected_amount_column) + amount_preview
+    date_preview, amount_preview = _column_live_preview(
+        text=text or "",
+        delimiter=delimiter,
+        sample_by_index=sample_by_index,
+        selected_date_column=selected_date_column,
+        date_format=date_format,
+        selected_amount_column=selected_amount_column,
+        decimal_separator=decimal_separator,
+    )
 
     return templates.TemplateResponse(
         request,
