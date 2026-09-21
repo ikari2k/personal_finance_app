@@ -292,6 +292,26 @@
           hx-push-url="true" hx-trigger="change"
           hx-vals='{"by_month": "{{ 'true' if by_month else 'false' }}", "by_type": "{{ 'true' if by_type else 'false' }}", "account_id": "{{ account_id }}", "category": "{{ category }}", "subcategory": "{{ subcategory }}", "txn_type": "{{ txn_type }}", "search": "{{ search }}", "date_from": "{{ date_from }}"}'>
     </span>
+    {#
+      Only shown once a filter is actually narrowing the list — matches
+      the app's own "only show a control when it's relevant" habit
+      (e.g. the accounts page's closed-accounts toggle, the Expand/
+      collapse button below only appearing when by_month is on).
+      Resets every filter field explicitly to "" (never omits one),
+      same "explicit empty overrides the sticky cookie" convention as
+      every other control here — grouping (by_month/by_type) is
+      deliberately left out of hx-vals so it falls back to its own
+      cookie unchanged, since "clear filters" is about what's shown,
+      not how it's grouped.
+    #}
+    {% if any_filter_active %}
+      <button type="button" class="secondary"
+              hx-get="/transactions" hx-target="#transactions-table-wrapper" hx-swap="outerHTML"
+              hx-push-url="true"
+              hx-vals='{"account_id": "", "category": "", "subcategory": "", "txn_type": "", "search": "", "date_from": "", "date_to": ""}'>
+        Clear filters
+      </button>
+    {% endif %}
     {% if by_month %}
       <button type="button" class="secondary"
               onclick="var anyClosed = document.querySelector('.month-section:not([open])'); document.querySelectorAll('.month-section').forEach(function (d) { d.open = !!anyClosed; });">

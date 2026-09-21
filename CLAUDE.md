@@ -439,7 +439,14 @@ blue underlined text" across an already-dense table — a new `.table-link` clas
 surrounding text's own color, underlines only on hover/focus) replaces the browser-default link
 look on all three link sites (category/subcategory names, each month-matrix cell's amount), same
 "understated until you actually reach for it" treatment as the row-click-through elsewhere in the
-app (e.g. the accounts list).
+app (e.g. the accounts list). The transactions toolbar then gained a "Clear filters" button —
+shown only when `any_filter_active` (a new context flag, `account_id or category or subcategory
+or txn_type or search or date_from or date_to`), same "only show a control when it's relevant"
+habit as the accounts page's closed-accounts toggle. Resets every filter field explicitly to `""`
+in one `hx-vals`, the same "explicit empty overrides the sticky cookie" convention every other
+control here already follows, rather than a new code path. Deliberately leaves `by_month`/
+`by_type` out of that `hx-vals` — grouping is a display preference, not a filter, so clearing
+filters doesn't also reset how the (now unfiltered) list is grouped.
 See `docs/implementation-plan.md` for the full phased plan, finalized schemas, and per-phase status
 checkboxes/implementation notes.
 

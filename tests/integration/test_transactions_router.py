@@ -667,6 +667,63 @@ def test_date_range_filter_ignores_malformed_date(client):
     assert "grocery run" in response.text
 
 
+def test_clear_filters_button_hidden_with_no_active_filter(client):
+    response = client.get("/transactions")
+
+    assert response.status_code == 200
+    assert "Clear filters" not in response.text
+
+
+def test_clear_filters_button_shown_when_a_filter_is_active(client):
+    response = client.get("/transactions?search=coffee")
+
+    assert response.status_code == 200
+    assert "Clear filters" in response.text
+
+
+def test_clear_filters_resets_every_filter_field(client):
+    _create_account(client)
+    client.post(
+        "/transactions",
+        data={
+            "account_id": "chk",
+            "date": "2026-01-15",
+            "type": "expense",
+            "category": "Groceries",
+            "subcategory": "Supermarket",
+            "description": "grocery run",
+            "amount": "10.00",
+            "notes": "",
+        },
+    )
+    client.get(
+        "/transactions"
+        "?account_id=chk&category=Groceries&subcategory=Supermarket"
+        "&txn_type=expense&search=grocery"
+        "&date_from=2026-01-01&date_to=2026-01-31"
+    )
+
+    cleared = client.get(
+        "/transactions"
+        "?account_id=&category=&subcategory=&txn_type=&search="
+        "&date_from=&date_to="
+    )
+
+    assert cleared.status_code == 200
+    assert "grocery run" in cleared.text
+    for cookie_name in (
+        "account_id",
+        "category",
+        "subcategory",
+        "txn_type",
+        "search",
+        "date_from",
+        "date_to",
+    ):
+        assert cleared.cookies.get(cookie_name) in ("", '""')
+    assert "Clear filters" not in cleared.text
+
+
 def test_category_and_subcategory_filters_combine_as_and(client):
     _create_account(client)
     client.post(

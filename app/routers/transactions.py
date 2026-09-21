@@ -178,6 +178,15 @@ def render_table(
             "search": search,
             "date_from": date_from,
             "date_to": date_to,
+            "any_filter_active": bool(
+                account_id
+                or category
+                or subcategory
+                or txn_type
+                or search
+                or date_from
+                or date_to
+            ),
             "oob": oob,
             "error": error,
         },
@@ -288,6 +297,15 @@ def list_transactions(
         "search": resolved_search,
         "date_from": resolved_date_from,
         "date_to": resolved_date_to,
+        "any_filter_active": bool(
+            resolved_account_id
+            or resolved_category
+            or resolved_subcategory
+            or resolved_txn_type
+            or resolved_search
+            or resolved_date_from
+            or resolved_date_to
+        ),
         "error": None,
     }
     template = (
