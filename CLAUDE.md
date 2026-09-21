@@ -418,7 +418,28 @@ range" filter concept instead of two separate label+input pairs. Search itself s
 `_icons.html`, the same 16×16/1.4-stroke hand-drawn family as `edit_icon()`/`delete_icon()`) — a
 native search input's own browser-drawn decorations (a clear button, and on some browsers a
 magnifier glyph) were colliding with the app's own icon, so dropping the native `type` sidesteps
-cross-browser inconsistency entirely rather than fighting it with more CSS.
+cross-browser inconsistency entirely rather than fighting it with more CSS. The category-breakdown
+tables on `/reports/{year}` and `/reports/{year}/{month}` (annual breakdown, month-to-month matrix)
+then gained click-through to `/transactions` — every category and subcategory name is now a link
+that filters the transactions list to exactly that category/subcategory (never just the category
+when a subcategory is clicked — `_txn_link`, a private macro in `reports/_category_breakdown.html`,
+builds the querystring) *and* the exact time span the row/cell belongs to: the whole year for the
+annual breakdown table, one specific calendar month per cell in the month-to-month matrix (a new
+`app.routers.reports._month_date_bounds` resolves a `"YYYY-MM"` key to its exact first/last day via
+`calendar.monthrange`, since months vary from 28-31 days), or the one month the whole page is
+already scoped to on `/reports/{year}/{month}`. `_category_month_matrix`'s row dicts gained a
+`category` field (subcategory rows previously carried only their own name, with no way to recover
+which category they belonged to) and `_month_cells`'s per-month cell dicts gained a `key` field, so
+the template has everything it needs to build each link without re-deriving it. `breakdown_table`
+and `month_matrix_table` (both in `reports/_category_breakdown.html`) also gained `date_from`/
+`date_to`/`account_id` parameters threaded from each router — `account_id` round-trips whichever
+account filter the report page itself is currently scoped to, same convention as every other
+cross-page link in the app. Live review flagged those new links as reading like "a wall of raw
+blue underlined text" across an already-dense table — a new `.table-link` class (inherits the
+surrounding text's own color, underlines only on hover/focus) replaces the browser-default link
+look on all three link sites (category/subcategory names, each month-matrix cell's amount), same
+"understated until you actually reach for it" treatment as the row-click-through elsewhere in the
+app (e.g. the accounts list).
 See `docs/implementation-plan.md` for the full phased plan, finalized schemas, and per-phase status
 checkboxes/implementation notes.
 

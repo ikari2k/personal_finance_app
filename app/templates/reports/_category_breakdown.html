@@ -1,5 +1,14 @@
 {% from "_category_icons.html" import category_icon %}
-{% macro breakdown_table(breakdown, config, txn_type, delta_label=none) %}
+{#
+  ``date_from``/``date_to`` (ISO YYYY-MM-DD, inclusive) scope every link
+  in this table to the period it's actually showing — the whole year for
+  the annual breakdown, one month for the month drill-down's own
+  category tables. ``account_id`` round-trips whichever account filter
+  the report page itself is currently scoped to, same convention as
+  every other cross-page link in the app.
+#}
+{% macro _txn_link(txn_type, category, subcategory, date_from, date_to, account_id) %}/transactions?txn_type={{ txn_type }}&category={{ category | urlencode }}&subcategory={{ subcategory | urlencode }}&date_from={{ date_from }}&date_to={{ date_to }}{{ '&account_id=' + account_id if account_id }}{% endmacro %}
+{% macro breakdown_table(breakdown, config, txn_type, date_from, date_to, account_id="", delta_label=none) %}
   {% if breakdown %}
     <div class="table-scroll">
       <table class="breakdown-table">
@@ -12,7 +21,7 @@
                 {% if cat_icon %}
                   <span class="cat-cell-icon cat-cell-icon-{{ txn_type }}">{{ category_icon(cat_icon) }}</span>
                 {% endif %}
-                {{ cat.name }}
+                <a class="table-link" href="{{ _txn_link(txn_type, cat.name, '', date_from, date_to, account_id) }}">{{ cat.name }}</a>
               </td>
               <td>{{ "%.2f"|format(cat.total) }}</td>
               <td>{{ cat.count }}</td>
@@ -35,7 +44,7 @@
                   {% if sub_icon %}
                     <span class="cat-cell-icon cat-cell-icon-{{ txn_type }}">{{ category_icon(sub_icon) }}</span>
                   {% endif %}
-                  {{ sub.name }}
+                  <a class="table-link" href="{{ _txn_link(txn_type, cat.name, sub.name, date_from, date_to, account_id) }}">{{ sub.name }}</a>
                 </td>
                 <td>{{ "%.2f"|format(sub.total) }}</td>
                 <td>{{ sub.count }}</td>
@@ -79,7 +88,7 @@
   {% endif %}
 {% endmacro %}
 
-{% macro month_matrix_table(rows, month_labels, txn_type) %}
+{% macro month_matrix_table(rows, month_labels, txn_type, date_from, date_to, month_bounds, account_id="") %}
   {% if rows %}
     <div class="table-scroll">
       <table class="month-matrix-table">
@@ -92,17 +101,19 @@
         </thead>
         <tbody>
           {% for row in rows %}
+            {% set row_subcategory = row.name if row.indent else '' %}
             <tr class="{{ 'subcategory-row' if row.indent }}">
               <td class="{{ 'indent' if row.indent }}">
                 {% if row.icon %}
                   <span class="cat-cell-icon cat-cell-icon-{{ txn_type }}">{{ category_icon(row.icon) }}</span>
                 {% endif %}
-                {{ row.name }}
+                <a class="table-link" href="{{ _txn_link(txn_type, row.category, row_subcategory, date_from, date_to, account_id) }}">{{ row.name }}</a>
               </td>
               {% for cell in row.monthly %}
+                {% set bounds = month_bounds[cell.key] %}
                 <td class="budget-cell">
                   <span class="budget-cell-row">
-                    <span class="budget-amount">{{ "%.2f"|format(cell.amount) if cell.amount else "—" }}</span>
+                    <a class="table-link budget-amount" href="{{ _txn_link(txn_type, row.category, row_subcategory, bounds[0], bounds[1], account_id) }}">{{ "%.2f"|format(cell.amount) if cell.amount else "—" }}</a>
                     {% if cell.ring %}
                       <span class="utilization utilization-{{ cell.ring.tier }}">
                         <svg width="16" height="16" viewBox="0 0 20 20" class="utilization-ring">

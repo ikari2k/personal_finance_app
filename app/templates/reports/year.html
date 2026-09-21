@@ -50,20 +50,20 @@
   <div class="report-columns">
     <div>
       <h2>Income by category</h2>
-      {{ breakdown_table(income_breakdown, income_config, "income", "vs. prior year") }}
+      {{ breakdown_table(income_breakdown, income_config, "income", date_from, date_to, account_id, "vs. prior year") }}
     </div>
     <div>
       <h2>Expense by category</h2>
-      {{ breakdown_table(expense_breakdown, expense_config, "expense", "vs. prior year") }}
+      {{ breakdown_table(expense_breakdown, expense_config, "expense", date_from, date_to, account_id, "vs. prior year") }}
     </div>
   </div>
 
   <h2>Income by category — month to month</h2>
-  {{ month_matrix_table(income_month_rows, month_labels, "income") }}
+  {{ month_matrix_table(income_month_rows, month_labels, "income", date_from, date_to, month_bounds, account_id) }}
 
   <h2>Expense by category — month to month</h2>
   <p class="chart-legend">
     <span class="utilization-legend-ring"></span> % of category/subcategory budget used that month
   </p>
-  {{ month_matrix_table(expense_month_rows, month_labels, "expense") }}
+  {{ month_matrix_table(expense_month_rows, month_labels, "expense", date_from, date_to, month_bounds, account_id) }}
 {% endblock %}

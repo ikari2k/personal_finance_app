@@ -16,7 +16,7 @@ this function and the template, not ``services.aggregation``'s data.
 """
 
 import math
-from calendar import month_abbr, month_name
+from calendar import month_abbr, month_name, monthrange
 from collections.abc import Callable
 from decimal import Decimal
 
@@ -41,6 +41,19 @@ from app.storage.ledger import read_ledger
 from app.templating import templates
 
 router = APIRouter(prefix="/reports", tags=["reports"])
+
+
+def _month_date_bounds(key: str) -> tuple[str, str]:
+    """Return a "YYYY-MM" key's ``(first day, last day)`` as ISO date strings.
+
+    Backs the category-breakdown tables' click-through to
+    ``/transactions`` filtered to this exact month — ``monthrange``
+    handles the varying month lengths (28-31 days, leap Februaries)
+    rather than hardcoding one.
+    """
+    year, month = (int(part) for part in key.split("-"))
+    last_day = monthrange(year, month)[1]
+    return f"{year:04d}-{month:02d}-01", f"{year:04d}-{month:02d}-{last_day:02d}"
 
 
 def _category_config(categories: CategoriesByType, txn_type: TransactionType) -> dict:
@@ -121,7 +134,9 @@ def _month_cells(
     cells = []
     for key in month_keys:
         amount = month_amounts.get(key, Decimal("0"))
-        cells.append({"amount": amount, "ring": _ring_geometry(amount, budget)})
+        cells.append(
+            {"key": key, "amount": amount, "ring": _ring_geometry(amount, budget)}
+        )
     return cells
 
 
@@ -152,6 +167,7 @@ def _category_month_matrix(
         rows.append(
             {
                 "name": category.name,
+                "category": category.name,
                 "icon": cat_config.get("icon", ""),
                 "indent": False,
                 "monthly": _month_cells(
@@ -169,6 +185,7 @@ def _category_month_matrix(
             rows.append(
                 {
                     "name": sub.name,
+                    "category": category.name,
                     "icon": sub_config.get("icon", ""),
                     "indent": True,
                     "monthly": _month_cells(
@@ -638,6 +655,11 @@ def year_detail(request: Request, year: int, account_id: str = "") -> HTMLRespon
     )
     income_config = _category_config(categories, TransactionType.INCOME)
     expense_config = _category_config(categories, TransactionType.EXPENSE)
+    # Backs the breakdown/month-matrix tables' click-through to
+    # /transactions, filtered to the clicked category/subcategory plus
+    # this exact time span — the whole year for the annual breakdown
+    # table, one specific month per cell in the month-to-month matrix.
+    month_bounds = {key: _month_date_bounds(key) for key in month_keys}
     return templates.TemplateResponse(
         request,
         "reports/year.html",
@@ -648,6 +670,9 @@ def year_detail(request: Request, year: int, account_id: str = "") -> HTMLRespon
             "chart": chart,
             "months": months,
             "month_labels": month_labels,
+            "date_from": f"{year:04d}-01-01",
+            "date_to": f"{year:04d}-12-31",
+            "month_bounds": month_bounds,
             "income_breakdown": income_breakdown,
             "expense_breakdown": expense_breakdown,
             "income_config": income_config,
@@ -707,6 +732,7 @@ def month_detail(
     expense_config = _category_config(categories, TransactionType.EXPENSE)
     prev_year, prev_month = _adjacent_month(year, month, -1)
     next_year, next_month = _adjacent_month(year, month, 1)
+    month_date_from, month_date_to = _month_date_bounds(f"{year:04d}-{month:02d}")
     return templates.TemplateResponse(
         request,
         "reports/month.html",
@@ -716,6 +742,8 @@ def month_detail(
             "accounts": accounts,
             "account_id": account_id,
             "label": f"{month_name[month]} {year}",
+            "date_from": month_date_from,
+            "date_to": month_date_to,
             "spending_pie": spending_pie,
             "income_breakdown": income_breakdown,
             "expense_breakdown": expense_breakdown,

@@ -293,6 +293,73 @@ def test_year_detail_shows_transaction_count_per_category(client):
     assert ">2<" in response.text
 
 
+def test_year_detail_breakdown_links_category_to_filtered_transactions(client):
+    _create_account(client)
+    _create_transaction(
+        client,
+        date="2026-01-20",
+        type="expense",
+        category="Groceries",
+        subcategory="Supermarket",
+        amount="50",
+    )
+
+    response = client.get("/reports/2026")
+
+    assert response.status_code == 200
+    assert (
+        "/transactions?txn_type=expense&category=Groceries&subcategory=&"
+        "date_from=2026-01-01&date_to=2026-12-31" in response.text
+    )
+    assert (
+        "/transactions?txn_type=expense&category=Groceries&"
+        "subcategory=Supermarket&date_from=2026-01-01&date_to=2026-12-31"
+        in response.text
+    )
+
+
+def test_year_detail_month_matrix_links_to_that_specific_month(client):
+    _create_account(client)
+    _create_transaction(
+        client, date="2026-02-20", type="expense", category="Groceries", amount="50"
+    )
+
+    response = client.get("/reports/2026")
+
+    assert response.status_code == 200
+    assert (
+        "/transactions?txn_type=expense&category=Groceries&subcategory=&"
+        "date_from=2026-02-01&date_to=2026-02-28" in response.text
+    )
+
+
+def test_year_detail_breakdown_links_preserve_account_filter(client):
+    _create_account(client, "chk")
+    _create_transaction(
+        client, date="2026-01-20", type="expense", category="Groceries", amount="50"
+    )
+
+    response = client.get("/reports/2026?account_id=chk")
+
+    assert response.status_code == 200
+    assert "account_id=chk" in response.text
+
+
+def test_month_detail_breakdown_links_to_that_month_only(client):
+    _create_account(client)
+    _create_transaction(
+        client, date="2026-09-20", type="expense", category="Groceries", amount="50"
+    )
+
+    response = client.get("/reports/2026/9")
+
+    assert response.status_code == 200
+    assert (
+        "/transactions?txn_type=expense&category=Groceries&subcategory=&"
+        "date_from=2026-09-01&date_to=2026-09-30" in response.text
+    )
+
+
 def test_year_detail_shows_category_icon_when_one_is_set(client):
     client.post("/categories/expense", data={"name": "Groceries", "icon": "cart"})
     _create_account(client)

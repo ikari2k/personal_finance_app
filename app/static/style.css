@@ -1336,6 +1336,26 @@ fieldset legend {
   border: 2px solid var(--pico-del-color);
 }
 
+/* Category/subcategory names and per-month amounts in the breakdown
+ * and month-matrix tables are links through to a filtered transactions
+ * list (see reports/_category_breakdown.html's _txn_link), but reading
+ * as a wall of underlined blue text across a dense table is exactly
+ * the "raw link" look that's wrong here — inherits the surrounding
+ * text's own color/weight instead, and only reveals itself as
+ * clickable on hover (underline) or focus (outline, for keyboard
+ * users), same "understated until you actually reach for it"
+ * treatment table rows with a click-through get elsewhere in the app
+ * (e.g. the accounts list). */
+.table-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.table-link:hover,
+.table-link:focus {
+  text-decoration: underline;
+}
+
 /* The annual category-breakdown table sits in a half-width
  * .report-columns cell, narrow enough that a long category/subcategory
  * name would otherwise wrap onto a second line and throw off row
