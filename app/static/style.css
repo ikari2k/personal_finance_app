@@ -498,12 +498,74 @@ button.btn-transfer {
   margin-bottom: 0;
 }
 
-.view-options input[type="search"] {
-  width: 12rem;
+/* The search/date-range row (see transactions/_table.html) — a second
+ * .view-options band, visually separated from the dropdown-filter row
+ * above it by its own top margin rather than all seven controls
+ * crowding one line. */
+.view-options-secondary {
+  margin-top: 0.5rem;
+}
+
+.view-options input[type="text"].search-input {
+  width: 14rem;
   flex: 0 0 auto;
   margin-bottom: 0;
-  padding: 0.35rem 0.6rem;
+  padding: 0.35rem 0.6rem 0.35rem 1.9rem;
   font-size: 0.85rem;
+}
+
+/* A native <input type="search">'s own browser-drawn decorations (a
+ * clear button, and on some browsers a magnifier) collided with this
+ * app's own icon — a plain type="text" input plus our own vendored
+ * icon instead, consistent across browsers and matching every other
+ * icon in the app being a real SVG rather than relying on inconsistent
+ * native chrome. */
+.search-input-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.search-input-icon {
+  position: absolute;
+  left: 0.55rem;
+  display: inline-flex;
+  color: var(--pico-muted-color);
+  pointer-events: none;
+}
+
+.search-input-icon svg {
+  width: 0.9rem;
+  height: 0.9rem;
+}
+
+/* One bordered pill around both date inputs (rather than two separate
+ * label+input pairs) so the pair reads as a single "date range" filter
+ * at a glance instead of competing for space with everything else in
+ * the row. */
+.date-range-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.15rem 0.5rem;
+  border: var(--pico-border-width) solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+  background: var(--pico-background-color);
+}
+
+.date-range-group input[type="date"] {
+  width: auto;
+  flex: 0 0 auto;
+  margin-bottom: 0;
+  padding: 0.3rem 0.4rem;
+  font-size: 0.85rem;
+  border-color: transparent;
+  background-color: transparent;
+}
+
+.date-range-sep {
+  color: var(--pico-muted-color);
+  font-size: 0.8rem;
 }
 
 .view-options-label {
@@ -1045,15 +1107,52 @@ fieldset legend {
  * charting library). Colors come from Pico's own variables so the
  * chart adapts to light/dark automatically, same as .amount-positive/
  * .amount-negative elsewhere. */
+/* Renders at its own native pixel size (viewBox units == real px) rather
+ * than stretching to width:100% — every month needs a genuinely fixed
+ * pixel width for .net-worth-chart-scroll's horizontal scroll to mean
+ * anything; a scaling SVG would just squash back down to fit instead. */
 .net-worth-chart {
+  display: block;
+}
+
+/* Shows exactly VISIBLE_MONTHS months at a time (max-width set inline
+ * per-render from chart.visible_width, since it depends on the actual
+ * month count) — older months scroll off to the left rather than all
+ * cramming into one illegibly dense chart. */
+.net-worth-chart-scroll {
+  overflow-x: auto;
+  padding-bottom: 0.35rem;
+}
+
+/* Applied instead of the above when chart.needs_scroll is false — the
+ * data already fits, so the SVG stretches to fill the container's own
+ * width (height follows automatically from the viewBox's own aspect
+ * ratio) rather than rendering at its native, possibly much narrower,
+ * pixel size and leaving empty space beside it. */
+.net-worth-chart-fill .net-worth-chart {
   width: 100%;
   height: auto;
+}
+
+.chart-axis-bg {
+  fill: var(--pico-background-color);
+}
+
+.chart-x-label {
+  fill: var(--pico-muted-color);
+  font-size: 13px;
+}
+
+.chart-x-label-year {
+  fill: var(--pico-color);
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .chart-line {
   fill: none;
   stroke: var(--pico-primary);
-  stroke-width: 2;
+  stroke-width: 2.5;
 }
 
 .chart-point {
@@ -1073,7 +1172,7 @@ fieldset legend {
 
 .chart-axis-label {
   fill: var(--pico-muted-color);
-  font-size: 10px;
+  font-size: 13px;
 }
 
 /* Income/expense bars reuse the same signed-amount colors as

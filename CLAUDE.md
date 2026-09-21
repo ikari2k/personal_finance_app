@@ -359,8 +359,67 @@ that a scale with no numbers can be glanced at but not actually read — reservi
 gutter (`_SPARK_LABEL_GUTTER`) rather than leaving the two end-of-scale values unlabeled; and
 Recent transactions switched from a flat "last 6 rows" cap to grouping by calendar day, showing
 the 5 most recent *distinct dates with any activity* (`RECENT_DAYS_LIMIT`, one `<tbody>` per day
-with its own header row) rather than a row count that could cut off mid-day. See
-`docs/implementation-plan.md` for the full phased plan, finalized schemas, and per-phase status
+with its own header row) rather than a row count that could cut off mid-day. Three redesign
+directions for `/reports`' net-worth chart were then explored as an Artifact mockup (smoothed
+line + quiet bars; net-worth and cash-flow split into two independently-scaled panels; both
+indexed to 100% at the range start) before picking pieces to build for real: `_svg_net_worth_chart`
+now gives every month a fixed `PER_MONTH_W` (56px) instead of squeezing the whole history into one
+flat 720px-wide chart, so `width` grows with the data (`pad_left + PER_MONTH_W * count +
+pad_right`) rather than bars getting thinner as more months accumulate. The template wraps it in
+`.net-worth-chart-scroll`, a horizontally-scrolling div capped at `chart.visible_width`
+(`VISIBLE_MONTHS` = 12 months' worth) — a long history scrolls left for older months instead of
+rendering illegibly dense. The y-axis value labels live in their own `<g id="net-worth-yaxis-pin">`
+painted last (so its `chart-axis-bg` rect occludes whatever's scrolled underneath) and get
+re-translated on every `scroll` event by a small inline script so they stay pinned to the
+viewport's left edge — a frozen axis — while gridlines/bars/the line scroll normally with the
+data; the same script sets initial `scrollLeft` to the far right on load, so the page opens
+already showing the most recent months, not the oldest. The chart also gained x-axis labels for
+the first time (previously month/year only appeared in hover tooltips and the two endpoint
+captions) — a month abbreviation under every column, with the year shown only where it actually
+changes (`_svg_net_worth_chart`'s `x_labels`, one `chart-x-label`/`chart-x-label-year` pair per
+row) rather than repeating it under all 12+ visible months. `_svg_net_worth_chart`'s `rows` shape
+changed from `(label, net_worth, income, expense)` 4-tuples to `(key, label, net_worth, income,
+expense)` 5-tuples — `key` (`"YYYY-MM"`) is what the new x-axis labels are actually built from,
+since a pre-formatted `"May 2024"` string can't cheaply tell you whether the year just changed.
+Live review flagged the chart as too small relative to how much page width was sitting empty next
+to it (a desktop-only local tool, per this file's own stance, has no narrow-screen budget to
+protect) — `PER_MONTH_W` grew from 56 to 84px, `VISIBLE_MONTHS` from 12 to 15, chart `height` from
+260 to 380, and every axis/label font-size and mark size scaled up to match. The whole chart +
+scroll-wrapper + pinned-axis markup (previously only on `/reports`) then got extracted into a
+shared `reports/_net_worth_chart.html` partial (expects `chart` in scope, included from both
+`reports/list.html` and the new `reports/year.html` usage) once `/reports/{year}` gained the same
+chart scoped to just that year. `app.routers.reports._net_worth_chart` is the new shared builder
+behind both pages — it always runs `net_worth_by_month` against the *full* transaction history
+first (net worth is a running cumulative total; computing it from only one year's transactions
+would drop every prior year's contribution and restart the line from zero) and only filters the
+resulting points down to one year *afterward*, when `year` is passed. A single year is always
+≤ 12 months, comfortably under `VISIBLE_MONTHS`, so the year page's chart never actually needs to
+scroll — the same markup just naturally renders without a scrollbar there. A follow-up made that
+explicit: `_svg_net_worth_chart` now also returns `needs_scroll` (`count > VISIBLE_MONTHS`), and
+the template only applies the fixed per-month pixel width/scroll wrapper when it's true; otherwise
+(a single year, or any short history) the SVG drops its fixed `width`/`height` attributes and
+`.net-worth-chart-fill` lets it stretch to `width: 100%` instead — every mark/label scales
+uniformly since they're all in the same viewBox coordinate system, so this reads as "fill the
+available page width" rather than sitting at a smaller native size with empty space beside it.
+
+The transactions list's toolbar then gained two more filters and a redesign pass after live
+review flagged it as crowded once search + date-range landed alongside the four existing dropdown
+filters. `_filter_ledger`/`render_table`/`list_transactions` gained `date_from`/`date_to` — two
+independent inclusive ISO `YYYY-MM-DD` bounds, same sticky-cookie "explicit empty overrides the
+cookie, absent falls back to it" convention as every other filter here, parsed defensively
+(`_parse_date` returns `None` rather than raising on a malformed value, so a stale/tampered cookie
+degrades to "no bound" instead of a 500). The `.view-options` toolbar split into two rows —
+Account/Category/Type/Group-by stayed on the first, while the two free-form filters (search text,
+date range) moved to a second `.view-options.view-options-secondary` band below it, rather than
+seven controls all crowding one line. The date inputs are grouped into one bordered
+`.date-range-group` pill (a shared "–" separator between them) so the pair reads as one "date
+range" filter concept instead of two separate label+input pairs. Search itself switched from
+`type="search"` to a plain `type="text"` with its own vendored icon (`search_icon()` in
+`_icons.html`, the same 16×16/1.4-stroke hand-drawn family as `edit_icon()`/`delete_icon()`) — a
+native search input's own browser-drawn decorations (a clear button, and on some browsers a
+magnifier glyph) were colliding with the app's own icon, so dropping the native `type` sidesteps
+cross-browser inconsistency entirely rather than fighting it with more CSS.
+See `docs/implementation-plan.md` for the full phased plan, finalized schemas, and per-phase status
 checkboxes/implementation notes.
 
 **Work proceeds one phase at a time.** Each phase in `docs/implementation-plan.md` is a discrete,

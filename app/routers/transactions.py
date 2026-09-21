@@ -57,6 +57,21 @@ def _categories_grouped(categories: CategoriesByType) -> list[tuple[str, list[st
     return [(name, sorted(subs)) for name, subs in sorted(grouped.items())]
 
 
+def _parse_date(value: str) -> date | None:
+    """Parse an ISO ``YYYY-MM-DD`` string, or ``None`` for empty/invalid input.
+
+    Never raises — a stale/tampered cookie holding a malformed date
+    should just be treated as "no bound" rather than 500ing the whole
+    list.
+    """
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return None
+
+
 def _filter_ledger(
     ledger: list[Transaction],
     *,
@@ -65,8 +80,10 @@ def _filter_ledger(
     subcategory: str,
     txn_type: str,
     search: str,
+    date_from: str,
+    date_to: str,
 ) -> list[Transaction]:
-    """Filter the ledger by account/category/subcategory/type/search (AND).
+    """Filter the ledger by account/category/subcategory/type/search/date range (AND).
 
     Each filter is optional.
 
@@ -80,6 +97,8 @@ def _filter_ledger(
     list is split into sections, not which rows are shown at all.
     ``search`` is a case-insensitive substring match against
     ``description`` — free text, not an equality filter like the others.
+    ``date_from``/``date_to`` are inclusive ISO ``YYYY-MM-DD`` bounds,
+    either or both may be unset independently.
     """
     if search:
         needle = search.strip().lower()
@@ -92,6 +111,12 @@ def _filter_ledger(
         ledger = [t for t in ledger if t.subcategory == subcategory]
     if txn_type:
         ledger = [t for t in ledger if t.type.value == txn_type]
+    parsed_from = _parse_date(date_from)
+    if parsed_from:
+        ledger = [t for t in ledger if t.date >= parsed_from]
+    parsed_to = _parse_date(date_to)
+    if parsed_to:
+        ledger = [t for t in ledger if t.date <= parsed_to]
     return ledger
 
 
@@ -120,6 +145,8 @@ def render_table(
     subcategory = request.cookies.get("subcategory", "")
     txn_type = request.cookies.get("txn_type", "")
     search = request.cookies.get("search", "")
+    date_from = request.cookies.get("date_from", "")
+    date_to = request.cookies.get("date_to", "")
     ledger = _filter_ledger(
         read_ledger(),
         account_id=account_id,
@@ -127,6 +154,8 @@ def render_table(
         subcategory=subcategory,
         txn_type=txn_type,
         search=search,
+        date_from=date_from,
+        date_to=date_to,
     )
     accounts_list = read_accounts()
     categories_tree = read_categories()
@@ -147,6 +176,8 @@ def render_table(
             "subcategory": subcategory,
             "txn_type": txn_type,
             "search": search,
+            "date_from": date_from,
+            "date_to": date_to,
             "oob": oob,
             "error": error,
         },
@@ -164,21 +195,26 @@ def list_transactions(
     subcategory: str | None = None,
     txn_type: str | None = None,
     search: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
 ) -> HTMLResponse:
     """Render the transaction list.
 
     Full navigation renders the whole page; an HTMX request (from the
-    grouping-toggle buttons or the account/category/subcategory/type/search
-    filters) renders just the table fragment they swap in. ``account_id``/
-    ``category``/``subcategory``/``txn_type``/``search`` each filter the
-    ledger (as an AND) before grouping when set; an empty string means "no
-    filter on this field". ``txn_type`` narrows to one of "income"/
-    "expense"/"transfer" — a different thing from the ``by_type``
-    *grouping* toggle, which only changes how an unfiltered list is split
-    into sections, not which rows are shown at all. ``search`` is a
-    case-insensitive substring match against ``description``.
+    grouping-toggle buttons or the account/category/subcategory/type/
+    search/date filters) renders just the table fragment they swap in.
+    ``account_id``/``category``/``subcategory``/``txn_type``/``search``/
+    ``date_from``/``date_to`` each filter the ledger (as an AND) before
+    grouping when set; an empty string means "no filter on this field".
+    ``txn_type`` narrows to one of "income"/"expense"/"transfer" — a
+    different thing from the ``by_type`` *grouping* toggle, which only
+    changes how an unfiltered list is split into sections, not which
+    rows are shown at all. ``search`` is a case-insensitive substring
+    match against ``description``. ``date_from``/``date_to`` are
+    inclusive ISO ``YYYY-MM-DD`` bounds, either or both settable
+    independently.
 
-    All seven params fall back to their standing cookie value when the
+    All nine params fall back to their standing cookie value when the
     query param is absent (a plain nav link) — never when it's explicitly
     present (including explicitly empty, e.g. picking "All accounts"), so
     a link that deliberately sets e.g. ``account_id=`` isn't overridden by
@@ -186,7 +222,7 @@ def list_transactions(
     rather than a concrete default — the concrete falsy value is itself a
     meaningful explicit choice, so only ``None`` (the param genuinely
     absent from the URL) means "fall back to the cookie". Every request
-    that resolves a value (from either source) re-writes all seven
+    that resolves a value (from either source) re-writes all nine
     cookies, keeping them in sync with the last choice actually shown.
     Cookies are set on the actual returned ``TemplateResponse`` rather
     than via an injected ``Response`` parameter — FastAPI only merges that
@@ -215,6 +251,12 @@ def list_transactions(
     resolved_search = (
         search if search is not None else request.cookies.get("search", "")
     )
+    resolved_date_from = (
+        date_from if date_from is not None else request.cookies.get("date_from", "")
+    )
+    resolved_date_to = (
+        date_to if date_to is not None else request.cookies.get("date_to", "")
+    )
 
     ledger = _filter_ledger(
         read_ledger(),
@@ -223,6 +265,8 @@ def list_transactions(
         subcategory=resolved_subcategory,
         txn_type=resolved_txn_type,
         search=resolved_search,
+        date_from=resolved_date_from,
+        date_to=resolved_date_to,
     )
     accounts_list = read_accounts()
     categories_tree = read_categories()
@@ -242,6 +286,8 @@ def list_transactions(
         "subcategory": resolved_subcategory,
         "txn_type": resolved_txn_type,
         "search": resolved_search,
+        "date_from": resolved_date_from,
+        "date_to": resolved_date_to,
         "error": None,
     }
     template = (
@@ -273,6 +319,12 @@ def list_transactions(
         "subcategory", resolved_subcategory, max_age=STICKY_FILTER_COOKIE_MAX_AGE
     )
     response.set_cookie("search", resolved_search, max_age=STICKY_FILTER_COOKIE_MAX_AGE)
+    response.set_cookie(
+        "date_from", resolved_date_from, max_age=STICKY_FILTER_COOKIE_MAX_AGE
+    )
+    response.set_cookie(
+        "date_to", resolved_date_to, max_age=STICKY_FILTER_COOKIE_MAX_AGE
+    )
     return response
 
 

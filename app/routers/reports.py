@@ -228,21 +228,50 @@ def _tick_bounds(values: list[float], step: float) -> tuple[float, float]:
     return y_min, y_max
 
 
+_MONTH_ABBR = [
+    "",
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+]
+
+# Chart geometry constants shared with the template's scroll wrapper —
+# the visible viewport is exactly VISIBLE_MONTHS wide, older months
+# reachable by scrolling left, so PER_MONTH_W must match on both ends
+# (see reports/list.html's inline max-width style). Sized to fill a
+# typical desktop viewport rather than sitting small in one corner of
+# the page — this is a desktop-only local tool (see CLAUDE.md), not a
+# mobile layout, so there's no narrow-screen budget being traded away.
+PER_MONTH_W = 84
+VISIBLE_MONTHS = 15
+
+
 def _svg_net_worth_chart(
-    rows: list[tuple[str, Decimal, Decimal, Decimal]],
+    rows: list[tuple[str, str, Decimal, Decimal, Decimal]],
     *,
-    width: int = 720,
-    height: int = 260,
-    pad_left: int = 72,
+    per_month_width: int = PER_MONTH_W,
+    height: int = 380,
+    pad_left: int = 84,
     pad_right: int = 16,
     pad_top: int = 16,
-    pad_bottom: int = 16,
+    pad_bottom: int = 42,
     tick_step: float | None = None,
 ) -> dict:
     """Return template-ready SVG geometry: a net worth line plus income/expense bars.
 
-    ``rows`` is ``(label, net_worth, income_total, expense_total)``
-    quadruples, oldest first, all for the same set of months. Returns
+    ``rows`` is ``(key, label, net_worth, income_total, expense_total)``
+    quintuples, oldest first, all for the same set of months — ``key``
+    is the "YYYY-MM" form (see ``services.aggregation.NetWorthPoint``),
+    used only to build the x-axis month/year labels below. Returns
     ``{"has_data": False}`` for no rows. Income/expense plot as
     magnitudes (``abs``) rising from the shared zero baseline — mixing a
     signed expense total with an unsigned bar height would read wrong —
@@ -251,13 +280,20 @@ def _svg_net_worth_chart(
     at a step ``_nice_step`` picks to fit the data (``tick_step``
     overrides that, mainly for tests that want an exact, predictable
     step rather than whatever the sample data happens to produce).
+
+    Each month gets a fixed ``per_month_width`` rather than however many
+    months squeezed into one flat total width — the whole chart widens
+    with the data instead of the bars getting thinner as more months
+    accumulate. The template scrolls this horizontally within a
+    ``VISIBLE_MONTHS``-wide viewport rather than showing years of
+    history at once, illegibly dense.
     """
     if not rows:
         return {"has_data": False}
 
-    net_worth_values = [float(net_worth) for _, net_worth, _, _ in rows]
-    magnitudes = [abs(float(income)) for _, _, income, _ in rows] + [
-        abs(float(expense)) for _, _, _, expense in rows
+    net_worth_values = [float(net_worth) for _, _, net_worth, _, _ in rows]
+    magnitudes = [abs(float(income)) for _, _, _, income, _ in rows] + [
+        abs(float(expense)) for _, _, _, _, expense in rows
     ]
     all_values = net_worth_values + magnitudes
     step = (
@@ -267,20 +303,15 @@ def _svg_net_worth_chart(
     )
     y_min, y_max = _tick_bounds(all_values, step)
 
+    count = len(rows)
     plot_left = pad_left
+    group_width = per_month_width
+    width = pad_left + group_width * count + pad_right
     plot_right = width - pad_right
-    plot_width = plot_right - plot_left
     plot_bottom = height - pad_bottom
     plot_height = plot_bottom - pad_top
-    count = len(rows)
-    group_width = plot_width / count
     bar_width = group_width * 0.32
     gap = group_width * 0.06
-
-    def x_at(index: int) -> float:
-        if count == 1:
-            return plot_left + plot_width / 2
-        return plot_left + plot_width * index / (count - 1)
 
     def y_at(value: float) -> float:
         return pad_top + plot_height * (1 - (value - y_min) / (y_max - y_min))
@@ -289,7 +320,9 @@ def _svg_net_worth_chart(
 
     bars = []
     coords = []
-    for index, (label, net_worth, income, expense) in enumerate(rows):
+    x_labels = []
+    previous_year = None
+    for index, (key, label, net_worth, income, expense) in enumerate(rows):
         center = plot_left + group_width * (index + 0.5)
         income_y = y_at(abs(float(income)))
         expense_y = y_at(abs(float(expense)))
@@ -307,7 +340,20 @@ def _svg_net_worth_chart(
                 "label": label,
             }
         )
-        coords.append((x_at(index), y_at(float(net_worth))))
+        coords.append((center, y_at(float(net_worth))))
+
+        year, month = key.split("-")
+        x_labels.append(
+            {
+                "x": center,
+                "month": _MONTH_ABBR[int(month)],
+                # Year shown only where it changes (or the very first
+                # column) — repeating it under every single month would
+                # just be noise once 12+ months are on screen at once.
+                "year": year if year != previous_year else "",
+            }
+        )
+        previous_year = year
 
     path_d = "M " + " L ".join(f"{x:.1f},{y:.1f}" for x, y in coords)
 
@@ -330,9 +376,23 @@ def _svg_net_worth_chart(
         "path_d": path_d,
         "coords": coords,
         "bars": bars,
-        "labels": [label for label, _, _, _ in rows],
-        "net_worth_labels": [f"{float(net_worth):,.2f}" for _, net_worth, _, _ in rows],
+        "x_labels": x_labels,
+        "labels": [label for _, label, _, _, _ in rows],
+        "net_worth_labels": [
+            f"{float(net_worth):,.2f}" for _, _, net_worth, _, _ in rows
+        ],
         "y_ticks": y_ticks,
+        "visible_width": pad_left + group_width * min(count, VISIBLE_MONTHS),
+        # When the data already fits within one screen (a single year on
+        # reports/year.html, or a short history on reports/list.html),
+        # there's nothing to scroll to — the template instead lets the
+        # chart stretch to fill whatever width its container actually
+        # has (CSS width: 100%), rather than sitting at its native,
+        # possibly much narrower, pixel size with empty space beside it.
+        # Once there's more than VISIBLE_MONTHS of data the fixed
+        # per-month pixel width has to hold instead, so the scroll
+        # container's width means something concrete.
+        "needs_scroll": count > VISIBLE_MONTHS,
     }
 
 
@@ -487,21 +547,37 @@ def _filter_by_account(transactions: list, account_id: str) -> list:
     return [t for t in transactions if t.account_id == account_id]
 
 
-@router.get("", response_class=HTMLResponse)
-def reports_overview(request: Request, account_id: str = "") -> HTMLResponse:
-    """Render the reports landing page: net worth chart + annual summary."""
-    accounts = read_accounts()
-    transactions = _filter_by_account(read_ledger(), account_id)
+def _net_worth_chart(
+    transactions: list, accounts: list, account_id: str, *, year: int | None = None
+) -> dict:
+    """Build ``_svg_net_worth_chart``'s geometry, optionally scoped to one year.
+
+    Shared by ``reports_overview`` (the full history) and ``year_detail``
+    (just that year's slice) so the two never duplicate the same
+    "resolve which accounts' starting balances count, run
+    ``net_worth_by_month``, zip in each month's income/expense" steps.
+    Net worth is always computed from the *full* transaction history
+    even when ``year`` narrows the result afterward — it's a running
+    cumulative total, so computing it against only one year's
+    transactions would drop every prior year's contribution and start
+    the line from zero instead of where the account actually stood
+    entering that year.
+    """
     net_worth_accounts = (
         [a for a in accounts if a.id == account_id] if account_id else accounts
     )
     net_worth_points = net_worth_by_month(transactions, net_worth_accounts)
+    if year is not None:
+        net_worth_points = [
+            p for p in net_worth_points if p.key.startswith(f"{year:04d}-")
+        ]
     monthly_totals = {
         month.key: month for month in monthly_totals_with_mom(transactions)
     }
-    chart = _svg_net_worth_chart(
+    return _svg_net_worth_chart(
         [
             (
+                point.key,
                 point.label,
                 point.value,
                 monthly_totals[point.key].income_total,
@@ -510,6 +586,14 @@ def reports_overview(request: Request, account_id: str = "") -> HTMLResponse:
             for point in net_worth_points
         ]
     )
+
+
+@router.get("", response_class=HTMLResponse)
+def reports_overview(request: Request, account_id: str = "") -> HTMLResponse:
+    """Render the reports landing page: net worth chart + annual summary."""
+    accounts = read_accounts()
+    transactions = _filter_by_account(read_ledger(), account_id)
+    chart = _net_worth_chart(transactions, accounts, account_id)
     years = yearly_totals_with_yoy(transactions)
     return templates.TemplateResponse(
         request,
@@ -529,6 +613,7 @@ def year_detail(request: Request, year: int, account_id: str = "") -> HTMLRespon
     accounts = read_accounts()
     transactions = _filter_by_account(read_ledger(), account_id)
     categories = read_categories()
+    chart = _net_worth_chart(transactions, accounts, account_id, year=year)
     income_breakdown = category_breakdown(transactions, year, TransactionType.INCOME)
     expense_breakdown = category_breakdown(transactions, year, TransactionType.EXPENSE)
     months = [
@@ -560,6 +645,7 @@ def year_detail(request: Request, year: int, account_id: str = "") -> HTMLRespon
             "year": year,
             "accounts": accounts,
             "account_id": account_id,
+            "chart": chart,
             "months": months,
             "month_labels": month_labels,
             "income_breakdown": income_breakdown,

@@ -141,12 +141,117 @@ def test_reports_overview_chart_includes_monthly_income_expense_bars(client):
     assert "chart-legend" in response.text
 
 
+def test_reports_overview_chart_shows_month_and_year_x_axis_labels(client):
+    _create_account(client, starting_balance="0.00")
+    _create_transaction(
+        client, date="2025-12-05", type="income", category="Salary", amount="100"
+    )
+    _create_transaction(
+        client, date="2026-01-05", type="income", category="Salary", amount="100"
+    )
+
+    response = client.get("/reports")
+
+    assert response.status_code == 200
+    net_worth_svg = response.text.split('aria-label="Net worth over time"')[1].split(
+        "</svg>"
+    )[0]
+    assert ">Dec<" in net_worth_svg
+    assert ">Jan<" in net_worth_svg
+    # The year label only appears once per year change, not on every
+    # month column.
+    assert net_worth_svg.count("chart-x-label-year") == 2
+    assert ">2025<" in net_worth_svg
+    assert ">2026<" in net_worth_svg
+
+
+def test_reports_overview_chart_scroll_wrapper_caps_at_visible_months(client):
+    _create_account(client, starting_balance="0.00")
+    # 18 months, spanning a year boundary (Jan 2025 - Jun 2026) so every
+    # month/date is genuinely valid.
+    for i in range(18):
+        year, month = divmod(i, 12)
+        _create_transaction(
+            client,
+            date=f"{2025 + year}-{month + 1:02d}-05",
+            type="income",
+            category="Salary",
+            amount="100",
+        )
+
+    response = client.get("/reports")
+
+    assert response.status_code == 200
+    assert "net-worth-chart-scroll" in response.text
+    # 18 months of data, but the wrapper's max-width should only ever
+    # show VISIBLE_MONTHS (15) of them at once (84 + 84*15 = 1344px).
+    assert "max-width: 1344px" in response.text
+
+
 def test_year_detail_with_no_transactions(client):
     response = client.get("/reports/2026")
 
     assert response.status_code == 200
     assert "No transactions in 2026" in response.text
     assert "No data" in response.text
+
+
+def test_year_detail_shows_net_worth_chart_for_just_that_year(client):
+    _create_account(client, starting_balance="1000.00")
+    _create_transaction(
+        client, date="2025-06-01", type="income", category="Salary", amount="500"
+    )
+    _create_transaction(
+        client, date="2026-01-15", type="income", category="Salary", amount="200"
+    )
+    _create_transaction(
+        client, date="2026-02-15", type="income", category="Salary", amount="300"
+    )
+
+    response = client.get("/reports/2026")
+
+    assert response.status_code == 200
+    net_worth_svg = response.text.split('aria-label="Net worth over time"')[1].split(
+        "</svg>"
+    )[0]
+    # Only 2026's two months show, even though 2025 has earlier activity
+    # that the cumulative net worth still needs to account for.
+    assert net_worth_svg.count("chart-point") == 2
+    assert "January 2026 net worth: 1,700.00" in net_worth_svg
+    assert "February 2026 net worth: 2,000.00" in net_worth_svg
+    assert "2025" not in net_worth_svg
+
+
+def test_year_detail_chart_stretches_to_fill_since_a_year_never_needs_scroll(client):
+    _create_account(client, starting_balance="0.00")
+    _create_transaction(
+        client, date="2026-01-15", type="income", category="Salary", amount="100"
+    )
+
+    response = client.get("/reports/2026")
+
+    assert response.status_code == 200
+    assert "net-worth-chart-fill" in response.text
+    assert "max-width:" not in response.text
+
+
+def test_reports_overview_chart_scrolls_once_past_visible_months(client):
+    _create_account(client, starting_balance="0.00")
+    for i in range(18):
+        year, month = divmod(i, 12)
+        _create_transaction(
+            client,
+            date=f"{2025 + year}-{month + 1:02d}-05",
+            type="income",
+            category="Salary",
+            amount="100",
+        )
+
+    response = client.get("/reports")
+
+    assert response.status_code == 200
+    assert "net-worth-chart-fill" not in response.text
+    assert "max-width: 1344px" in response.text
 
 
 def test_year_detail_shows_monthly_breakdown_and_category_totals(client):

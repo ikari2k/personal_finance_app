@@ -7,6 +7,11 @@
   <h1>{{ year }}</h1>
   {{ account_filter(accounts, account_id) }}
 
+  <article>
+    <h2>Net worth over time</h2>
+    {% include "reports/_net_worth_chart.html" %}
+  </article>
+
   <h2>Monthly breakdown</h2>
   {% if months %}
     <div class="table-scroll">

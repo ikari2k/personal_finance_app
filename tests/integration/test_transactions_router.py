@@ -529,6 +529,144 @@ def test_explicit_empty_search_overrides_cookie(client):
     assert "paycheck" in all_rows.text
 
 
+def test_date_range_filter_matches_inclusive_bounds(client):
+    _create_account(client)
+    for d in ("2026-01-10", "2026-01-15", "2026-01-20"):
+        client.post(
+            "/transactions",
+            data={
+                "account_id": "chk",
+                "date": d,
+                "type": "expense",
+                "category": "Groceries",
+                "subcategory": "",
+                "description": d,
+                "amount": "10.00",
+                "notes": "",
+            },
+        )
+
+    filtered = client.get("/transactions?date_from=2026-01-10&date_to=2026-01-15")
+
+    assert "2026-01-10" in filtered.text
+    assert "2026-01-15" in filtered.text
+    assert "2026-01-20" not in filtered.text
+
+
+def test_date_range_filter_only_from_set(client):
+    _create_account(client)
+    for d in ("2026-01-10", "2026-01-20"):
+        client.post(
+            "/transactions",
+            data={
+                "account_id": "chk",
+                "date": d,
+                "type": "expense",
+                "category": "Groceries",
+                "subcategory": "",
+                "description": d,
+                "amount": "10.00",
+                "notes": "",
+            },
+        )
+
+    filtered = client.get("/transactions?date_from=2026-01-15")
+
+    assert "2026-01-10" not in filtered.text
+    assert "2026-01-20" in filtered.text
+
+
+def test_date_range_filter_only_to_set(client):
+    _create_account(client)
+    for d in ("2026-01-10", "2026-01-20"):
+        client.post(
+            "/transactions",
+            data={
+                "account_id": "chk",
+                "date": d,
+                "type": "expense",
+                "category": "Groceries",
+                "subcategory": "",
+                "description": d,
+                "amount": "10.00",
+                "notes": "",
+            },
+        )
+
+    filtered = client.get("/transactions?date_to=2026-01-15")
+
+    assert "2026-01-10" in filtered.text
+    assert "2026-01-20" not in filtered.text
+
+
+def test_date_range_filter_is_sticky_via_cookies(client):
+    _create_account(client)
+    client.post(
+        "/transactions",
+        data={
+            "account_id": "chk",
+            "date": "2026-01-15",
+            "type": "expense",
+            "category": "Groceries",
+            "subcategory": "",
+            "description": "grocery run",
+            "amount": "10.00",
+            "notes": "",
+        },
+    )
+
+    filtered = client.get("/transactions?date_from=2026-01-01&date_to=2026-01-31")
+    assert filtered.cookies.get("date_from") == "2026-01-01"
+    assert filtered.cookies.get("date_to") == "2026-01-31"
+
+    remembered = client.get("/transactions")
+    assert "grocery run" in remembered.text
+
+
+def test_explicit_empty_date_range_overrides_cookie(client):
+    _create_account(client)
+    client.post(
+        "/transactions",
+        data={
+            "account_id": "chk",
+            "date": "2026-01-15",
+            "type": "expense",
+            "category": "Groceries",
+            "subcategory": "",
+            "description": "grocery run",
+            "amount": "10.00",
+            "notes": "",
+        },
+    )
+    client.get("/transactions?date_from=2026-06-01&date_to=2026-06-30")
+
+    all_rows = client.get("/transactions?date_from=&date_to=")
+
+    assert "grocery run" in all_rows.text
+
+
+def test_date_range_filter_ignores_malformed_date(client):
+    _create_account(client)
+    client.post(
+        "/transactions",
+        data={
+            "account_id": "chk",
+            "date": "2026-01-15",
+            "type": "expense",
+            "category": "Groceries",
+            "subcategory": "",
+            "description": "grocery run",
+            "amount": "10.00",
+            "notes": "",
+        },
+    )
+
+    response = client.get("/transactions?date_from=not-a-date")
+
+    assert response.status_code == 200
+    assert "grocery run" in response.text
+
+
 def test_category_and_subcategory_filters_combine_as_and(client):
     _create_account(client)
     client.post(

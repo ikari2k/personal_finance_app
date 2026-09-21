@@ -1,0 +1,94 @@
+{#
+  Shared by reports/list.html (the full multi-year history) and
+  reports/year.html (one year's slice of the same cumulative line) —
+  same chart, same markup, just fed a differently-scoped ``chart`` geometry
+  (see app.routers.reports._net_worth_chart). Expects ``chart`` in scope.
+#}
+{% if chart.has_data %}
+  <p class="chart-legend">
+    <span class="chart-legend-swatch bar-income"></span> Income
+    <span class="chart-legend-swatch bar-expense"></span> Expense
+    <span class="chart-legend-swatch line-net-worth"></span> Net worth
+  </p>
+  {#
+    Shows only VISIBLE_MONTHS (15) months at a time — the wrapper's
+    max-width is chart.visible_width, so a long history scrolls
+    horizontally within it instead of squeezing every month into one
+    illegibly dense chart. When the data already fits (chart.needs_scroll
+    is false — a single year on year.html, or a short history on
+    list.html), there's nothing to scroll to, so the SVG instead
+    stretches to fill its container width (no fixed width/height
+    attributes, no max-width cap) rather than sitting at its native,
+    possibly much narrower, size with empty space beside it — the
+    stretch scales every mark/label uniformly since they're all defined
+    in the same viewBox coordinate system. The y-axis value labels live
+    in a separate <g> at the very end (painted last, so its background
+    rect occludes whatever's scrolled underneath) and get repositioned
+    via the inline script below on every scroll event so they stay
+    pinned to the viewport's left edge — a frozen axis — while
+    gridlines/bars/the line itself scroll normally with the data they
+    belong to; harmless no-op when there's nothing to scroll.
+  #}
+  <div class="net-worth-chart-scroll{{ '' if chart.needs_scroll else ' net-worth-chart-fill' }}"
+       id="net-worth-chart-scroll"
+       {% if chart.needs_scroll %}style="max-width: {{ chart.visible_width }}px;"{% endif %}>
+    <svg viewBox="0 0 {{ chart.width }} {{ chart.height }}"
+         {% if chart.needs_scroll %}width="{{ chart.width }}" height="{{ chart.height }}"{% endif %}
+         class="net-worth-chart" role="img" aria-label="Net worth over time">
+      {% for tick in chart.y_ticks %}
+        <line x1="{{ chart.plot_left }}" y1="{{ tick.y }}" x2="{{ chart.plot_right }}" y2="{{ tick.y }}"
+              class="chart-gridline"/>
+      {% endfor %}
+      <line x1="{{ chart.plot_left }}" y1="{{ chart.zero_y }}" x2="{{ chart.plot_right }}" y2="{{ chart.zero_y }}"
+            class="chart-zero-line"/>
+      {% for bar in chart.bars %}
+        <rect x="{{ bar.income_x }}" y="{{ bar.income_y }}" width="{{ bar.bar_width }}"
+              height="{{ bar.income_h }}" class="bar-income">
+          <title>{{ bar.label }} income: {{ bar.income_label }}</title>
+        </rect>
+        <rect x="{{ bar.expense_x }}" y="{{ bar.expense_y }}" width="{{ bar.bar_width }}"
+              height="{{ bar.expense_h }}" class="bar-expense">
+          <title>{{ bar.label }} expense: {{ bar.expense_label }}</title>
+        </rect>
+      {% endfor %}
+      <path d="{{ chart.path_d }}" class="chart-line"/>
+      {% for x, y in chart.coords %}
+        <circle cx="{{ x }}" cy="{{ y }}" r="4" class="chart-point">
+          <title>{{ chart.labels[loop.index0] }} net worth: {{ chart.net_worth_labels[loop.index0] }}</title>
+        </circle>
+      {% endfor %}
+      {% for xl in chart.x_labels %}
+        <text x="{{ xl.x }}" y="{{ chart.height - 26 }}" class="chart-x-label"
+              text-anchor="middle">{{ xl.month }}</text>
+        {% if xl.year %}
+          <text x="{{ xl.x }}" y="{{ chart.height - 9 }}" class="chart-x-label-year"
+                text-anchor="middle">{{ xl.year }}</text>
+        {% endif %}
+      {% endfor %}
+      <g id="net-worth-yaxis-pin">
+        <rect class="chart-axis-bg" x="0" y="0" width="{{ chart.plot_left }}" height="{{ chart.height }}"/>
+        {% for tick in chart.y_ticks %}
+          <text x="{{ chart.plot_left - 8 }}" y="{{ tick.y }}" class="chart-axis-label"
+                text-anchor="end" dominant-baseline="middle">{{ tick.label }}</text>
+        {% endfor %}
+      </g>
+    </svg>
+  </div>
+  <script>
+    (function () {
+      var wrap = document.getElementById("net-worth-chart-scroll");
+      var pin = document.getElementById("net-worth-yaxis-pin");
+      if (!wrap || !pin) return;
+      function sync() { pin.setAttribute("transform", "translate(" + wrap.scrollLeft + ",0)"); }
+      wrap.addEventListener("scroll", sync);
+      wrap.scrollLeft = wrap.scrollWidth;
+      sync();
+    })();
+  </script>
+  <p class="chart-range muted">
+    <span>{{ chart.labels[0] }}: {{ chart.net_worth_labels[0] }}</span>
+    <span>{{ chart.labels[-1] }}: {{ chart.net_worth_labels[-1] }}</span>
+  </p>
+{% else %}
+  <p>No transactions yet.</p>
+{% endif %}
