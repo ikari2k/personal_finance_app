@@ -5,7 +5,13 @@ from decimal import Decimal, InvalidOperation
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 
-from app.models.account import Account
+from app.models.account import (
+    ACCOUNT_STATUS_LABELS,
+    ACCOUNT_TYPE_LABELS,
+    Account,
+    AccountStatus,
+    AccountType,
+)
 from app.routers.htmx_events import toast
 from app.services.accounts import add_account, remove_account, update_account
 from app.services.balances import all_balances
@@ -34,7 +40,14 @@ def _render_table(
     return templates.TemplateResponse(
         request,
         "accounts/_table.html",
-        {"accounts": accounts, "balances": balances, "oob": oob, "error": error},
+        {
+            "accounts": accounts,
+            "balances": balances,
+            "oob": oob,
+            "error": error,
+            "account_type_labels": ACCOUNT_TYPE_LABELS,
+            "account_status_labels": ACCOUNT_STATUS_LABELS,
+        },
         headers=headers,
     )
 
@@ -50,7 +63,13 @@ def _render_form(
     return templates.TemplateResponse(
         request,
         "accounts/_form.html",
-        {"mode": mode, "values": values, "error": error},
+        {
+            "mode": mode,
+            "values": values,
+            "error": error,
+            "account_type_labels": ACCOUNT_TYPE_LABELS,
+            "account_status_labels": ACCOUNT_STATUS_LABELS,
+        },
     )
 
 
@@ -62,7 +81,13 @@ def list_accounts(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
         "accounts/list.html",
-        {"accounts": accounts, "balances": balances, "error": None},
+        {
+            "accounts": accounts,
+            "balances": balances,
+            "error": None,
+            "account_type_labels": ACCOUNT_TYPE_LABELS,
+            "account_status_labels": ACCOUNT_STATUS_LABELS,
+        },
     )
 
 
@@ -75,6 +100,8 @@ def new_account_form(request: Request) -> HTMLResponse:
         "number": "",
         "description": "",
         "starting_balance": "0.00",
+        "account_type": AccountType.CHECKING.value,
+        "status": AccountStatus.ACTIVE.value,
     }
     return _render_form(request, mode="new", values=values)
 
@@ -91,6 +118,8 @@ def edit_account_form(request: Request, account_id: str) -> HTMLResponse:
         "number": account.number,
         "description": account.description,
         "starting_balance": str(account.starting_balance),
+        "account_type": account.account_type.value,
+        "status": account.status.value,
     }
     return _render_form(request, mode="edit", values=values)
 
@@ -103,6 +132,8 @@ def create_account(
     number: str = Form(""),
     description: str = Form(""),
     starting_balance: str = Form("0"),
+    account_type: str = Form(AccountType.OTHER.value),
+    status: str = Form(AccountStatus.ACTIVE.value),
 ) -> HTMLResponse:
     """Create a new account; close the dialog and refresh the table on success."""
     values = {
@@ -111,6 +142,8 @@ def create_account(
         "number": number,
         "description": description,
         "starting_balance": starting_balance,
+        "account_type": account_type,
+        "status": status,
     }
     accounts = read_accounts()
     try:
@@ -121,6 +154,8 @@ def create_account(
             number=number,
             description=description,
             starting_balance=balance,
+            account_type=AccountType(account_type),
+            status=AccountStatus(status),
         )
         accounts = add_account(accounts, new_account)
     except (ValueError, InvalidOperation) as exc:
@@ -139,6 +174,8 @@ def edit_account(
     number: str = Form(""),
     description: str = Form(""),
     starting_balance: str = Form("0"),
+    account_type: str = Form(AccountType.OTHER.value),
+    status: str = Form(AccountStatus.ACTIVE.value),
 ) -> HTMLResponse:
     """Update an existing account; close the dialog and refresh the table on success."""
     values = {
@@ -147,6 +184,8 @@ def edit_account(
         "number": number,
         "description": description,
         "starting_balance": starting_balance,
+        "account_type": account_type,
+        "status": status,
     }
     accounts = read_accounts()
     try:
@@ -158,6 +197,8 @@ def edit_account(
             number=number,
             description=description,
             starting_balance=balance,
+            account_type=AccountType(account_type),
+            status=AccountStatus(status),
         )
     except (ValueError, InvalidOperation) as exc:
         return _render_form(request, mode="edit", values=values, error=str(exc))

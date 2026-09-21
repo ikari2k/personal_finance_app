@@ -18,21 +18,100 @@
           {{ delete_icon() }}
         </button>
       </span>
-      {{ txn.date }}
+      <span class="txn-date">{{ txn.date }}</span>
     </td>
     {% if show_account %}
       <td>{{ accounts[txn.account_id].name if txn.account_id in accounts else txn.account_id }}</td>
     {% endif %}
     <td class="cat-cell">
-      {% if txn.subcategory %}
-        {% if sub_icon %}<span class="cat-cell-icon cat-cell-icon-{{ txn.type.value }}">{{ category_icon(sub_icon) }}</span>{% endif %}
-        {{ txn.subcategory }}
-      {% else %}
-        {% if cat_icon %}<span class="cat-cell-icon cat-cell-icon-{{ txn.type.value }}">{{ category_icon(cat_icon) }}</span>{% endif %}
+      {% if txn.type.value == 'transfer' %}
         {{ txn.category }}
+      {% else %}
+      {#
+        Icon + combobox share one flex row (not just left as sibling
+        inline elements) so they never wrap onto two lines — see
+        .cat-combo-input's own CSS comment for why a fixed-width column
+        needs the input to truncate rather than wrap/overflow.
+      #}
+      <span class="cat-cell-row">
+        {% if txn.subcategory %}
+          {% if sub_icon %}<span class="cat-cell-icon cat-cell-icon-{{ txn.type.value }}">{{ category_icon(sub_icon) }}</span>{% endif %}
+        {% elif cat_icon %}
+          <span class="cat-cell-icon cat-cell-icon-{{ txn.type.value }}">{{ category_icon(cat_icon) }}</span>
+        {% endif %}
+        {#
+          A hand-rolled type-to-filter combobox (app/static/app.js), not
+          a native <select> — the whole point is to make recategorizing
+          several rows in a row fast, and typing narrows the list live
+          (substring match) rather than relying on a native select's
+          jump-to-first-match type-ahead. A subcategory option's own text
+          carries its category as a "(Category)" suffix, matching the
+          toolbar's own combined Category filter's grouping. Deliberately
+          never offers "create new" — only category_pair_exists-validated
+          pairs already in the tree, see app.routers.transactions
+          .update_transaction_category_route; the JS only ever commits a
+          value picked from `.cat-combo-option`, never free-typed text
+          (Escape, or clicking away without picking one, reverts the
+          input to its last committed value).
+
+          A ledger row's category/subcategory can go stale (deleting a
+          category/subcategory intentionally never touches existing
+          ledger rows — see CLAUDE.md's "no automatic dedup" stance), in
+          which case it won't match any `.cat-combo-option`; known_current
+          catches that so the input just shows the row's *actual* stored
+          value plus a "(not in category list)" suffix, rather than a
+          <select>-style synthetic disabled option (not needed here — a
+          text input can show arbitrary text with no matching option at
+          all).
+        #}
+        {% set type_tree = categories.get(txn.type.value, {}) %}
+        {% set current_cat_entry = type_tree.get(txn.category) %}
+        {% set known_current = current_cat_entry is not none and (not txn.subcategory or txn.subcategory in current_cat_entry.subcategories) %}
+        {% if known_current %}
+          {% set display_value = txn.subcategory + ' (' + txn.category + ')' if txn.subcategory else txn.category %}
+        {% else %}
+          {% set display_value = (txn.subcategory or txn.category) + ' (not in category list)' %}
+        {% endif %}
+        <span class="cat-combo" data-txn-id="{{ txn.id }}">
+          <input type="text" class="cat-combo-input" autocomplete="off" spellcheck="false"
+                 value="{{ display_value }}"
+                 data-category="{{ txn.category }}" data-subcategory="{{ txn.subcategory }}"
+                 data-display="{{ display_value }}">
+          <div class="cat-combo-list" role="listbox" hidden>
+            {% for cat_name, entry in type_tree.items() %}
+              <div class="cat-combo-group-label">{{ cat_name }}</div>
+              <div class="cat-combo-option" role="option" tabindex="-1"
+                   data-category="{{ cat_name }}" data-subcategory="">{{ cat_name }}</div>
+              {% for sub_name in entry.subcategories %}
+                <div class="cat-combo-option" role="option" tabindex="-1"
+                     data-category="{{ cat_name }}" data-subcategory="{{ sub_name }}">{{ sub_name }} ({{ cat_name }})</div>
+              {% endfor %}
+            {% endfor %}
+          </div>
+        </span>
+      </span>
       {% endif %}
     </td>
-    <td>{{ txn.description }}</td>
+    <td>
+      {#
+        Displays ``notes`` when set, falling back to the original
+        ``description`` otherwise — editing this input only ever
+        writes ``notes`` (POST /transactions/{id}/notes), never
+        ``description`` itself, which import dedup and rule matching
+        key off of and must stay untouched (see CLAUDE.md). Submitting
+        it empty clears the note and reverts the cell back to showing
+        the original description. When a note is overriding the
+        display, the original description is still reachable — a
+        native title tooltip on hover — rather than gone with no trace;
+        skipped when there's no note to override anything, since the
+        input's own value already is the description then.
+      #}
+      <input type="text" class="desc-inline-input"
+             value="{{ txn.notes if txn.notes else txn.description }}"
+             {% if txn.notes %}title="Original description: {{ txn.description }}"{% endif %}
+             hx-post="/transactions/{{ txn.id }}/notes" hx-trigger="change"
+             hx-target="closest tr" hx-swap="outerHTML" name="notes">
+    </td>
     <td class="{{ 'amount-negative' if txn.amount < 0 else 'amount-positive' }}">
       {{ "%.2f"|format(txn.amount) }}
     </td>
@@ -68,7 +147,10 @@
     {% for group in month.groups %}
       <div class="type-group" data-type="{{ group.type.value }}">
         <div class="type-group-header">
-          <span>{{ group.type.value|capitalize }}</span>
+          <span>
+            {{ group.type.value|capitalize }}
+            <span class="txn-count">({{ group.transactions|length }})</span>
+          </span>
           <span>{{ "%.2f"|format(group.subtotal) }}</span>
         </div>
         <table>
@@ -95,7 +177,7 @@
     <select
         hx-get="/transactions" hx-target="#transactions-table-wrapper" hx-swap="outerHTML"
         hx-push-url="true" hx-trigger="change" name="account_id"
-        hx-vals='{"by_month": "{{ 'true' if by_month else 'false' }}", "by_type": "{{ 'true' if by_type else 'false' }}", "category": "{{ category }}", "subcategory": "{{ subcategory }}"}'>
+        hx-vals='{"by_month": "{{ 'true' if by_month else 'false' }}", "by_type": "{{ 'true' if by_type else 'false' }}", "category": "{{ category }}", "subcategory": "{{ subcategory }}", "txn_type": "{{ txn_type }}", "search": "{{ search }}"}'>
       <option value="" {{ 'selected' if not account_id }}>All accounts</option>
       {% for account in accounts_list %}
         <option value="{{ account.id }}" {{ 'selected' if account.id == account_id }}>
@@ -116,7 +198,7 @@
     <select
         hx-get="/transactions" hx-target="#transactions-table-wrapper" hx-swap="outerHTML"
         hx-push-url="true" hx-trigger="change" name="category"
-        hx-vals='js:{by_month: "{{ 'true' if by_month else 'false' }}", by_type: "{{ 'true' if by_type else 'false' }}", account_id: "{{ account_id }}", subcategory: event.target.selectedOptions[0].dataset.subcategory}'>
+        hx-vals='js:{by_month: "{{ 'true' if by_month else 'false' }}", by_type: "{{ 'true' if by_type else 'false' }}", account_id: "{{ account_id }}", txn_type: "{{ txn_type }}", search: "{{ search }}", subcategory: event.target.selectedOptions[0].dataset.subcategory}'>
       <option value="" data-subcategory="" {{ 'selected' if not category }}>All categories</option>
       {% for name, subcategories in categories_grouped %}
         <optgroup label="{{ name }}">
@@ -134,6 +216,24 @@
       {% endfor %}
     </select>
     {#
+      Type filter (income/expense/transfer) — a different thing from the
+      "Group by" select below: filtering narrows which rows are shown at
+      all, grouping only changes how an unfiltered list is split into
+      sections. Kept as its own control rather than folded into Group by,
+      since the two are orthogonal (you can filter to Expense only *and*
+      still group by month).
+    #}
+    <span class="view-options-label">Type</span>
+    <select
+        hx-get="/transactions" hx-target="#transactions-table-wrapper" hx-swap="outerHTML"
+        hx-push-url="true" hx-trigger="change" name="txn_type"
+        hx-vals='{"by_month": "{{ 'true' if by_month else 'false' }}", "by_type": "{{ 'true' if by_type else 'false' }}", "account_id": "{{ account_id }}", "category": "{{ category }}", "subcategory": "{{ subcategory }}", "search": "{{ search }}"}'>
+      <option value="" {{ 'selected' if not txn_type }}>All types</option>
+      <option value="income" {{ 'selected' if txn_type == 'income' }}>Income</option>
+      <option value="expense" {{ 'selected' if txn_type == 'expense' }}>Expense</option>
+      <option value="transfer" {{ 'selected' if txn_type == 'transfer' }}>Transfer</option>
+    </select>
+    {#
       Same "js:" hx-vals trick collapses the old two grouping-toggle
       buttons into one select — by_type rides along as a data attribute
       on whichever by_month option was picked.
@@ -142,12 +242,25 @@
     <select
         hx-get="/transactions" hx-target="#transactions-table-wrapper" hx-swap="outerHTML"
         hx-push-url="true" hx-trigger="change" name="by_month"
-        hx-vals='js:{by_type: event.target.selectedOptions[0].dataset.byType, account_id: "{{ account_id }}", category: "{{ category }}", subcategory: "{{ subcategory }}"}'>
+        hx-vals='js:{by_type: event.target.selectedOptions[0].dataset.byType, account_id: "{{ account_id }}", category: "{{ category }}", subcategory: "{{ subcategory }}", txn_type: "{{ txn_type }}", search: "{{ search }}"}'>
       <option value="true" data-by-type="true" {{ 'selected' if by_month and by_type }}>Month &amp; type</option>
       <option value="true" data-by-type="false" {{ 'selected' if by_month and not by_type }}>Month only</option>
       <option value="false" data-by-type="true" {{ 'selected' if not by_month and by_type }}>Type only</option>
       <option value="false" data-by-type="false" {{ 'selected' if not by_month and not by_type }}>No grouping</option>
     </select>
+    {#
+      Free-text search — the one non-<select> control in this toolbar, so
+      it can't ride the same "picking an option carries every other
+      value" pattern; instead its own hx-vals reads the other five
+      current values as plain template output (no event needed, there's
+      no <option> to inspect). Debounced via hx-trigger's delay so it
+      doesn't round-trip on every keystroke.
+    #}
+    <span class="view-options-label">Search</span>
+    <input type="search" name="search" value="{{ search }}" placeholder="Description…"
+        hx-get="/transactions" hx-target="#transactions-table-wrapper" hx-swap="outerHTML"
+        hx-push-url="true" hx-trigger="input changed delay:400ms, search"
+        hx-vals='{"by_month": "{{ 'true' if by_month else 'false' }}", "by_type": "{{ 'true' if by_type else 'false' }}", "account_id": "{{ account_id }}", "category": "{{ category }}", "subcategory": "{{ subcategory }}", "txn_type": "{{ txn_type }}"}'>
     {% if by_month %}
       <button type="button" class="secondary"
               onclick="var anyClosed = document.querySelector('.month-section:not([open])'); document.querySelectorAll('.month-section').forEach(function (d) { d.open = !!anyClosed; });">
@@ -160,7 +273,10 @@
     {% if by_month %}
       <details class="month-section" {% if loop.first %}open{% endif %}>
         <summary>
-          <span class="month-label">{{ month.label }}</span>
+          <span class="month-label">
+            {{ month.label }}
+            <span class="txn-count">({{ month.transactions|length }})</span>
+          </span>
           <span class="{{ 'amount-negative' if month.net_total < 0 else 'amount-positive' }}">
             {{ "%.2f"|format(month.net_total) }}
           </span>
@@ -169,7 +285,7 @@
       </details>
     {% else %}
       <div class="flat-net-total">
-        <span>Net total</span>
+        <span>Net total <span class="txn-count">({{ month.transactions|length }})</span></span>
         <span class="{{ 'amount-negative' if month.net_total < 0 else 'amount-positive' }}">
           {{ "%.2f"|format(month.net_total) }}
         </span>

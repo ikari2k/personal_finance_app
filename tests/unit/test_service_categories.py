@@ -8,6 +8,7 @@ from app.models.transaction import TransactionType
 from app.services.categories import (
     add_category,
     add_subcategory,
+    category_pair_exists,
     delete_category,
     delete_subcategory,
     subcategories_exceed_category_budget,
@@ -489,3 +490,40 @@ def test_subcategories_exceed_category_budget_false_when_category_has_no_budget(
     }
 
     assert subcategories_exceed_category_budget(entry) is False
+
+
+_TREE = {
+    "expense": {
+        "Groceries": {
+            "icon": "",
+            "budget": "",
+            "subcategories": {"Supermarket": {"icon": "", "budget": ""}},
+        }
+    }
+}
+
+
+def test_category_pair_exists_true_for_bare_category():
+    assert category_pair_exists(_TREE, TransactionType.EXPENSE, "Groceries", "") is True
+
+
+def test_category_pair_exists_true_for_real_subcategory():
+    assert (
+        category_pair_exists(_TREE, TransactionType.EXPENSE, "Groceries", "Supermarket")
+        is True
+    )
+
+
+def test_category_pair_exists_false_for_unknown_category():
+    assert category_pair_exists(_TREE, TransactionType.EXPENSE, "Ghost", "") is False
+
+
+def test_category_pair_exists_false_for_unknown_subcategory():
+    assert (
+        category_pair_exists(_TREE, TransactionType.EXPENSE, "Groceries", "Ghost")
+        is False
+    )
+
+
+def test_category_pair_exists_false_for_wrong_type():
+    assert category_pair_exists(_TREE, TransactionType.INCOME, "Groceries", "") is False

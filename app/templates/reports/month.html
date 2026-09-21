@@ -4,7 +4,15 @@
 {% block title %}{{ label }} — Reports — Finance Tracker{% endblock %}
 {% block content %}
   <p><a href="/reports/{{ year }}{{ '?account_id=' + account_id if account_id }}">&larr; Back to {{ year }}</a></p>
-  <h1>{{ label }}</h1>
+  <div class="month-nav">
+    <a href="/reports/{{ prev_year }}/{{ prev_month }}{{ '?account_id=' + account_id if account_id }}" class="month-nav-prev">
+      &larr; {{ prev_label }}
+    </a>
+    <h1>{{ label }}</h1>
+    <a href="/reports/{{ next_year }}/{{ next_month }}{{ '?account_id=' + account_id if account_id }}" class="month-nav-next">
+      {{ next_label }} &rarr;
+    </a>
+  </div>
   {{ account_filter(accounts, account_id) }}
 
   <h2>Top spending categories</h2>

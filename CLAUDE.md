@@ -8,7 +8,7 @@ Phases 0–2 and 2.5–2.7 are complete: storage/locking (Phase 1), a working HT
 (CRUD, starting balance shown, click-through to filtered transactions), manual transaction
 entry/edit/delete (with on-the-fly category/subcategory creation), transfers (create, edit-both-
 legs-together, and pair-delete), balance display, a dedicated `/categories` management page
-(add/rename/delete category and subcategory, each with an optional icon from a vendored 47-icon
+(add/rename/delete category and subcategory, each with an optional icon from a vendored 78-icon
 set — shown inline in the transactions list, colored by transaction type, uniformly sized via
 shared CSS custom properties, with a per-icon tooltip hint), and a redesigned transactions list
 (month/type grouping and account filter — both now sticky across navigation via cookies) — all
@@ -145,8 +145,223 @@ carry `transfer_volume`, the same "total volume moved" magnitude convention as
 `TypeGroup.subtotal`'s transfer handling elsewhere (`sum(abs(amount)) / 2`), purely informational
 and never folded into `income_total`/`expense_total`/`net_total` or their YoY/MoM deltas. A year
 with transfers but no income/expense now gets a row too (previously dropped entirely), so its volume
-has somewhere to show. See `docs/implementation-plan.md` for the full phased plan, finalized
-schemas, and per-phase status checkboxes/implementation notes.
+has somewhere to show. A further addendum made the transactions list's Category cell itself
+directly editable: every non-transfer row's category/subcategory became a live picker
+(`transactions/_table.html`'s `txn_row`), posting to `POST /transactions/{id}/category` on a
+change and re-rendering just that one row (`transactions/_row.html`) rather than the whole table
+— so an in-progress bulk recategorization pass doesn't keep resetting every month `<details>`
+section back to its default open/closed state. Deliberately never creates a category/subcategory
+on the fly, unlike every other category entry point in the app (manual entry, CSV import, bulk
+reclassify) — only pairs already in the tree can ever be picked, double-checked server-side via
+`services.categories.category_pair_exists` (never trusting the submitted value), so this is the
+one path with no "add new" escape hatch. A subcategory's own text carries its category as a
+trailing `"(Category)"` hint — a suffix, not a prefix, so type-ahead still finds it by the
+subcategory's own first couple of letters. A row whose stored category/subcategory has since been
+deleted (see the no-automatic-dedup stance above) shows its actual stale value plus a
+"(not in category list)" suffix rather than silently defaulting to something else. Originally a
+native `<select>` grouped via `<optgroup>` (browser type-ahead only jumps to the first match on a
+fresh keystroke run); a later addendum replaced it with a hand-rolled type-to-filter combobox
+(`.cat-combo`/`.cat-combo-input`/`.cat-combo-list`/`.cat-combo-option` in `style.css`, behavior in
+`app/static/app.js` — the app's first real custom-JS component, vendored the same as htmx/Pico,
+no CDN) so typing narrows the option list live via substring match instead. Every listener is
+delegated on `document` rather than bound per `.cat-combo`, since htmx re-renders rows/the whole
+table on swaps that would otherwise silently orphan per-element listeners. It only ever commits a
+value clicked or Enter-selected from a real `.cat-combo-option`; Escape or clicking away without
+picking one reverts the input to its last committed value (`data-display`) — free-typed text is
+never sent to the server, preserving the "no add-new escape hatch" invariant above. Most recently,
+accounts gained a `Account.account_type` field (`app.models.account
+.AccountType` — `checking`/`savings`/`credit_card`/`cash`/`investment`/`other`, a fixed enum, same
+"controlled vocabulary" convention as `TransactionType`, not free text) shown as a "Type" column on
+`/accounts` and a required `<select>` on the account add/edit form, labeled via `ACCOUNT_TYPE_LABELS`
+(`credit_card` isn't presentable as-is, unlike `TransactionType`'s own values). Defaults to `OTHER`
+both on the model (so an `accounts.toml` written before this field existed still reads back fine)
+and on the two POST routes' own `Form(...)` default, so any caller that doesn't send it (an old
+test helper, a script) still succeeds rather than 422ing on a newly-required field. Purely a
+label/grouping field — never affects balance math or any other business rule. Transfer detection
+then gained a second, opt-in-per-row mode alongside `find_transfer_matches`: `services.transactions
+.find_orphan_transfer_candidates` finds existing rows whose counterparty is a registered account but
+has *no* matching row anywhere in the ledger to pair with (typically: no import data at all for that
+account — e.g. no CSV export available for a linked savings sub-account). `synthesize_and_merge_transfer`
+creates the missing leg (same date, opposite-sign amount, shared description — the same convention
+`new_transfer_pair` already uses for a manually-recorded transfer) and links both via the existing
+`merge_into_transfer`. Surfaced in the same `/import` "Detect transfers" dialog as a second, clearly
+separate "New transfers to create" section — checkboxes default **unchecked** here (unlike ordinary
+matches, checked by default), since every row in this section is a genuinely inferred transaction,
+never one independently observed in any bank export, which is a materially bigger trust step than
+merging two already-real rows. Most recently, the transactions list's toolbar gained a fifth
+control: a Type filter (income/expense/transfer), narrowing which rows are shown at all — a
+different thing from the existing "Group by" select, which only changes how an *unfiltered* list is
+split into sections. `app.routers.transactions._filter_ledger` gained a `txn_type` parameter
+alongside its existing account/category/subcategory ones, `list_transactions` gained a sixth sticky
+cookie-backed query param (`txn_type`, same "explicit empty string overrides the cookie, absent
+param falls back to it" convention as the other five), and every other toolbar control's
+`hx-vals`/URL was updated to keep round-tripping it (the "every control must preserve every other
+control's current value" rule already documented above). Accounts then gained a second display-only
+enum field alongside `account_type`: `Account.status` (`app.models.account.AccountStatus` —
+`active`/`closed`, defaults to `active` for the same backward-compat reason `account_type` defaults
+to `OTHER`), shown as a "Status" column on `/accounts` and a required `<select>` on the account
+form, labeled via `ACCOUNT_STATUS_LABELS`. Purely informational, same as `account_type` — a closed
+account keeps its full transaction history, is never filtered out of any list or picker, and can
+still be referenced by a transaction; `services.accounts.remove_account` already refuses to *delete*
+an account with transaction history regardless of status, so "closed" is what marks an account
+that's done being used day-to-day without losing its past. A closed row is visually muted on
+`/accounts` (`.account-row-closed` in `style.css`) — recedes, doesn't disappear. The transactions
+list then gained a transaction count next to each subtotal it already showed — a month's `<summary>`
+label, the flat "Net total" row (month grouping off), and each type-group header — all via a plain
+`{{ ...|length }}` on the already-available `month.transactions`/`group.transactions` list in
+`transactions/_table.html`, no Python/service change needed (`.txn-count` in `style.css`). The
+vendored icon set grew to 48 with an `apple` glyph (fresh produce/fruit) — same three-place addition
+every new icon needs: `VALID_ICONS`/`ICON_HINTS` in `app/models/category.py`, plus a `*_icon()`
+macro and `_icon_registry` entry in `_category_icons.html`; the picker grid and every render site
+pick it up automatically since none of them hardcode the icon list. The month drill-down then
+gained Previous/Next navigation either side of its own `<h1>` (`app.routers.reports._adjacent_month`
+— plain `year*12 + (month-1) ± 1` div/mod arithmetic, wrapping across a year boundary), always shown
+regardless of whether the adjacent month actually has any data (the page already renders a graceful
+"No data" state for an empty month) and preserving the current `account_id` filter, same convention
+as every other link between the three report views. The icon set grew twice more: `baby`/`star`/
+`ferris-wheel`/`backpack`/`blocks` for a real Kids category tree, then `person`/`scissors`/
+`lipstick`/`donate`/`cocktail` for a real Personal category tree — the latter batch also reused
+three already-existing icons (`book`, `cap`, `x`) rather than drawing near-duplicates, since the
+icon set isn't scoped to one category and a glyph like "book" or "the generic X" fits more than one
+tree. `/transactions` also gained a free-text description search (`search` query param/cookie,
+same sticky-filter convention as `account_id`/`category`/`subcategory`/`txn_type` — explicit empty
+overrides the cookie, an absent param falls back to it), applied as a case-insensitive substring
+match against `description` in `_filter_ledger` before every other filter. It's the toolbar's one
+non-`<select>` control, a text `<input type="search">` debounced via `hx-trigger="input changed
+delay:400ms, search"` rather than firing on every keystroke; every other toolbar control's
+`hx-vals` now round-trips `search` too, per the toolbar's standing "every control must carry every
+other control's current value" rule. A follow-up fixed three vendored icons whose actual drawn
+ink sat noticeably off-center within their 16×16 box — `gift`, `coffee`, `gamepad` — each by
+shifting its `<svg>`'s `viewBox` origin (e.g. `viewBox="0 2 16 16"` for `gift`) rather than
+touching path coordinates: the box a flex-centered wrapper aligns is the *viewBox window*, not
+the ink inside it, so an icon whose shape sits in (say) the lower half of that window still reads
+as "sitting low" even though its wrapper box is perfectly centered. Found by walking every icon's
+`d`/`rect`/`circle` geometry and comparing its centroid to the 16×16 midpoint — a handful of
+others were flagged too (`tv`, `wifi`, `disc`, `refresh`) but left alone: their apparent offset
+was a smaller appendage (afoot/stand) pulling a raw bounding-box calculation off without actually
+looking off, or an arc-heavy path where a quick geometric check overestimates the arc's true
+extent — not worth risking a visual regression on an already-shipped, already-looked-at icon
+without being able to see the render (no browser tooling on this machine — verification here was
+math on the path data, not a screenshot). The transactions list's row padding was also tightened
+(`#transactions-table-wrapper td`, 0.6rem → 0.4rem top/bottom, its own override distinct from the
+other three row-actions tables which keep 0.6rem) — still comfortably above the 2rem
+button-clearance floor the shared rule exists for. The whole hand-drawn icon set was then swapped
+wholesale for Lucide (https://lucide.dev, ISC license) — `app/templates/_category_icons.html`'s
+macros are now Lucide's own published SVG markup verbatim (24×24 viewBox, `stroke-width="2"`,
+fetched once from the `lucide-static` npm package and committed, same "fetch once, vendor, no CDN
+at runtime" treatment as htmx/Pico/the font — the app itself never fetches Lucide at runtime, only
+the one-time authoring step did). Every *key* that already existed (the
+vocabulary `categories.toml` actually stores, e.g. `"baby"`, `"cart"`) kept its exact name — only
+which artwork that key renders as changed, via `_icon_registry` in `_category_icons.html` — so no
+existing category/subcategory icon assignment in real data needed touching, and no migration
+script was needed; verified by checking every icon key in the real `config/categories.toml`
+against `VALID_ICONS` post-swap. The set also grew from 58 to 78: 20 new keys added for concepts
+the existing tree didn't have an icon for yet (medical, public transit, furniture, utilities,
+pets beyond dogs, hospitality, family/shared expenses, payment methods) — chosen by cross-
+referencing gaps against the real category/subcategory names already in use, not picked
+arbitrarily. `--category-icon-size`/`--subcategory-icon-size` size overrides are unchanged, but
+the three `stroke-width: 1.3`/`1.5` CSS overrides (tuned for the old hand-drawn set's 16×16/1.4
+proportions) were removed rather than reworked — Lucide's own native `stroke-width="2"` at a
+24×24 viewBox is almost exactly the same *relative* thickness those overrides were already
+approximating by hand, so letting each icon's own baked-in attribute apply is simpler than
+re-deriving new override numbers for the new viewBox scale. The `/categories` page's "Top
+uncategorized descriptions" table was bumped from 10 to 20 rows (`top_uncategorized_descriptions`'s
+`limit` passed explicitly at the one call site in `app.routers.categories.list_categories`, the
+function's own default left at 10 for any future caller that doesn't care) — the page heading now
+says "Top 20" to match. The icon set then grew to 80 with `spade` (card/tabletop games) and
+`truck` (delivery, shipping), added specifically to fill the last two real gaps below, and every
+category/subcategory in the real tree that still had no icon (37 of them, across both income and
+expense) got one assigned — reusing an existing key wherever one fit (e.g. `key` for both
+Housing→Rent and Transportation→Car Rental, `wrench` for both House Maintenace and Car
+Maintenance, `x` for every "Other"/"Uncategorized" bucket) rather than minting a new key per
+subcategory. Caught one self-inflicted bug while doing this: `services.categories
+.update_subcategory`'s `budget` parameter defaults to `None`, meaning "no budget" — calling it
+with only `icon=` set (no `budget=`) silently wiped Housing→Rent's existing 1500 budget, since the
+function has no "leave budget alone" mode distinct from "clear the budget." Caught immediately via
+a before/after diff of every non-icon field across the whole tree (the same habit used elsewhere
+for reconciling ledger fixes), and fixed by re-calling with the existing budget carried forward
+explicitly — this function's calling convention is a footgun worth remembering: any future
+icon-only or name-only update through it must still pass the entry's *current* budget, not omit
+it. The accounts list then gained a closed-accounts toggle: `#accounts-table-wrapper` starts with
+a `hide-closed` class (CSS-only, `display: none` on `.account-row-closed` rows), flipped by a
+plain client-side `onclick` button shown only when at least one account is closed — same "pure
+display toggle, no cookie, resets to its default on every render" precedent as the transactions
+list's own expand/collapse-all button, since which accounts are closed doesn't change from one
+page load to the next the way a filter selection would. Most recently, a new `/dashboard` page (now
+also where `/` redirects, replacing `/accounts`) gives an at-a-glance summary: a net-worth hero
+stat with a MoM delta and a 6-month sparkline (`app.routers.dashboard._svg_net_worth_sparkline` —
+a small inline-SVG area+line chart, deliberately not `reports._svg_net_worth_chart`, which is
+sized and detailed for its own full page), this-month income/expense/net with MoM deltas, an
+active-accounts list (closed accounts excluded, just a count linking to `/accounts`), a budget
+status widget (categories at/over 75% of their monthly budget, reusing `reports._ring_geometry`
+and its exact ring markup rather than a second implementation), top expense categories this month,
+a "needs attention" panel (uncategorized-transaction count, pending transfer-detection candidate
+count), and a recent-transactions list — plus the same three quick-add dialogs
+(`/transactions/new/{type}`, `/transfers/new`) reused verbatim from the transactions page, so
+adding an entry doesn't require leaving the dashboard. Every number is assembled from the existing
+`services.aggregation`/`services.balances`/`services.transactions` functions; this router adds no
+new business logic beyond the sparkline's own SVG geometry. Known simplification: the quick-add
+dialogs' success response targets `#transactions-table-wrapper` out-of-band, which doesn't exist on
+this page, so it silently no-ops — the dialog still closes and the toast still fires (both driven by
+the `HX-Trigger` header, independent of the oob swap), but the dashboard's own widgets don't
+live-update until the next full page load. Caught one real bug while building this:
+`MonthlyTotal.expense_total` is signed (negative, matching the transactions list's own type-group
+subtotal convention) — a first pass computed `net_total` as `income_total - expense_total`, which
+for a signed negative expense actually *adds* it back, producing a net figure larger than income
+alone. Fixed by taking `net_total` straight from `MonthlyTotal.net_total` (already correct)
+instead of re-deriving it, and showing `expense_total` as `abs()` only for the stat tile's own
+display, never for arithmetic. Design pass done via the `artifact-design` skill — a mockup was
+published as an Artifact first, reviewed, then implemented for real against the app's actual
+Pico/JetBrains Mono/Lucide system rather than the mockup's own styling. A follow-up round of small
+dashboard tweaks landed after live review: "This month"'s Reports link now points at
+`/reports/{year}/{month}` for the current month specifically, not the generic `/reports` landing
+page; the Accounts widget no longer mentions closed accounts at all (they're simply excluded from
+the list, no "N closed accounts hidden" note — `closed_count` was dropped from the router entirely
+once nothing referenced it); Top categories grew from 5 rows to 10 (`TOP_CATEGORIES_LIMIT`). The
+transactions list then gained a real description/notes split, addressing a standing confusion:
+`Transaction.description` and `.notes` were already two separate model fields, but `notes` had no
+UI presence beyond the add/edit form — nothing on the list ever showed it, so typing into it felt
+like it went nowhere. The Description cell (`transactions/_table.html`'s `txn_row`) now shows
+`notes` when set, falling back to `description` otherwise, and is itself inline-editable
+(`.desc-inline-input`, same borderless-until-hover treatment as `.cat-combo-input`) — but that
+input only ever writes `notes` (`POST /transactions/{id}/notes`, `services.transactions
+.update_transaction_notes`, mirroring the category route's narrow-update pattern), never
+`description`. `description` itself is now read-only everywhere once a transaction exists: the
+full edit dialog (`transactions/_form.html`) renders it as a `readonly` input instead of an
+editable one when `transaction_id` is set (new-entry creation still gets a normal editable field —
+there's no import source to protect yet), and `update_transaction_route` enforces this
+server-side too, unconditionally carrying forward `existing.description` rather than trusting
+anything submitted for it — belt-and-suspenders, not just a client-side restriction. This keeps
+`description` permanently trustworthy as what `services.importer`'s duplicate detection and
+`services.categorizer`'s rule matching actually key off of, while `notes` becomes the one place
+personal annotations live, unconditionally overriding what the list displays.
+`update_transaction_notes` is allowed on a transfer leg (unlike category, which stays fixed to
+`"Transfer"`) since a personal note doesn't interact with the category tree at all. The
+transactions list's category glyphs then picked up the dashboard's own visual treatment — a soft
+tinted rounded-square tile around the icon (`.cat-cell-icon`, matching `.dash-cat-glyph`) instead
+of a bare colored glyph, plus a muted date column — after which a latent alignment bug surfaced:
+the icon tile (a fixed 1.7rem square) is taller than a plain line of text, and once it became the
+tallest content in a row, `#transactions-table-wrapper td` had no explicit `vertical-align`, so it
+fell back to the browser default and read as visibly misaligned against the row's other cells.
+Fixed with an explicit `vertical-align: middle` (the same rule the dashboard's own
+`.dash-txn-table td` already had) — a good reminder that adding a taller fixed-size element to one
+column can silently break an unrelated column's alignment if the row's own vertical-align was
+never pinned down. A follow-up pass on the dashboard itself, after live review, landed several
+small fixes: the "This month" widget's Reports link now points at `/reports/{year}/{month}`
+instead of the generic `/reports` landing page; Accounts no longer mentions closed accounts at
+all (`closed_count` dropped from the router — they're simply excluded, no "N hidden" note); Top
+categories grew from 5 rows to 10; Budget status gained an explanatory caption
+(`dash-widget-caption`) and its own inclusion threshold moved to 60% — a
+`BUDGET_ATTENTION_THRESHOLD_PCT` constant kept deliberately independent of `_ring_geometry`'s own
+75%/100% color-tier boundaries, which still drive `/reports`' ring colors and weren't touched; the
+net-worth sparkline gained axis value labels (max/min, `.spark-axis-label`) after review flagged
+that a scale with no numbers can be glanced at but not actually read — reserving a left-side label
+gutter (`_SPARK_LABEL_GUTTER`) rather than leaving the two end-of-scale values unlabeled; and
+Recent transactions switched from a flat "last 6 rows" cap to grouping by calendar day, showing
+the 5 most recent *distinct dates with any activity* (`RECENT_DAYS_LIMIT`, one `<tbody>` per day
+with its own header row) rather than a row count that could cut off mid-day. See
+`docs/implementation-plan.md` for the full phased plan, finalized schemas, and per-phase status
+checkboxes/implementation notes.
 
 **Work proceeds one phase at a time.** Each phase in `docs/implementation-plan.md` is a discrete,
 separately-reviewable unit — implement it, verify it, stop, and update docs (this file plus the

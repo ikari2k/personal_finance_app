@@ -1,41 +1,80 @@
 <h2>Detect transfers</h2>
-{% if matches %}
-  <p>
-    Found {{ matches | length }} transaction pair{{ '' if matches | length == 1 else 's' }} that look
-    like a transfer between two of your own accounts, based on a counterparty account number
-    captured at import time. Uncheck any pair that isn't really a transfer before applying — merging
-    is not currently reversible from the UI.
-  </p>
+{% if matches or orphans %}
   <form hx-post="/import/detect-transfers/apply" hx-target="#detect-transfers-dialog-content" hx-swap="innerHTML">
     <input type="hidden" name="matches_payload" value="{{ matches_payload }}">
-    <div class="table-scroll">
-      <table>
-        <thead>
-          <tr><th></th><th>Date</th><th>From</th><th>To</th><th>Amount</th></tr>
-        </thead>
-        <tbody>
-          {% for match in matches %}
-            <tr>
-              <td><input type="checkbox" name="selected" value="{{ match.from_transaction_id }}" checked></td>
-              <td>{{ match.date }}</td>
-              <td>
-                {{ accounts[match.from_account_id].name if match.from_account_id in accounts else match.from_account_id }}
-                {% if match.from_description %} — {{ match.from_description }}{% endif %}
-              </td>
-              <td>
-                {{ accounts[match.to_account_id].name if match.to_account_id in accounts else match.to_account_id }}
-                {% if match.to_description %} — {{ match.to_description }}{% endif %}
-              </td>
-              <td>{{ "%.2f"|format(match.amount) }}</td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
+    <input type="hidden" name="orphans_payload" value="{{ orphans_payload }}">
+
+    {% if matches %}
+      <p>
+        Found {{ matches | length }} transaction pair{{ '' if matches | length == 1 else 's' }} that look
+        like a transfer between two of your own accounts, based on a counterparty account number
+        captured at import time. Uncheck any pair that isn't really a transfer before applying — merging
+        is not currently reversible from the UI.
+      </p>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr><th></th><th>Date</th><th>From</th><th>To</th><th>Amount</th></tr>
+          </thead>
+          <tbody>
+            {% for match in matches %}
+              <tr>
+                <td><input type="checkbox" name="selected" value="{{ match.from_transaction_id }}" checked></td>
+                <td>{{ match.date }}</td>
+                <td>
+                  {{ accounts[match.from_account_id].name if match.from_account_id in accounts else match.from_account_id }}
+                  {% if match.from_description %} — {{ match.from_description }}{% endif %}
+                </td>
+                <td>
+                  {{ accounts[match.to_account_id].name if match.to_account_id in accounts else match.to_account_id }}
+                  {% if match.to_description %} — {{ match.to_description }}{% endif %}
+                </td>
+                <td>{{ "%.2f"|format(match.amount) }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+
+    {% if orphans %}
+      <h3>New transfers to create</h3>
+      <p>
+        These rows' counterparty is one of your own registered accounts, but that account has no
+        matching transaction at all — likely because you haven't imported a CSV for it. Checking one
+        below <strong>creates a new transaction</strong> on the counterparty account (same date and
+        amount, inferred from this row, not independently observed in any bank export) and links both
+        into a transfer. Unchecked by default — review each one before creating new data.
+      </p>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr><th></th><th>Date</th><th>Existing row</th><th>Will create on</th><th>Amount</th></tr>
+          </thead>
+          <tbody>
+            {% for candidate in orphans %}
+              <tr>
+                <td><input type="checkbox" name="selected_orphans" value="{{ candidate.transaction_id }}"></td>
+                <td>{{ candidate.date }}</td>
+                <td>
+                  {{ accounts[candidate.account_id].name if candidate.account_id in accounts else candidate.account_id }}
+                  {% if candidate.description %} — {{ candidate.description }}{% endif %}
+                </td>
+                <td>
+                  {{ accounts[candidate.counterparty_account_id].name if candidate.counterparty_account_id in accounts else candidate.counterparty_account_id }}
+                </td>
+                <td>{{ "%.2f"|format(candidate.amount|abs) }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+
     <footer class="dialog-footer">
       <button type="button" class="btn-outline"
               onclick="document.getElementById('detect-transfers-dialog').close()">Cancel</button>
-      <button type="submit">Merge selected into transfers</button>
+      <button type="submit">Apply selected</button>
     </footer>
   </form>
 {% else %}

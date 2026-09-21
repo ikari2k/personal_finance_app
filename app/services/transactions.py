@@ -163,6 +163,62 @@ def update_transaction(
     return [updated if t.id == transaction_id else t for t in transactions]
 
 
+def update_transaction_category(
+    transactions: list[Transaction],
+    transaction_id: str,
+    *,
+    category: str,
+    subcategory: str,
+) -> list[Transaction]:
+    """Return ``transactions`` with only ``transaction_id``'s category changed.
+
+    The narrow "recategorize inline from the transactions table" path —
+    distinct from ``update_transaction``'s full-row edit, this touches
+    nothing else about the row (account, date, amount, description,
+    notes all stay exactly as they were). Raises ``ValueError`` if no
+    transaction with ``transaction_id`` exists, or it's a transfer leg
+    (transfers always use the fixed "Transfer" category — see
+    ``new_transfer_pair`` — and aren't recategorizable this way, same
+    restriction as ``update_transaction``). Whether ``category``/
+    ``subcategory`` is itself a real, existing pair is the caller's job
+    (``services.categories.category_pair_exists``) — this function
+    doesn't know about the category tree.
+    """
+    existing = next((t for t in transactions if t.id == transaction_id), None)
+    if existing is None:
+        raise ValueError(f"no transaction with id '{transaction_id}'")
+    if existing.type is TransactionType.TRANSFER:
+        raise ValueError("transfers always use a fixed category, never editable here")
+    updated = existing.model_copy(
+        update={"category": category, "subcategory": subcategory}
+    )
+    return [updated if t.id == transaction_id else t for t in transactions]
+
+
+def update_transaction_notes(
+    transactions: list[Transaction], transaction_id: str, *, notes: str
+) -> list[Transaction]:
+    """Return ``transactions`` with only ``transaction_id``'s notes changed.
+
+    The narrow "edit inline from the transactions table" path for
+    ``notes``, mirroring ``update_transaction_category`` — touches
+    nothing else about the row, including ``description`` itself, which
+    stays exactly as it came from import/manual entry (it's what
+    ``services.importer``'s duplicate detection and ``services
+    .categorizer``'s rule matching key off of; ``notes`` is a separate,
+    purely personal field precisely so editing it can never disturb
+    either). Allowed on a transfer leg too, unlike category — a personal
+    note doesn't interact with the fixed "Transfer" category tree the
+    way recategorizing would. Raises ``ValueError`` if no transaction
+    with ``transaction_id`` exists.
+    """
+    existing = next((t for t in transactions if t.id == transaction_id), None)
+    if existing is None:
+        raise ValueError(f"no transaction with id '{transaction_id}'")
+    updated = existing.model_copy(update={"notes": notes or None})
+    return [updated if t.id == transaction_id else t for t in transactions]
+
+
 def update_transfer_pair(
     transactions: list[Transaction],
     transfer_id: str,
@@ -480,3 +536,127 @@ def apply_transfer_matches(
         except ValueError:
             continue
     return result
+
+
+@dataclass
+class OrphanTransferCandidate:
+    """One existing row whose counterparty is registered, but unpaired.
+
+    Found by ``find_orphan_transfer_candidates``: the row's
+    ``counterparty_account`` resolves to one of the user's own
+    registered accounts (same signal ``find_transfer_matches`` trusts),
+    but that account has no matching row anywhere in the ledger to pair
+    it with — typically because there's no import data for that account
+    at all. ``synthesize_and_merge_transfer`` is what actually creates
+    the missing leg and merges both into a transfer.
+    """
+
+    transaction_id: str
+    date: date_
+    account_id: str
+    counterparty_account_id: str
+    amount: Decimal
+    description: str
+
+
+def find_orphan_transfer_candidates(
+    transactions: Iterable[Transaction], accounts: Iterable[Account]
+) -> list[OrphanTransferCandidate]:
+    """Find rows with a registered counterparty but no real row to pair with.
+
+    ``find_transfer_matches`` already finds every pair where *both* legs
+    exist in the ledger; this finds the leftover anchors — rows whose
+    ``counterparty_account`` is still a registered account, just one
+    with no transaction data at all (or none close enough in amount/date
+    to have matched). These are candidates for
+    ``synthesize_and_merge_transfer``, not ``merge_into_transfer`` — the
+    other leg doesn't exist yet and has to be created, which is why this
+    is a separate, explicitly-opt-in step from ordinary transfer
+    detection (see CLAUDE.md): every one of these rows is a genuinely
+    inferred transaction, not one independently observed in any bank
+    export.
+    """
+    transactions = list(transactions)
+    account_by_number = {
+        normalize_account_number(account.number): account.id
+        for account in accounts
+        if account.number
+    }
+    matched_ids: set[str] = set()
+    for match in find_transfer_matches(transactions, accounts):
+        matched_ids.add(match.from_transaction_id)
+        matched_ids.add(match.to_transaction_id)
+
+    candidates = []
+    for txn in transactions:
+        if (
+            txn.type is TransactionType.TRANSFER
+            or txn.id in matched_ids
+            or not txn.counterparty_account
+            or txn.counterparty_account not in account_by_number
+        ):
+            continue
+        counterparty_account_id = account_by_number[txn.counterparty_account]
+        if counterparty_account_id == txn.account_id:
+            continue
+        candidates.append(
+            OrphanTransferCandidate(
+                transaction_id=txn.id,
+                date=txn.date,
+                account_id=txn.account_id,
+                counterparty_account_id=counterparty_account_id,
+                amount=txn.amount,
+                description=txn.description,
+            )
+        )
+    return sorted(candidates, key=lambda c: (c.date, c.transaction_id))
+
+
+def synthesize_and_merge_transfer(
+    transactions: list[Transaction], candidate: OrphanTransferCandidate
+) -> list[Transaction]:
+    """Create ``candidate``'s missing other leg and merge both into a transfer.
+
+    The existing row keeps its own id/date/amount; the new leg is a
+    freshly-minted ``Transaction`` on ``counterparty_account_id`` with
+    the opposite-sign amount, same date, and the same description (the
+    same "one shared description for both legs" convention as
+    ``new_transfer_pair``) — then both are linked via
+    ``merge_into_transfer``. Raises ``ValueError`` if the existing row no
+    longer exists or is already a transfer (a stale candidate — deleted
+    or merged since the preview was computed).
+    """
+    existing = next((t for t in transactions if t.id == candidate.transaction_id), None)
+    if existing is None:
+        raise ValueError(f"no transaction with id '{candidate.transaction_id}'")
+    if existing.type is TransactionType.TRANSFER:
+        raise ValueError("transaction is already a transfer")
+
+    is_existing_outflow = existing.amount < 0
+    new_leg = Transaction(
+        id=uuid.uuid4().hex,
+        date=existing.date,
+        account_id=candidate.counterparty_account_id,
+        category=existing.category,
+        subcategory=existing.subcategory,
+        description=existing.description,
+        amount=-existing.amount,
+        type=TransactionType.INCOME if is_existing_outflow else TransactionType.EXPENSE,
+        transfer_id=None,
+        notes=None,
+    )
+    match = TransferMatch(
+        from_transaction_id=existing.id if is_existing_outflow else new_leg.id,
+        to_transaction_id=new_leg.id if is_existing_outflow else existing.id,
+        date=existing.date,
+        from_account_id=existing.account_id
+        if is_existing_outflow
+        else new_leg.account_id,
+        to_account_id=new_leg.account_id
+        if is_existing_outflow
+        else existing.account_id,
+        amount=abs(existing.amount),
+        from_description=existing.description,
+        to_description=existing.description,
+    )
+    return merge_into_transfer([*transactions, new_leg], match)

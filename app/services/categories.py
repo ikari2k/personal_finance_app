@@ -87,6 +87,31 @@ def subcategories_exceed_category_budget(entry: CategoryEntry) -> bool:
     return subcategory_total > Decimal(entry["budget"])
 
 
+def category_pair_exists(
+    categories: CategoriesByType,
+    txn_type: TransactionType,
+    category: str,
+    subcategory: str,
+) -> bool:
+    """Return whether ``category``/``subcategory`` already exist in ``txn_type``'s tree.
+
+    Backs the transactions list's inline category-picker (``app.routers
+    .transactions.update_transaction_category_route``), which — unlike
+    every other category-entry point in the app — deliberately never
+    creates a new category/subcategory on the fly; the picker's own
+    ``<select>`` only ever offers existing ones, but the server still
+    checks rather than trusting the client. A blank ``subcategory``
+    means "just the bare category," which is valid whenever ``category``
+    itself exists.
+    """
+    entry = categories.get(txn_type.value, {}).get(category)
+    if entry is None:
+        return False
+    if not subcategory:
+        return True
+    return subcategory in entry["subcategories"]
+
+
 def add_category(
     categories: CategoriesByType,
     txn_type: TransactionType,

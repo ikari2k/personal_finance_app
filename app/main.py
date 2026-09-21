@@ -16,6 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from app.routers import (
     accounts,
     categories,
+    dashboard,
     import_,
     reports,
     rules,
@@ -54,6 +55,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="Personal Finance Tracker", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=APP_DIR / "static"), name="static")
+app.include_router(dashboard.router)
 app.include_router(accounts.router)
 app.include_router(categories.router)
 app.include_router(transactions.router)
@@ -66,8 +68,8 @@ app.include_router(reports.router)
 
 @app.get("/", include_in_schema=False)
 def index() -> RedirectResponse:
-    """Redirect the root path to the accounts page."""
-    return RedirectResponse(url="/accounts")
+    """Redirect the root path to the dashboard."""
+    return RedirectResponse(url="/dashboard")
 
 
 @app.get("/health", response_class=HTMLResponse)

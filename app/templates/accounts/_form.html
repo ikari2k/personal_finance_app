@@ -24,6 +24,26 @@
       <input type="text" name="starting_balance" value="{{ values.starting_balance }}" required>
     </label>
   </div>
+  <div class="form-grid-2">
+    <label>Type
+      <select name="account_type" required>
+        {% for type_value, label in account_type_labels.items() %}
+          <option value="{{ type_value.value }}" {{ 'selected' if type_value.value == values.account_type }}>
+            {{ label }}
+          </option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Status
+      <select name="status" required>
+        {% for status_value, label in account_status_labels.items() %}
+          <option value="{{ status_value.value }}" {{ 'selected' if status_value.value == values.status }}>
+            {{ label }}
+          </option>
+        {% endfor %}
+      </select>
+    </label>
+  </div>
   <label>Description
     <input type="text" name="description" value="{{ values.description }}">
   </label>

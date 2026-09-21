@@ -166,7 +166,9 @@ def list_categories(request: Request) -> HTMLResponse:
         {
             "categories": categories,
             "budget_warnings": _budget_warnings(categories),
-            "top_uncategorized": top_uncategorized_descriptions(read_ledger()),
+            "top_uncategorized": top_uncategorized_descriptions(
+                read_ledger(), limit=20
+            ),
             "error": None,
         },
     )

@@ -291,6 +291,244 @@ def test_subcategory_filter_shows_only_matching_subcategory(client):
     assert "farmers market trip" not in filtered.text
 
 
+def test_type_filter_shows_only_matching_type(client):
+    _create_account(client, "chk")
+    _create_account(client, "sav")
+    client.post(
+        "/transactions",
+        data={
+            "account_id": "chk",
+            "date": "2026-01-15",
+            "type": "expense",
+            "category": "Groceries",
+            "subcategory": "",
+            "description": "grocery run",
+            "amount": "40.00",
+            "notes": "",
+        },
+    )
+    client.post(
+        "/transactions",
+        data={
+            "account_id": "chk",
+            "date": "2026-01-16",
+            "type": "income",
+            "category": "Salary",
+            "subcategory": "",
+            "description": "paycheck",
+            "amount": "1000.00",
+            "notes": "",
+        },
+    )
+    client.post(
+        "/transfers",
+        data={
+            "from_account_id": "chk",
+            "to_account_id": "sav",
+            "date": "2026-01-17",
+            "amount": "50.00",
+            "description": "moved to savings",
+            "notes": "",
+        },
+    )
+
+    expense_only = client.get("/transactions?txn_type=expense")
+    income_only = client.get("/transactions?txn_type=income")
+    transfer_only = client.get("/transactions?txn_type=transfer")
+
+    assert "grocery run" in expense_only.text
+    assert "paycheck" not in expense_only.text
+    assert "moved to savings" not in expense_only.text
+
+    assert "paycheck" in income_only.text
+    assert "grocery run" not in income_only.text
+
+    assert "moved to savings" in transfer_only.text
+    assert "grocery run" not in transfer_only.text
+    assert "paycheck" not in transfer_only.text
+
+
+def test_type_filter_is_sticky_via_cookie(client):
+    _create_account(client)
+    client.post(
+        "/transactions",
+        data={
+            "account_id": "chk",
+            "date": "2026-01-15",
+            "type": "expense",
+            "category": "Groceries",
+            "subcategory": "",
+            "description": "grocery run",
+            "amount": "40.00",
+            "notes": "",
+        },
+    )
+
+    filtered = client.get("/transactions?txn_type=expense")
+    assert filtered.cookies.get("txn_type") == "expense"
+
+    remembered = client.get("/transactions")
+    assert "grocery run" in remembered.text
+
+
+def test_explicit_empty_txn_type_overrides_cookie(client):
+    _create_account(client)
+    client.post(
+        "/transactions",
+        data={
+            "account_id": "chk",
+            "date": "2026-01-15",
+            "type": "income",
+            "category": "Salary",
+            "subcategory": "",
+            "description": "paycheck",
+            "amount": "1000.00",
+            "notes": "",
+        },
+    )
+    client.get("/transactions?txn_type=expense")
+
+    all_types = client.get("/transactions?txn_type=")
+
+    assert "paycheck" in all_types.text
+
+
+def test_search_filter_matches_description_case_insensitively(client):
+    _create_account(client)
+    client.post(
+        "/transactions",
+        data={
+            "account_id": "chk",
+            "date": "2026-01-15",
+            "type": "expense",
+            "category": "Groceries",
+            "subcategory": "",
+            "description": "Trader Joe's run",
+            "amount": "40.00",
+            "notes": "",
+        },
+    )
+    client.post(
+        "/transactions",
+        data={
+            "account_id": "chk",
+            "date": "2026-01-16",
+            "type": "income",
+            "category": "Salary",
+            "subcategory": "",
+            "description": "paycheck",
+            "amount": "1000.00",
+            "notes": "",
+        },
+    )
+
+    filtered = client.get("/transactions?search=trader")
+
+    assert "Trader Joe" in filtered.text
+    assert "paycheck" not in filtered.text
+
+
+def test_search_filter_empty_shows_everything(client):
+    _create_account(client)
+    client.post(
+        "/transactions",
+        data={
+            "account_id": "chk",
+            "date": "2026-01-15",
+            "type": "expense",
+            "category": "Groceries",
+            "subcategory": "",
+            "description": "grocery run",
+            "amount": "40.00",
+            "notes": "",
+        },
+    )
+
+    unfiltered = client.get("/transactions?search=")
+
+    assert "grocery run" in unfiltered.text
+
+
+def test_search_filter_combines_with_other_filters_as_and(client):
+    _create_account(client)
+    client.post(
+        "/transactions",
+        data={
+            "account_id": "chk",
+            "date": "2026-01-15",
+            "type": "expense",
+            "category": "Groceries",
+            "subcategory": "",
+            "description": "grocery run",
+            "amount": "40.00",
+            "notes": "",
+        },
+    )
+    client.post(
+        "/transactions",
+        data={
+            "account_id": "chk",
+            "date": "2026-01-16",
+            "type": "expense",
+            "category": "Shopping",
+            "subcategory": "",
+            "description": "grocery mislabeled",
+            "amount": "15.00",
+            "notes": "",
+        },
+    )
+
+    filtered = client.get("/transactions?search=grocery&category=Groceries")
+
+    assert "grocery run" in filtered.text
+    assert "grocery mislabeled" not in filtered.text
+
+
+def test_search_filter_is_sticky_via_cookie(client):
+    _create_account(client)
+    client.post(
+        "/transactions",
+        data={
+            "account_id": "chk",
+            "date": "2026-01-15",
+            "type": "expense",
+            "category": "Groceries",
+            "subcategory": "",
+            "description": "grocery run",
+            "amount": "40.00",
+            "notes": "",
+        },
+    )
+
+    filtered = client.get("/transactions?search=grocery")
+    assert filtered.cookies.get("search") == "grocery"
+
+    remembered = client.get("/transactions")
+    assert "grocery run" in remembered.text
+
+
+def test_explicit_empty_search_overrides_cookie(client):
+    _create_account(client)
+    client.post(
+        "/transactions",
+        data={
+            "account_id": "chk",
+            "date": "2026-01-15",
+            "type": "income",
+            "category": "Salary",
+            "subcategory": "",
+            "description": "paycheck",
+            "amount": "1000.00",
+            "notes": "",
+        },
+    )
+    client.get("/transactions?search=grocery")
+
+    all_rows = client.get("/transactions?search=")
+
+    assert "paycheck" in all_rows.text
+
+
 def test_category_and_subcategory_filters_combine_as_and(client):
     _create_account(client)
     client.post(
@@ -385,8 +623,292 @@ def test_edit_transaction_updates_fields(client):
     ledger = read_ledger(config.LEDGER_PATH)
     assert len(ledger) == 1
     assert ledger[0].id == transaction_id
-    assert ledger[0].description == "edited"
+    # description is read-only once a transaction exists — see
+    # test_edit_transaction_never_changes_description below — only
+    # amount (and every other non-description field) changes here.
+    assert ledger[0].description == "original"
     assert ledger[0].amount == Decimal("-25.00")
+
+
+def test_edit_transaction_never_changes_description(client):
+    _create_account(client)
+    client.post(
+        "/transactions",
+        data={
+            "account_id": "chk",
+            "date": "2026-01-15",
+            "type": "expense",
+            "category": "Groceries",
+            "subcategory": "",
+            "description": "from bank export",
+            "amount": "10.00",
+            "notes": "",
+        },
+    )
+    transaction_id = read_ledger(config.LEDGER_PATH)[0].id
+
+    response = client.post(
+        f"/transactions/{transaction_id}",
+        data={
+            "account_id": "chk",
+            "date": "2026-01-15",
+            "type": "expense",
+            "category": "Groceries",
+            "subcategory": "",
+            "description": "trying to overwrite it",
+            "amount": "10.00",
+            "notes": "my own note",
+        },
+    )
+
+    assert response.status_code == 200
+    [updated] = read_ledger(config.LEDGER_PATH)
+    assert updated.description == "from bank export"
+    assert updated.notes == "my own note"
+
+
+def test_inline_category_update_changes_category_and_subcategory(client):
+    _create_account(client)
+    client.post(
+        "/transactions",
+        data={
+            "account_id": "chk",
+            "date": "2026-01-15",
+            "type": "expense",
+            "category": "Groceries",
+            "subcategory": "Supermarket",
+            "description": "original",
+            "amount": "10.00",
+            "notes": "",
+        },
+    )
+    # ensure_category (via a second transaction) creates a second real
+    # category/subcategory pair to switch to.
+    client.post(
+        "/transactions",
+        data={
+            "account_id": "chk",
+            "date": "2026-01-16",
+            "type": "expense",
+            "category": "Dining",
+            "subcategory": "Restaurants",
+            "description": "other",
+            "amount": "20.00",
+            "notes": "",
+        },
+    )
+    transaction_id = next(
+        t.id for t in read_ledger(config.LEDGER_PATH) if t.description == "original"
+    )
+
+    response = client.post(
+        f"/transactions/{transaction_id}/category",
+        data={"category": "Dining", "subcategory": "Restaurants"},
+    )
+
+    assert response.status_code == 200
+    updated = next(t for t in read_ledger(config.LEDGER_PATH) if t.id == transaction_id)
+    assert updated.category == "Dining"
+    assert updated.subcategory == "Restaurants"
+    # Every other field is untouched.
+    assert updated.description == "original"
+    assert updated.amount == Decimal("-10.00")
+
+
+def test_inline_category_update_to_bare_category_clears_subcategory(client):
+    _create_account(client)
+    client.post(
+        "/transactions",
+        data={
+            "account_id": "chk",
+            "date": "2026-01-15",
+            "type": "expense",
+            "category": "Groceries",
+            "subcategory": "Supermarket",
+            "description": "original",
+            "amount": "10.00",
+            "notes": "",
+        },
+    )
+    transaction_id = read_ledger(config.LEDGER_PATH)[0].id
+
+    client.post(
+        f"/transactions/{transaction_id}/category",
+        data={"category": "Groceries", "subcategory": ""},
+    )
+
+    updated = next(t for t in read_ledger(config.LEDGER_PATH) if t.id == transaction_id)
+    assert updated.category == "Groceries"
+    assert updated.subcategory == ""
+
+
+def test_inline_category_update_rejects_unknown_category(client):
+    _create_account(client)
+    client.post(
+        "/transactions",
+        data={
+            "account_id": "chk",
+            "date": "2026-01-15",
+            "type": "expense",
+            "category": "Groceries",
+            "subcategory": "",
+            "description": "original",
+            "amount": "10.00",
+            "notes": "",
+        },
+    )
+    transaction_id = read_ledger(config.LEDGER_PATH)[0].id
+
+    response = client.post(
+        f"/transactions/{transaction_id}/category",
+        data={"category": "Not A Real Category", "subcategory": ""},
+    )
+
+    assert response.status_code == 400
+    updated = next(t for t in read_ledger(config.LEDGER_PATH) if t.id == transaction_id)
+    assert updated.category == "Groceries"
+
+
+def test_inline_category_update_rejects_a_transfer_leg(client):
+    _create_account(client, "chk")
+    _create_account(client, "sav")
+    client.post(
+        "/transfers",
+        data={
+            "from_account_id": "chk",
+            "to_account_id": "sav",
+            "date": "2026-01-15",
+            "amount": "50.00",
+            "description": "",
+            "notes": "",
+        },
+    )
+    transfer_leg_id = read_ledger(config.LEDGER_PATH)[0].id
+
+    response = client.post(
+        f"/transactions/{transfer_leg_id}/category",
+        data={"category": "Groceries", "subcategory": ""},
+    )
+
+    assert response.status_code == 404
+    updated = next(
+        t for t in read_ledger(config.LEDGER_PATH) if t.id == transfer_leg_id
+    )
+    assert updated.category == "Transfer"
+
+
+def test_inline_notes_update_sets_notes_leaves_description_untouched(client):
+    _create_account(client)
+    client.post(
+        "/transactions",
+        data={
+            "account_id": "chk",
+            "date": "2026-01-15",
+            "type": "expense",
+            "category": "Groceries",
+            "subcategory": "",
+            "description": "Lidl 4471",
+            "amount": "10.00",
+            "notes": "",
+        },
+    )
+    transaction_id = read_ledger(config.LEDGER_PATH)[0].id
+
+    response = client.post(
+        f"/transactions/{transaction_id}/notes",
+        data={"notes": "weekly shop"},
+    )
+
+    assert response.status_code == 200
+    assert "weekly shop" in response.text
+    [updated] = read_ledger(config.LEDGER_PATH)
+    assert updated.notes == "weekly shop"
+    assert updated.description == "Lidl 4471"
+
+
+def test_inline_notes_update_allowed_on_a_transfer_leg(client):
+    _create_account(client, "chk")
+    _create_account(client, "sav")
+    client.post(
+        "/transfers",
+        data={
+            "from_account_id": "chk",
+            "to_account_id": "sav",
+            "date": "2026-01-15",
+            "amount": "50.00",
+            "description": "",
+            "notes": "",
+        },
+    )
+    transfer_leg_id = read_ledger(config.LEDGER_PATH)[0].id
+
+    response = client.post(
+        f"/transactions/{transfer_leg_id}/notes",
+        data={"notes": "moving to savings"},
+    )
+
+    assert response.status_code == 200
+    updated = next(
+        t for t in read_ledger(config.LEDGER_PATH) if t.id == transfer_leg_id
+    )
+    assert updated.notes == "moving to savings"
+
+
+def test_inline_notes_update_rejects_unknown_id(client):
+    response = client.post(
+        "/transactions/ghost/notes",
+        data={"notes": "anything"},
+    )
+
+    assert response.status_code == 404
+
+
+def test_transactions_list_shows_notes_instead_of_description_when_set(client):
+    _create_account(client)
+    client.post(
+        "/transactions",
+        data={
+            "account_id": "chk",
+            "date": "2026-01-15",
+            "type": "expense",
+            "category": "Groceries",
+            "subcategory": "",
+            "description": "Lidl 4471",
+            "amount": "10.00",
+            "notes": "weekly shop",
+        },
+    )
+
+    response = client.get("/transactions")
+
+    assert response.status_code == 200
+    assert 'value="weekly shop"' in response.text
+    assert 'value="Lidl 4471"' not in response.text
+    # The original description stays reachable via a hover tooltip even
+    # though it's no longer the visible value.
+    assert 'title="Original description: Lidl 4471"' in response.text
+
+
+def test_transactions_list_falls_back_to_description_when_no_notes(client):
+    _create_account(client)
+    client.post(
+        "/transactions",
+        data={
+            "account_id": "chk",
+            "date": "2026-01-15",
+            "type": "expense",
+            "category": "Groceries",
+            "subcategory": "",
+            "description": "Lidl 4471",
+            "amount": "10.00",
+            "notes": "",
+        },
+    )
+
+    response = client.get("/transactions")
+
+    assert response.status_code == 200
+    assert "Lidl 4471" in response.text
 
 
 def test_edit_transaction_form_rejects_a_transfer_leg(client):
@@ -570,3 +1092,86 @@ def test_post_create_refresh_uses_cookie_grouping(client):
 
     assert "flat-net-total" in response.text
     assert "month-section" not in response.text
+
+
+def test_month_summary_shows_transaction_count(client):
+    _create_account(client)
+    for i in range(3):
+        client.post(
+            "/transactions",
+            data={
+                "account_id": "chk",
+                "date": "2026-01-15",
+                "type": "expense",
+                "category": "Groceries",
+                "subcategory": "",
+                "description": f"item {i}",
+                "amount": "10.00",
+                "notes": "",
+            },
+        )
+
+    response = client.get("/transactions")
+
+    assert "(3)" in response.text
+
+
+def test_type_group_header_shows_transaction_count(client):
+    _create_account(client)
+    for i in range(2):
+        client.post(
+            "/transactions",
+            data={
+                "account_id": "chk",
+                "date": "2026-01-15",
+                "type": "expense",
+                "category": "Groceries",
+                "subcategory": "",
+                "description": f"item {i}",
+                "amount": "10.00",
+                "notes": "",
+            },
+        )
+    client.post(
+        "/transactions",
+        data={
+            "account_id": "chk",
+            "date": "2026-01-16",
+            "type": "income",
+            "category": "Salary",
+            "subcategory": "",
+            "description": "paycheck",
+            "amount": "1000.00",
+            "notes": "",
+        },
+    )
+
+    response = client.get("/transactions?by_month=true&by_type=true")
+
+    assert "Expense" in response.text
+    assert "(2)" in response.text
+    assert "Income" in response.text
+    assert "(1)" in response.text
+
+
+def test_flat_net_total_shows_transaction_count(client):
+    _create_account(client)
+    for i in range(4):
+        client.post(
+            "/transactions",
+            data={
+                "account_id": "chk",
+                "date": "2026-01-15",
+                "type": "expense",
+                "category": "Groceries",
+                "subcategory": "",
+                "description": f"item {i}",
+                "amount": "10.00",
+                "notes": "",
+            },
+        )
+
+    response = client.get("/transactions?by_month=false")
+
+    assert "Net total" in response.text
+    assert "(4)" in response.text

@@ -5,7 +5,7 @@ from decimal import Decimal
 
 import pytest
 
-from app.models.account import Account
+from app.models.account import Account, AccountStatus, AccountType
 from app.models.transaction import Transaction, TransactionType
 from app.services.accounts import add_account, remove_account, update_account
 
@@ -37,6 +37,8 @@ def test_update_account_changes_fields_but_not_id():
         number="2",
         description="desc",
         starting_balance=Decimal("200"),
+        account_type=AccountType.SAVINGS,
+        status=AccountStatus.CLOSED,
     )
 
     assert updated == [
@@ -46,6 +48,8 @@ def test_update_account_changes_fields_but_not_id():
             number="2",
             description="desc",
             starting_balance=Decimal("200"),
+            account_type=AccountType.SAVINGS,
+            status=AccountStatus.CLOSED,
         )
     ]
 
@@ -59,6 +63,8 @@ def test_update_account_raises_for_unknown_id():
             number="",
             description="",
             starting_balance=Decimal("0"),
+            account_type=AccountType.OTHER,
+            status=AccountStatus.ACTIVE,
         )
 
 

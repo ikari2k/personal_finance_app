@@ -127,3 +127,92 @@ def test_detect_transfers_apply_skips_an_unselected_pair(client):
     ledger = {t.id: t for t in read_ledger(config.LEDGER_PATH)}
     assert ledger[outflow.id].type is TransactionType.EXPENSE
     assert ledger[inflow.id].type is TransactionType.INCOME
+
+
+def _seed_orphan_candidate(client) -> Transaction:
+    """One account with a row whose counterparty is a second, dataless account."""
+    write_accounts(
+        [
+            Account(
+                id="chk", name="Checking", number="1111", starting_balance=Decimal("0")
+            ),
+            Account(
+                id="sav",
+                name="Savings",
+                number="2222",
+                starting_balance=Decimal("1000.00"),
+            ),
+        ],
+        config.ACCOUNTS_PATH,
+    )
+    outflow = Transaction(
+        id="a",
+        date=date(2026, 9, 1),
+        account_id="chk",
+        category="Uncategorized",
+        subcategory="",
+        description="Own transfer",
+        amount=Decimal("-75.00"),
+        type=TransactionType.EXPENSE,
+        transfer_id=None,
+        notes=None,
+        counterparty_account="2222",
+    )
+    write_ledger([outflow], config.LEDGER_PATH)
+    return outflow
+
+
+def test_detect_transfers_preview_lists_an_orphan_candidate(client):
+    _seed_orphan_candidate(client)
+
+    response = client.get("/import/detect-transfers/preview")
+
+    assert response.status_code == 200
+    assert "New transfers to create" in response.text
+    assert "Own transfer" in response.text
+    assert "Savings" in response.text
+
+
+def test_detect_transfers_apply_synthesizes_selected_orphan(client):
+    outflow = _seed_orphan_candidate(client)
+    preview = client.get("/import/detect-transfers/preview")
+    matches_payload = _extract_hidden_value(preview.text, "matches_payload")
+    orphans_payload = _extract_hidden_value(preview.text, "orphans_payload")
+
+    response = client.post(
+        "/import/detect-transfers/apply",
+        data={
+            "matches_payload": matches_payload,
+            "orphans_payload": orphans_payload,
+            "selected_orphans": [outflow.id],
+        },
+    )
+
+    assert "Merged 1 transaction pair into transfers" in response.headers["hx-trigger"]
+    ledger = read_ledger(config.LEDGER_PATH)
+    assert len(ledger) == 2
+    updated_outflow = next(t for t in ledger if t.id == outflow.id)
+    new_leg = next(t for t in ledger if t.id != outflow.id)
+    assert updated_outflow.type is TransactionType.TRANSFER
+    assert new_leg.type is TransactionType.TRANSFER
+    assert new_leg.account_id == "sav"
+    assert new_leg.amount == Decimal("75.00")
+    assert new_leg.transfer_id == updated_outflow.transfer_id
+
+
+def test_detect_transfers_apply_leaves_unselected_orphan_untouched(client):
+    outflow = _seed_orphan_candidate(client)
+    preview = client.get("/import/detect-transfers/preview")
+    matches_payload = _extract_hidden_value(preview.text, "matches_payload")
+    orphans_payload = _extract_hidden_value(preview.text, "orphans_payload")
+
+    response = client.post(
+        "/import/detect-transfers/apply",
+        data={"matches_payload": matches_payload, "orphans_payload": orphans_payload},
+    )
+
+    assert "Merged 0 transaction pairs into transfers" in response.headers["hx-trigger"]
+    ledger = read_ledger(config.LEDGER_PATH)
+    assert len(ledger) == 1
+    assert ledger[0].id == outflow.id
+    assert ledger[0].type is TransactionType.EXPENSE

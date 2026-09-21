@@ -25,6 +25,8 @@ def _to_dict(account: Account) -> dict[str, str]:
         "number": account.number,
         "description": account.description,
         "starting_balance": str(account.starting_balance),
+        "account_type": account.account_type.value,
+        "status": account.status.value,
     }
 
 

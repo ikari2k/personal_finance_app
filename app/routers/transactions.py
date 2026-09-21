@@ -10,11 +10,14 @@ from app.models.category import CategoriesByType
 from app.models.transaction import Transaction, TransactionType
 from app.routers.htmx_events import toast
 from app.services.aggregation import grouped_transaction_view
+from app.services.categories import category_pair_exists
 from app.services.transactions import (
     ensure_category,
     new_transaction,
     remove_transaction,
     update_transaction,
+    update_transaction_category,
+    update_transaction_notes,
 )
 from app.storage.accounts import read_accounts
 from app.storage.categories import read_categories, write_categories
@@ -55,21 +58,40 @@ def _categories_grouped(categories: CategoriesByType) -> list[tuple[str, list[st
 
 
 def _filter_ledger(
-    ledger: list[Transaction], *, account_id: str, category: str, subcategory: str
+    ledger: list[Transaction],
+    *,
+    account_id: str,
+    category: str,
+    subcategory: str,
+    txn_type: str,
+    search: str,
 ) -> list[Transaction]:
-    """Filter the ledger by account/category/subcategory (AND), each optional.
+    """Filter the ledger by account/category/subcategory/type/search (AND).
+
+    Each filter is optional.
 
     Shared by ``render_table`` and ``list_transactions`` — both apply the
-    exact same three optional equality filters to ``read_ledger()``'s
-    result before grouping. An empty string for any of the three means
-    "no filter on this field" (see ``list_transactions``'s docstring).
+    exact same optional filters to ``read_ledger()``'s result before
+    grouping. An empty string for any of them means "no filter on this
+    field" (see ``list_transactions``'s docstring). ``txn_type`` is the
+    raw ``TransactionType`` value ("income"/"expense"/"transfer") —
+    filtering to a single type this way is a different thing from the
+    ``by_type`` *grouping* toggle, which only changes how an unfiltered
+    list is split into sections, not which rows are shown at all.
+    ``search`` is a case-insensitive substring match against
+    ``description`` — free text, not an equality filter like the others.
     """
+    if search:
+        needle = search.strip().lower()
+        ledger = [t for t in ledger if needle in t.description.lower()]
     if account_id:
         ledger = [t for t in ledger if t.account_id == account_id]
     if category:
         ledger = [t for t in ledger if t.category == category]
     if subcategory:
         ledger = [t for t in ledger if t.subcategory == subcategory]
+    if txn_type:
+        ledger = [t for t in ledger if t.type.value == txn_type]
     return ledger
 
 
@@ -96,8 +118,15 @@ def render_table(
     account_id = request.cookies.get("account_id", "")
     category = request.cookies.get("category", "")
     subcategory = request.cookies.get("subcategory", "")
+    txn_type = request.cookies.get("txn_type", "")
+    search = request.cookies.get("search", "")
     ledger = _filter_ledger(
-        read_ledger(), account_id=account_id, category=category, subcategory=subcategory
+        read_ledger(),
+        account_id=account_id,
+        category=category,
+        subcategory=subcategory,
+        txn_type=txn_type,
+        search=search,
     )
     accounts_list = read_accounts()
     categories_tree = read_categories()
@@ -116,6 +145,8 @@ def render_table(
             "account_id": account_id,
             "category": category,
             "subcategory": subcategory,
+            "txn_type": txn_type,
+            "search": search,
             "oob": oob,
             "error": error,
         },
@@ -131,31 +162,38 @@ def list_transactions(
     account_id: str | None = None,
     category: str | None = None,
     subcategory: str | None = None,
+    txn_type: str | None = None,
+    search: str | None = None,
 ) -> HTMLResponse:
     """Render the transaction list.
 
     Full navigation renders the whole page; an HTMX request (from the
-    grouping-toggle buttons or the account/category/subcategory filters)
-    renders just the table fragment they swap in. ``account_id``/
-    ``category``/``subcategory`` each filter the ledger (as an AND) before
-    grouping when set; an empty string means "no filter on this field".
+    grouping-toggle buttons or the account/category/subcategory/type/search
+    filters) renders just the table fragment they swap in. ``account_id``/
+    ``category``/``subcategory``/``txn_type``/``search`` each filter the
+    ledger (as an AND) before grouping when set; an empty string means "no
+    filter on this field". ``txn_type`` narrows to one of "income"/
+    "expense"/"transfer" — a different thing from the ``by_type``
+    *grouping* toggle, which only changes how an unfiltered list is split
+    into sections, not which rows are shown at all. ``search`` is a
+    case-insensitive substring match against ``description``.
 
-    All five params fall back to their standing cookie value when the query
-    param is absent (a plain nav link) — never when it's explicitly present
-    (including explicitly empty, e.g. picking "All accounts"), so a link
-    that deliberately sets e.g. ``account_id=`` isn't overridden by an old
-    cookie. This is why each needs ``str | None``/``bool | None`` rather
-    than a concrete default — the concrete falsy value is itself a
+    All seven params fall back to their standing cookie value when the
+    query param is absent (a plain nav link) — never when it's explicitly
+    present (including explicitly empty, e.g. picking "All accounts"), so
+    a link that deliberately sets e.g. ``account_id=`` isn't overridden by
+    an old cookie. This is why each needs ``str | None``/``bool | None``
+    rather than a concrete default — the concrete falsy value is itself a
     meaningful explicit choice, so only ``None`` (the param genuinely
     absent from the URL) means "fall back to the cookie". Every request
-    that resolves a value (from either source) re-writes all five cookies,
-    keeping them in sync with the last choice actually shown. Cookies are
-    set on the actual returned ``TemplateResponse`` rather than via an
-    injected ``Response`` parameter — FastAPI only merges that parameter's
-    cookies into the final response when the endpoint returns plain data
-    (a dict/model) for it to wrap; a path operation that returns a
-    ``Response`` itself, as this one does, has that return value used
-    completely as-is.
+    that resolves a value (from either source) re-writes all seven
+    cookies, keeping them in sync with the last choice actually shown.
+    Cookies are set on the actual returned ``TemplateResponse`` rather
+    than via an injected ``Response`` parameter — FastAPI only merges that
+    parameter's cookies into the final response when the endpoint returns
+    plain data (a dict/model) for it to wrap; a path operation that
+    returns a ``Response`` itself, as this one does, has that return value
+    used completely as-is.
     """
     cookie_by_month, cookie_by_type = _grouping_from_cookies(request)
     resolved_by_month = by_month if by_month is not None else cookie_by_month
@@ -171,12 +209,20 @@ def list_transactions(
         if subcategory is not None
         else request.cookies.get("subcategory", "")
     )
+    resolved_txn_type = (
+        txn_type if txn_type is not None else request.cookies.get("txn_type", "")
+    )
+    resolved_search = (
+        search if search is not None else request.cookies.get("search", "")
+    )
 
     ledger = _filter_ledger(
         read_ledger(),
         account_id=resolved_account_id,
         category=resolved_category,
         subcategory=resolved_subcategory,
+        txn_type=resolved_txn_type,
+        search=resolved_search,
     )
     accounts_list = read_accounts()
     categories_tree = read_categories()
@@ -194,6 +240,8 @@ def list_transactions(
         "account_id": resolved_account_id,
         "category": resolved_category,
         "subcategory": resolved_subcategory,
+        "txn_type": resolved_txn_type,
+        "search": resolved_search,
         "error": None,
     }
     template = (
@@ -213,6 +261,9 @@ def list_transactions(
         max_age=STICKY_FILTER_COOKIE_MAX_AGE,
     )
     response.set_cookie(
+        "txn_type", resolved_txn_type, max_age=STICKY_FILTER_COOKIE_MAX_AGE
+    )
+    response.set_cookie(
         "account_id", resolved_account_id, max_age=STICKY_FILTER_COOKIE_MAX_AGE
     )
     response.set_cookie(
@@ -221,6 +272,7 @@ def list_transactions(
     response.set_cookie(
         "subcategory", resolved_subcategory, max_age=STICKY_FILTER_COOKIE_MAX_AGE
     )
+    response.set_cookie("search", resolved_search, max_age=STICKY_FILTER_COOKIE_MAX_AGE)
     return response
 
 
@@ -375,16 +427,28 @@ def update_transaction_route(
     type: TransactionType = Form(...),
     category: str = Form(...),
     subcategory: str = Form(""),
-    description: str = Form(""),
     amount: str = Form(...),
     notes: str = Form(""),
 ) -> HTMLResponse:
     """Update an existing income/expense transaction.
 
+    ``description`` is never accepted here — it's read-only once a
+    transaction exists (see ``transactions/_form.html``'s edit-mode
+    Description field and CLAUDE.md's description/notes split): the
+    text import/manual entry originally recorded stays exactly as it
+    was, and ``existing.description`` is carried forward unconditionally
+    rather than trusting anything the client might submit for it.
+    ``notes`` is the only free-text field this route can change (see
+    ``update_transaction_notes_route`` for the table's own inline
+    shortcut to the same field).
+
     On success, closes the dialog and refreshes the transaction list
     (out-of-band). On error (including "this is a transfer"), re-renders
     the form in place with the error and the user's input preserved.
     """
+    ledger = read_ledger()
+    existing = next((t for t in ledger if t.id == transaction_id), None)
+    description = existing.description if existing else ""
     values = {
         "account_id": account_id,
         "date": date.isoformat(),
@@ -396,7 +460,6 @@ def update_transaction_route(
         "notes": notes,
     }
     account_ids = [account.id for account in read_accounts()]
-    ledger = read_ledger()
     try:
         parsed_amount = Decimal(amount)
         ledger = update_transaction(
@@ -428,6 +491,103 @@ def update_transaction_route(
         request,
         oob=True,
         headers=toast(f"{type.value.capitalize()} updated", close_dialog=True),
+    )
+
+
+@router.post("/{transaction_id}/category", response_class=HTMLResponse)
+def update_transaction_category_route(
+    request: Request,
+    transaction_id: str,
+    category: str = Form(...),
+    subcategory: str = Form(""),
+) -> HTMLResponse:
+    """Quick-recategorize one transaction inline from the table, no dialog.
+
+    Unlike every other category-entry point in the app (manual entry,
+    CSV import, bulk reclassify), this one never creates a new category
+    or subcategory on the fly — the inline ``<select>`` only ever offers
+    ones that already exist (see ``transactions/_table.html``'s
+    ``txn_row``), and the server double-checks that with
+    ``services.categories.category_pair_exists`` rather than trusting
+    the submitted value. Re-renders just the one row (not the whole
+    table) so an in-progress bulk recategorization pass doesn't keep
+    resetting every ``<details>`` month section back to its default
+    open/closed state on each change.
+    """
+    ledger = read_ledger()
+    target = next((t for t in ledger if t.id == transaction_id), None)
+    if target is None or target.type is TransactionType.TRANSFER:
+        return HTMLResponse(
+            "Transaction not found or not recategorizable", status_code=404
+        )
+
+    categories = read_categories()
+    if not category_pair_exists(categories, target.type, category, subcategory):
+        return HTMLResponse("Unknown category/subcategory", status_code=400)
+
+    ledger = update_transaction_category(
+        ledger, transaction_id, category=category, subcategory=subcategory
+    )
+    write_ledger(ledger)
+    updated = next(t for t in ledger if t.id == transaction_id)
+
+    accounts = {account.id: account for account in read_accounts()}
+    show_account = not request.cookies.get("account_id", "")
+    return templates.TemplateResponse(
+        request,
+        "transactions/_row.html",
+        {
+            "txn": updated,
+            "accounts": accounts,
+            "show_account": show_account,
+            "categories": categories,
+        },
+        headers=toast("Category updated"),
+    )
+
+
+@router.post("/{transaction_id}/notes", response_class=HTMLResponse)
+def update_transaction_notes_route(
+    request: Request,
+    transaction_id: str,
+    notes: str = Form(""),
+) -> HTMLResponse:
+    """Quick-edit one transaction's personal note inline from the table.
+
+    The list's Description cell displays ``notes`` when set, falling
+    back to ``description`` otherwise (``transactions/_table.html``'s
+    ``txn_row``) — so this inline field *reads* as "edit the
+    description," but it only ever writes ``notes``. ``description``
+    itself — the text import/manual entry originally recorded, which
+    ``services.importer``'s duplicate detection and ``services
+    .categorizer``'s rule matching both key off of — is never touched
+    here, unlike the full edit dialog's Description field. Submitting an
+    empty value clears the note and reverts the cell back to showing the
+    original description. Allowed on a transfer leg, unlike category
+    (see ``services.transactions.update_transaction_notes``). Re-renders
+    just the one row, same reasoning as the category route.
+    """
+    ledger = read_ledger()
+    target = next((t for t in ledger if t.id == transaction_id), None)
+    if target is None:
+        return HTMLResponse("Transaction not found", status_code=404)
+
+    ledger = update_transaction_notes(ledger, transaction_id, notes=notes)
+    write_ledger(ledger)
+    updated = next(t for t in ledger if t.id == transaction_id)
+
+    accounts = {account.id: account for account in read_accounts()}
+    show_account = not request.cookies.get("account_id", "")
+    return templates.TemplateResponse(
+        request,
+        "transactions/_row.html",
+        {
+            "txn": updated,
+            "accounts": accounts,
+            "show_account": show_account,
+            "categories": read_categories(),
+        },
+        headers=toast("Note saved"),
     )
 
 

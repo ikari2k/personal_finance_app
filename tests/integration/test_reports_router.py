@@ -330,3 +330,42 @@ def test_year_detail_only_includes_that_years_months(client):
 
     assert "January 2026" in response.text
     assert "June 2025" not in response.text
+
+
+def test_month_detail_shows_prev_and_next_month_links(client):
+    response = client.get("/reports/2026/6")
+
+    assert response.status_code == 200
+    assert 'href="/reports/2026/5"' in response.text
+    assert "May 2026" in response.text
+    assert 'href="/reports/2026/7"' in response.text
+    assert "July 2026" in response.text
+
+
+def test_month_detail_nav_wraps_to_prior_year_in_january(client):
+    response = client.get("/reports/2026/1")
+
+    assert 'href="/reports/2025/12"' in response.text
+    assert "December 2025" in response.text
+
+
+def test_month_detail_nav_wraps_to_next_year_in_december(client):
+    response = client.get("/reports/2026/12")
+
+    assert 'href="/reports/2027/1"' in response.text
+    assert "January 2027" in response.text
+
+
+def test_month_detail_nav_preserves_account_filter(client):
+    _create_account(client, "chk")
+
+    response = client.get("/reports/2026/6?account_id=chk")
+
+    assert 'href="/reports/2026/5?account_id=chk"' in response.text
+    assert 'href="/reports/2026/7?account_id=chk"' in response.text
+
+
+def test_month_detail_rejects_invalid_month(client):
+    response = client.get("/reports/2026/13")
+
+    assert response.status_code == 404

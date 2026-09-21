@@ -8,15 +8,20 @@ import pytest
 from app.models.account import Account
 from app.models.transaction import Transaction, TransactionType
 from app.services.transactions import (
+    OrphanTransferCandidate,
     TransferMatch,
     apply_transfer_matches,
     ensure_category,
+    find_orphan_transfer_candidates,
     find_transfer_matches,
     merge_into_transfer,
     new_transaction,
     new_transfer_pair,
     remove_transaction,
+    synthesize_and_merge_transfer,
     update_transaction,
+    update_transaction_category,
+    update_transaction_notes,
     update_transfer_pair,
 )
 
@@ -328,6 +333,85 @@ def test_update_transaction_rejects_changing_type_to_transfer():
             amount=Decimal("10"),
             type=TransactionType.TRANSFER,
         )
+
+
+def test_update_transaction_category_changes_only_category_fields():
+    existing = _txn(
+        id="t1",
+        account_id="chk",
+        date=date(2026, 3, 4),
+        category="old",
+        subcategory="old-sub",
+        description="Coffee",
+        amount=Decimal("-4.50"),
+        notes="keep me",
+    )
+
+    [updated] = update_transaction_category(
+        [existing], "t1", category="new", subcategory="new-sub"
+    )
+
+    assert updated.category == "new"
+    assert updated.subcategory == "new-sub"
+    assert updated.account_id == "chk"
+    assert updated.date == date(2026, 3, 4)
+    assert updated.description == "Coffee"
+    assert updated.amount == Decimal("-4.50")
+    assert updated.notes == "keep me"
+
+
+def test_update_transaction_category_rejects_unknown_id():
+    with pytest.raises(ValueError):
+        update_transaction_category(
+            [_txn(id="t1")], "ghost", category="new", subcategory=""
+        )
+
+
+def test_update_transaction_category_rejects_a_transfer_leg():
+    transfer_leg = _txn(id="t1", type=TransactionType.TRANSFER, transfer_id="x1")
+
+    with pytest.raises(ValueError):
+        update_transaction_category(
+            [transfer_leg], "t1", category="new", subcategory=""
+        )
+
+
+def test_update_transaction_notes_changes_only_notes():
+    existing = _txn(
+        id="t1",
+        category="Groceries",
+        subcategory="Supermarket",
+        description="Lidl 4471",
+        notes=None,
+    )
+
+    [updated] = update_transaction_notes([existing], "t1", notes="weekly shop")
+
+    assert updated.notes == "weekly shop"
+    assert updated.description == "Lidl 4471"
+    assert updated.category == "Groceries"
+    assert updated.subcategory == "Supermarket"
+
+
+def test_update_transaction_notes_empty_string_clears_to_none():
+    existing = _txn(id="t1", notes="old note")
+
+    [updated] = update_transaction_notes([existing], "t1", notes="")
+
+    assert updated.notes is None
+
+
+def test_update_transaction_notes_allowed_on_a_transfer_leg():
+    transfer_leg = _txn(id="t1", type=TransactionType.TRANSFER, transfer_id="x1")
+
+    [updated] = update_transaction_notes([transfer_leg], "t1", notes="moving funds")
+
+    assert updated.notes == "moving funds"
+
+
+def test_update_transaction_notes_rejects_unknown_id():
+    with pytest.raises(ValueError):
+        update_transaction_notes([_txn(id="t1")], "ghost", notes="x")
 
 
 def test_remove_transaction_deletes_a_plain_row():
@@ -682,3 +766,144 @@ def test_apply_transfer_matches_skips_stale_match():
     result = apply_transfer_matches([out], [match])
 
     assert result == [out]
+
+
+def test_find_orphan_transfer_candidates_finds_an_unpaired_registered_counterparty():
+    out = _txn(
+        id="a",
+        account_id="chk",
+        amount=Decimal("-50"),
+        counterparty_account="333444",
+        description="Own transfer",
+    )
+    # sav has no transactions at all, so this can never match via
+    # find_transfer_matches.
+
+    [candidate] = find_orphan_transfer_candidates([out], ACCOUNTS)
+
+    assert candidate.transaction_id == "a"
+    assert candidate.account_id == "chk"
+    assert candidate.counterparty_account_id == "sav"
+    assert candidate.amount == Decimal("-50")
+    assert candidate.description == "Own transfer"
+
+
+def test_find_orphan_transfer_candidates_excludes_rows_already_matched():
+    out = _txn(
+        id="a", account_id="chk", amount=Decimal("-50"), counterparty_account="333444"
+    )
+    inn = _txn(id="b", account_id="sav", amount=Decimal("50"))
+
+    assert find_orphan_transfer_candidates([out, inn], ACCOUNTS) == []
+
+
+def test_find_orphan_transfer_candidates_ignores_unregistered_counterparty():
+    out = _txn(
+        id="a", account_id="chk", amount=Decimal("-50"), counterparty_account="999999"
+    )
+
+    assert find_orphan_transfer_candidates([out], ACCOUNTS) == []
+
+
+def test_find_orphan_transfer_candidates_sorted_by_date():
+    late = _txn(
+        id="a",
+        account_id="chk",
+        date=date(2026, 3, 1),
+        amount=Decimal("-10"),
+        counterparty_account="333444",
+    )
+    early = _txn(
+        id="b",
+        account_id="chk",
+        date=date(2026, 1, 1),
+        amount=Decimal("-10"),
+        counterparty_account="333444",
+    )
+
+    candidates = find_orphan_transfer_candidates([late, early], ACCOUNTS)
+
+    assert [c.transaction_id for c in candidates] == ["b", "a"]
+
+
+def test_synthesize_and_merge_transfer_creates_the_missing_leg():
+    out = _txn(
+        id="a",
+        account_id="chk",
+        date=date(2026, 3, 4),
+        amount=Decimal("-50"),
+        description="Own transfer",
+    )
+    candidate = OrphanTransferCandidate(
+        transaction_id="a",
+        date=date(2026, 3, 4),
+        account_id="chk",
+        counterparty_account_id="sav",
+        amount=Decimal("-50"),
+        description="Own transfer",
+    )
+
+    result = synthesize_and_merge_transfer([out], candidate)
+
+    assert len(result) == 2
+    updated_out = next(t for t in result if t.id == "a")
+    new_leg = next(t for t in result if t.id != "a")
+    assert updated_out.type is TransactionType.TRANSFER
+    assert updated_out.amount == Decimal("-50")
+    assert new_leg.type is TransactionType.TRANSFER
+    assert new_leg.account_id == "sav"
+    assert new_leg.amount == Decimal("50")
+    assert new_leg.date == date(2026, 3, 4)
+    assert new_leg.description == "Own transfer"
+    assert new_leg.transfer_id == updated_out.transfer_id
+
+
+def test_synthesize_and_merge_transfer_handles_an_inflow_anchor():
+    """The anchor row can also be an inflow — the synthesized leg then outflows."""
+    inn = _txn(id="a", account_id="chk", amount=Decimal("50"))
+    candidate = OrphanTransferCandidate(
+        transaction_id="a",
+        date=date(2026, 1, 1),
+        account_id="chk",
+        counterparty_account_id="sav",
+        amount=Decimal("50"),
+        description="",
+    )
+
+    result = synthesize_and_merge_transfer([inn], candidate)
+
+    new_leg = next(t for t in result if t.id != "a")
+    assert new_leg.account_id == "sav"
+    assert new_leg.amount == Decimal("-50")
+    assert new_leg.type is TransactionType.TRANSFER
+
+
+def test_synthesize_and_merge_transfer_rejects_a_stale_candidate():
+    candidate = OrphanTransferCandidate(
+        transaction_id="ghost",
+        date=date(2026, 1, 1),
+        account_id="chk",
+        counterparty_account_id="sav",
+        amount=Decimal("-50"),
+        description="",
+    )
+
+    with pytest.raises(ValueError):
+        synthesize_and_merge_transfer([], candidate)
+
+
+def test_synthesize_and_merge_transfer_rejects_an_already_transferred_row():
+    already = _txn(
+        id="a", account_id="chk", type=TransactionType.TRANSFER, transfer_id="x"
+    )
+    candidate = OrphanTransferCandidate(
+        transaction_id="a",
+        date=date(2026, 1, 1),
+        account_id="chk",
+        counterparty_account_id="sav",
+        amount=Decimal("-50"),
+        description="",
+    )
+
+    with pytest.raises(ValueError):
+        synthesize_and_merge_transfer([already], candidate)

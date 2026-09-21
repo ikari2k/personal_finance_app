@@ -7,7 +7,7 @@ calling these, and write the result back afterward.
 
 from decimal import Decimal
 
-from app.models.account import Account
+from app.models.account import Account, AccountStatus, AccountType
 from app.models.transaction import Transaction
 
 
@@ -30,6 +30,8 @@ def update_account(
     number: str,
     description: str,
     starting_balance: Decimal,
+    account_type: AccountType,
+    status: AccountStatus,
 ) -> list[Account]:
     """Return ``accounts`` with the account named ``account_id`` updated.
 
@@ -45,6 +47,8 @@ def update_account(
                 "number": number,
                 "description": description,
                 "starting_balance": starting_balance,
+                "account_type": account_type,
+                "status": status,
             }
         )
         if account.id == account_id

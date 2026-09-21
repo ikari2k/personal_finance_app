@@ -1,10 +1,31 @@
 {% from "_icons.html" import edit_icon, delete_icon %}
-<div id="accounts-table-wrapper" {% if oob %}hx-swap-oob="true"{% endif %}>
+{% set closed_count = accounts | selectattr("status.value", "equalto", "closed") | list | length %}
+<div id="accounts-table-wrapper" class="hide-closed" {% if oob %}hx-swap-oob="true"{% endif %}>
   {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  {% if closed_count %}
+    {#
+      Closed accounts hidden by default — they never change day-to-day
+      (see CLAUDE.md's account-status invariant), so surfacing them
+      unconditionally just pushes the active accounts an eye further
+      down for no ongoing benefit. Pure client-side toggle, no htmx
+      round-trip and no sticky cookie — same "resets to default on
+      reload/re-render" precedent as the transactions list's
+      expand/collapse-all button, since this is a display toggle, not a
+      data filter.
+    #}
+    <div class="view-options">
+      <button type="button" class="secondary" id="toggle-closed-accounts"
+              onclick="var wrap = document.getElementById('accounts-table-wrapper'); var hiding = wrap.classList.toggle('hide-closed'); this.textContent = hiding ? 'Show {{ closed_count }} closed account{{ 's' if closed_count != 1 else '' }}' : 'Hide closed account{{ 's' if closed_count != 1 else '' }}';">
+        Show {{ closed_count }} closed account{{ "s" if closed_count != 1 else "" }}
+      </button>
+    </div>
+  {% endif %}
   <table>
     <thead>
       <tr>
         <th>Name</th>
+        <th>Type</th>
+        <th>Status</th>
         <th>Number</th>
         <th>Description</th>
         <th>Starting balance</th>
@@ -14,7 +35,7 @@
     <tbody>
       {% for account in accounts %}
         {% set balance = balances[account.id] %}
-        <tr class="account-row"
+        <tr class="account-row {{ 'account-row-closed' if account.status.value == 'closed' }}"
             onclick="if (!event.target.closest('.row-actions')) location.href='/transactions?account_id={{ account.id }}'">
           <td>
             <span class="row-actions">
@@ -30,6 +51,8 @@
             </span>
             {{ account.name }}
           </td>
+          <td>{{ account_type_labels[account.account_type] }}</td>
+          <td>{{ account_status_labels[account.status] }}</td>
           <td>{{ account.number }}</td>
           <td>{{ account.description }}</td>
           <td class="{{ 'amount-negative' if account.starting_balance < 0 else 'amount-positive' }}">
@@ -40,14 +63,14 @@
           </td>
         </tr>
       {% else %}
-        <tr><td colspan="5">No accounts yet.</td></tr>
+        <tr><td colspan="7">No accounts yet.</td></tr>
       {% endfor %}
     </tbody>
     {% if accounts %}
       {% set total = balances.values() | sum %}
       <tfoot>
         <tr>
-          <td colspan="4">Total</td>
+          <td colspan="6">Total</td>
           <td class="{{ 'amount-negative' if total < 0 else 'amount-positive' }}">
             {{ "%.2f"|format(total) }}
           </td>

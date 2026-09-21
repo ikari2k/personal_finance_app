@@ -60,10 +60,23 @@ def test_list_categories_shows_top_uncategorized_descriptions(client):
     response = client.get("/categories")
 
     assert response.status_code == 200
-    assert "Top uncategorized descriptions" in response.text
+    assert "Top 20 uncategorized descriptions" in response.text
     assert "Allegro" in response.text
     # Allegro appears first (count 2) ahead of Apple.com/Bill (count 1).
     assert response.text.index("Allegro") < response.text.index("Apple.com/Bill")
+
+
+def test_list_categories_shows_more_than_ten_uncategorized_descriptions(client):
+    write_ledger(
+        [_txn(f"t{i}", f"Merchant {i}") for i in range(15)],
+        config.LEDGER_PATH,
+    )
+
+    response = client.get("/categories")
+
+    assert response.status_code == 200
+    for i in range(15):
+        assert f"Merchant {i}" in response.text
 
 
 def test_list_categories_excludes_categorized_rows_from_uncategorized_table(client):

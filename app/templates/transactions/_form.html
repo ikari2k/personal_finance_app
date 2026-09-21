@@ -34,9 +34,26 @@
     </label>
   </div>
   <div class="form-grid-2">
-    <label>Description
-      <input type="text" name="description" value="{{ values.description }}">
-    </label>
+    {% if transaction_id %}
+      {#
+        Read-only once a transaction exists — description is the text
+        import/manual entry originally recorded (what duplicate
+        detection and rule matching key off of, see CLAUDE.md), never
+        editable again after the fact. Personal notes below are the
+        editable field from here on; the transactions list's own
+        Description cell shows notes over description for exactly this
+        reason. Still submitted as part of the form (harmless — the
+        server ignores it either way, see update_transaction_route),
+        just not typable.
+      #}
+      <label>Description
+        <input type="text" value="{{ values.description }}" readonly>
+      </label>
+    {% else %}
+      <label>Description
+        <input type="text" name="description" value="{{ values.description }}">
+      </label>
+    {% endif %}
     <label>Amount
       <input type="text" name="amount" value="{{ values.amount }}" required>
     </label>

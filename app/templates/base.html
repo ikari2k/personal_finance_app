@@ -6,6 +6,7 @@
     <link rel="stylesheet" href="{{ url_for('static', path='pico.min.css') }}" />
     <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}?v={{ static_version('style.css') }}" />
     <script src="{{ url_for('static', path='htmx.min.js') }}"></script>
+    <script src="{{ url_for('static', path='app.js') }}?v={{ static_version('app.js') }}" defer></script>
   </head>
   <body hx-on:toast="const t = document.createElement('div'); t.className = 'toast'; t.textContent = event.detail.value; const c = document.getElementById('toast-container'); c.appendChild(t); requestAnimationFrame(() => t.classList.add('show')); setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 200); }, 3000);"
         hx-on::confirm="if (!event.detail.question) return; event.preventDefault(); document.getElementById('confirm-dialog-message').textContent = event.detail.question; document.getElementById('confirm-dialog-confirm').onclick = function () { document.getElementById('confirm-dialog').close(); event.detail.issueRequest(true); }; document.getElementById('confirm-dialog').showModal();">
@@ -15,6 +16,7 @@
           <li><strong>Finance Tracker</strong></li>
         </ul>
         <ul>
+          <li><a href="/dashboard">Dashboard</a></li>
           <li><a href="/accounts">Accounts</a></li>
           <li><a href="/transactions">Transactions</a></li>
           <li><a href="/categories">Categories</a></li>

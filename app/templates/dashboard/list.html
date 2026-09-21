@@ -1,0 +1,287 @@
+{% extends "base.html" %}
+{% from "_category_icons.html" import category_icon %}
+{% block title %}Dashboard — Finance Tracker{% endblock %}
+{% block content %}
+  <div class="page-header-row">
+    <h1>Dashboard</h1>
+    <div class="cta-row">
+      <button class="btn-income" hx-get="/transactions/new/income"
+              hx-target="#income-dialog-content" hx-swap="innerHTML">
+        Add income
+      </button>
+      <button class="btn-expense" hx-get="/transactions/new/expense"
+              hx-target="#expense-dialog-content" hx-swap="innerHTML">
+        Add expense
+      </button>
+      <button class="btn-transfer" hx-get="/transfers/new" hx-target="#transfer-dialog-content"
+              hx-swap="innerHTML">
+        Record transfer
+      </button>
+    </div>
+  </div>
+
+  <div class="dash-hero">
+    <div class="dash-hero-figure">
+      <span class="dash-eyebrow">Net worth</span>
+      <div class="dash-hero-number {{ 'amount-negative' if current_net_worth < 0 else 'amount-positive' }}">
+        {{ "%.2f"|format(current_net_worth) }}
+      </div>
+      {% if net_worth_delta is not none %}
+        <div class="dash-hero-delta {{ 'up' if net_worth_delta >= 0 else 'down' }}">
+          {{ '▲' if net_worth_delta >= 0 else '▼' }}
+          {{ "%.2f"|format(net_worth_delta) }}
+          <span class="muted">vs last month{% if net_worth_delta_pct is not none %} &middot; {{ "%.1f"|format(net_worth_delta_pct) }}%{% endif %}</span>
+        </div>
+      {% endif %}
+    </div>
+    {% if sparkline_svg %}
+      <div class="dash-hero-chart">
+        <div class="spark-wrap">{{ sparkline_svg | safe }}</div>
+        <div class="dash-hero-chart-caption">
+          {% for label in sparkline_labels %}<span>{{ label.split(' ')[0][:3] }}</span>{% endfor %}
+        </div>
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="dash-grid">
+
+    <div class="dash-widget dash-widget-bordered dash-span-4">
+      <div class="dash-widget-head">
+        <span class="dash-widget-title">This month</span>
+        <a class="dash-widget-link" href="/reports/{{ as_of.year }}/{{ as_of.month }}">Reports &rsaquo;</a>
+      </div>
+      <div class="dash-stat-row">
+        <span class="dash-stat-lockup">
+          <span class="dash-stat-icon dash-stat-icon-income">{{ category_icon('banknote') }}</span>
+          <span class="dash-stat-label">Income</span>
+        </span>
+        <span class="dash-stat-main">
+          <span class="dash-stat-value">{{ "%.2f"|format(income_total) }}</span>
+          {% if income_delta_pct is not none %}
+            <span class="dash-stat-delta {{ 'up' if income_delta_pct >= 0 else 'down' }}">
+              {{ '▲' if income_delta_pct >= 0 else '▼' }} {{ "%.1f"|format(income_delta_pct|abs) }}% vs last month
+            </span>
+          {% endif %}
+        </span>
+      </div>
+      <div class="dash-stat-row">
+        <span class="dash-stat-lockup">
+          <span class="dash-stat-icon dash-stat-icon-expense">{{ category_icon('cart') }}</span>
+          <span class="dash-stat-label">Expense</span>
+        </span>
+        <span class="dash-stat-main">
+          <span class="dash-stat-value">{{ "%.2f"|format(expense_total) }}</span>
+          {% if expense_delta_pct is not none %}
+            <span class="dash-stat-delta {{ 'down' if expense_delta_pct >= 0 else 'up' }}">
+              {{ '▲' if expense_delta_pct >= 0 else '▼' }} {{ "%.1f"|format(expense_delta_pct|abs) }}% vs last month
+            </span>
+          {% endif %}
+        </span>
+      </div>
+      <div class="dash-net-line">
+        <span class="dash-stat-label">Net</span>
+        <span class="dash-net-value {{ 'amount-negative' if net_total < 0 else 'amount-positive' }}">{{ "%.2f"|format(net_total) }}</span>
+      </div>
+    </div>
+
+    <div class="dash-widget dash-widget-bordered dash-span-4">
+      <div class="dash-widget-head">
+        <span class="dash-widget-title">Accounts</span>
+        <a class="dash-widget-link" href="/accounts">All &rsaquo;</a>
+      </div>
+      <div class="dash-account-list">
+        {% for account in active_accounts %}
+          <div class="dash-account-row">
+            <span class="dash-account-glyph">{{ category_icon(account_type_icons[account.account_type]) }}</span>
+            <span>
+              <span class="dash-account-name">{{ account.name }}</span>
+              <span class="dash-account-type">{{ account_type_labels[account.account_type] }}</span>
+            </span>
+            <span class="dash-account-balance {{ 'amount-negative' if balances[account.id] < 0 else 'amount-positive' }}">
+              {{ "%.2f"|format(balances[account.id]) }}
+            </span>
+          </div>
+        {% else %}
+          <p class="muted">No active accounts.</p>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="dash-widget dash-widget-bordered dash-span-4">
+      <div class="dash-widget-head">
+        <span class="dash-widget-title">Needs attention</span>
+      </div>
+      {% if uncategorized_count or transfer_candidate_count %}
+        <div class="dash-attention-list">
+          {% if uncategorized_count %}
+            <a class="dash-attention-item" href="/transactions?category=Uncategorized">
+              <span class="dash-attention-icon">{{ category_icon('x') }}</span>
+              <span>
+                <span class="dash-attention-title">{{ uncategorized_count }} uncategorized transaction{{ "s" if uncategorized_count != 1 else "" }}</span>
+                <span class="dash-attention-sub">Review on Transactions</span>
+              </span>
+            </a>
+          {% endif %}
+          {% if transfer_candidate_count %}
+            <a class="dash-attention-item" href="/import">
+              <span class="dash-attention-icon">{{ category_icon('refresh') }}</span>
+              <span>
+                <span class="dash-attention-title">{{ transfer_candidate_count }} possible transfer{{ "s" if transfer_candidate_count != 1 else "" }}</span>
+                <span class="dash-attention-sub">Detected &middot; confirm on Import</span>
+              </span>
+            </a>
+          {% endif %}
+        </div>
+      {% else %}
+        <p class="dash-all-clear">Nothing needs attention.</p>
+      {% endif %}
+    </div>
+
+    <div class="dash-widget dash-widget-bordered dash-span-6">
+      <div class="dash-widget-head">
+        <span class="dash-widget-title">Budget status</span>
+        <a class="dash-widget-link" href="/categories">Categories &rsaquo;</a>
+      </div>
+      <p class="dash-widget-caption">Budgeted categories at {{ budget_threshold_pct }}%+ of this month's limit, worst first.</p>
+      {% if budget_rows %}
+        <div class="dash-budget-list">
+          {% for row in budget_rows %}
+            <div class="dash-budget-row">
+              <span class="utilization utilization-{{ row.ring.tier }}">
+                <svg width="30" height="30" viewBox="0 0 20 20" class="utilization-ring">
+                  <circle cx="10" cy="10" r="7" class="ring-track"/>
+                  <circle cx="10" cy="10" r="7" class="ring-fill"
+                          stroke-dasharray="{{ row.ring.dash }} {{ row.ring.gap }}"
+                          transform="rotate(-90 10 10)">
+                    <title>{{ row.name }}: {{ row.ring.pct_label }} of budget</title>
+                  </circle>
+                </svg>
+              </span>
+              <span class="dash-budget-main">
+                <span class="dash-budget-name">{{ row.name }}</span>
+                <span class="dash-budget-figures">{{ "%.2f"|format(row.amount) }} / {{ "%.2f"|format(row.budget) }}</span>
+              </span>
+              <span class="dash-budget-pct utilization-{{ row.ring.tier }}">{{ row.ring.pct_label }}</span>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="dash-all-clear">No budgeted category is over {{ budget_threshold_pct }}% this month.</p>
+      {% endif %}
+    </div>
+
+    <div class="dash-widget dash-widget-bordered dash-span-6">
+      <div class="dash-widget-head">
+        <span class="dash-widget-title">Top categories this month</span>
+      </div>
+      {% if top_categories %}
+        <div class="dash-cat-bars">
+          {% for cat in top_categories %}
+            <div class="dash-cat-bar-row">
+              <span class="dash-cat-glyph">{{ category_icon(cat.icon) }}</span>
+              <span class="dash-cat-bar-main">
+                <span class="dash-cat-bar-top">
+                  <span class="dash-cat-bar-name">{{ cat.name }}</span>
+                  <span class="dash-cat-bar-amount">{{ "%.2f"|format(cat.amount) }}</span>
+                </span>
+                <span class="dash-cat-bar-track">
+                  <span class="dash-cat-bar-fill" style="width: {{ (cat.amount / top_category_max * 100) if top_category_max else 0 }}%"></span>
+                </span>
+              </span>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="dash-all-clear">No expenses recorded this month yet.</p>
+      {% endif %}
+    </div>
+
+    <div class="dash-widget dash-widget-bordered dash-span-12">
+      <div class="dash-widget-head">
+        <span class="dash-widget-title">Recent transactions</span>
+        <a class="dash-widget-link" href="/transactions">All transactions &rsaquo;</a>
+      </div>
+      {% if recent_days %}
+        <div class="table-scroll">
+          <table class="dash-txn-table">
+            <colgroup>
+              <col style="width: 28%">
+              <col>
+              <col style="width: calc(10ch + 1rem)">
+            </colgroup>
+            <thead>
+              <tr><th>Category</th><th>Description</th><th style="text-align:right">Amount</th></tr>
+            </thead>
+            {% for day in recent_days %}
+              <tbody>
+                <tr class="dash-txn-day-row"><td colspan="3">{{ day.label }}</td></tr>
+                {% for row in day.rows %}
+                  {% set txn = row.txn %}
+                  <tr>
+                    {% if txn.type.value == 'transfer' %}
+                      <td class="dash-transfer-label">Transfer</td>
+                    {% else %}
+                      <td>
+                        <span class="dash-txn-cat">
+                          {% if row.icon %}<span class="dash-cat-glyph dash-cat-glyph-{{ txn.type.value }}">{{ category_icon(row.icon) }}</span>{% endif %}
+                          {{ txn.category }}
+                        </span>
+                      </td>
+                    {% endif %}
+                    <td class="dash-txn-desc"{% if txn.notes %} title="Original description: {{ txn.description }}"{% endif %}>{{ txn.notes or txn.description or row.account_name }}</td>
+                    <td class="dash-txn-amount {{ 'dash-amount-transfer' if txn.type.value == 'transfer' else ('amount-negative' if txn.amount < 0 else 'amount-positive') }}">
+                      {{ "%.2f"|format(txn.amount) }}
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            {% endfor %}
+          </table>
+        </div>
+      {% else %}
+        <p class="dash-all-clear">No transactions yet.</p>
+      {% endif %}
+    </div>
+
+  </div>
+
+  <dialog id="income-dialog" hx-on:close-dialog="this.close()"
+          hx-on:click="if (event.target === this) this.close()">
+    <article>
+      <header>
+        <button aria-label="Close" rel="prev"
+                onclick="document.getElementById('income-dialog').close()"></button>
+        <strong>Income</strong>
+      </header>
+      <div id="income-dialog-content"
+           hx-on::after-swap="if (this.firstElementChild) { const d = this.closest('dialog'); if (!d.open) d.showModal(); }"></div>
+    </article>
+  </dialog>
+
+  <dialog id="expense-dialog" hx-on:close-dialog="this.close()"
+          hx-on:click="if (event.target === this) this.close()">
+    <article>
+      <header>
+        <button aria-label="Close" rel="prev"
+                onclick="document.getElementById('expense-dialog').close()"></button>
+        <strong>Expense</strong>
+      </header>
+      <div id="expense-dialog-content"
+           hx-on::after-swap="if (this.firstElementChild) { const d = this.closest('dialog'); if (!d.open) d.showModal(); }"></div>
+    </article>
+  </dialog>
+
+  <dialog id="transfer-dialog" hx-on:close-dialog="this.close()"
+          hx-on:click="if (event.target === this) this.close()">
+    <article>
+      <header>
+        <button aria-label="Close" rel="prev"
+                onclick="document.getElementById('transfer-dialog').close()"></button>
+        <strong>Transfer</strong>
+      </header>
+      <div id="transfer-dialog-content"
+           hx-on::after-swap="if (this.firstElementChild) { const d = this.closest('dialog'); if (!d.open) d.showModal(); }"></div>
+    </article>
+  </dialog>
+{% endblock %}

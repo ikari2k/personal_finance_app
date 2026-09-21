@@ -584,6 +584,21 @@ def year_detail(request: Request, year: int, account_id: str = "") -> HTMLRespon
     )
 
 
+def _adjacent_month(year: int, month: int, delta: int) -> tuple[int, int]:
+    """Return the ``(year, month)`` one step before/after, wrapping years.
+
+    ``delta`` is ``+1`` or ``-1``.
+
+    Backs the month drill-down's Previous/Next navigation — no bounds
+    checking against what data actually exists (the page already renders
+    a graceful "No data" state for an empty month, so an adjacent link
+    can always be shown rather than needing to know in advance whether
+    it leads anywhere).
+    """
+    total = year * 12 + (month - 1) + delta
+    return total // 12, total % 12 + 1
+
+
 @router.get("/{year}/{month}", response_class=HTMLResponse)
 def month_detail(
     request: Request, year: int, month: int, account_id: str = ""
@@ -604,6 +619,8 @@ def month_detail(
     spending_pie = _svg_pie_chart([(cat.name, cat.total) for cat in expense_breakdown])
     income_config = _category_config(categories, TransactionType.INCOME)
     expense_config = _category_config(categories, TransactionType.EXPENSE)
+    prev_year, prev_month = _adjacent_month(year, month, -1)
+    next_year, next_month = _adjacent_month(year, month, 1)
     return templates.TemplateResponse(
         request,
         "reports/month.html",
@@ -618,5 +635,11 @@ def month_detail(
             "expense_breakdown": expense_breakdown,
             "income_config": income_config,
             "expense_config": expense_config,
+            "prev_year": prev_year,
+            "prev_month": prev_month,
+            "prev_label": f"{month_name[prev_month]} {prev_year}",
+            "next_year": next_year,
+            "next_month": next_month,
+            "next_label": f"{month_name[next_month]} {next_year}",
         },
     )
