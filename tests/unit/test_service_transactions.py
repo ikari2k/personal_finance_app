@@ -11,6 +11,7 @@ from app.services.transactions import (
     OrphanTransferCandidate,
     TransferMatch,
     apply_transfer_matches,
+    convert_to_transfer,
     ensure_category,
     find_orphan_transfer_candidates,
     find_transfer_matches,
@@ -907,3 +908,115 @@ def test_synthesize_and_merge_transfer_rejects_an_already_transferred_row():
 
     with pytest.raises(ValueError):
         synthesize_and_merge_transfer([already], candidate)
+
+
+def test_convert_to_transfer_synthesizes_a_leg_when_no_match_exists():
+    expense = _txn(
+        id="a",
+        account_id="chk",
+        date=date(2026, 3, 4),
+        amount=Decimal("-50"),
+        description="Moved to savings",
+        type=TransactionType.EXPENSE,
+    )
+
+    result = convert_to_transfer(
+        [expense], ["chk", "sav"], "a", counterpart_account_id="sav"
+    )
+
+    assert len(result) == 2
+    updated = next(t for t in result if t.id == "a")
+    new_leg = next(t for t in result if t.id != "a")
+    assert updated.type is TransactionType.TRANSFER
+    assert updated.amount == Decimal("-50")
+    assert new_leg.type is TransactionType.TRANSFER
+    assert new_leg.account_id == "sav"
+    assert new_leg.amount == Decimal("50")
+    assert new_leg.transfer_id == updated.transfer_id
+
+
+def test_convert_to_transfer_pairs_with_an_existing_opposite_row():
+    expense = _txn(
+        id="a",
+        account_id="chk",
+        date=date(2026, 3, 4),
+        amount=Decimal("-50"),
+        type=TransactionType.EXPENSE,
+    )
+    income = _txn(
+        id="b",
+        account_id="sav",
+        date=date(2026, 3, 5),
+        amount=Decimal("50"),
+        type=TransactionType.INCOME,
+    )
+
+    result = convert_to_transfer(
+        [expense, income], ["chk", "sav"], "a", counterpart_account_id="sav"
+    )
+
+    assert len(result) == 2
+    updated_a = next(t for t in result if t.id == "a")
+    updated_b = next(t for t in result if t.id == "b")
+    assert updated_a.type is TransactionType.TRANSFER
+    assert updated_b.type is TransactionType.TRANSFER
+    assert updated_a.transfer_id == updated_b.transfer_id
+
+
+def test_convert_to_transfer_ignores_an_opposite_row_outside_the_day_gap():
+    expense = _txn(
+        id="a",
+        account_id="chk",
+        date=date(2026, 3, 4),
+        amount=Decimal("-50"),
+        type=TransactionType.EXPENSE,
+    )
+    unrelated_income = _txn(
+        id="b",
+        account_id="sav",
+        date=date(2026, 4, 20),
+        amount=Decimal("50"),
+        type=TransactionType.INCOME,
+    )
+
+    result = convert_to_transfer(
+        [expense, unrelated_income], ["chk", "sav"], "a", counterpart_account_id="sav"
+    )
+
+    assert len(result) == 3
+    updated_b = next(t for t in result if t.id == "b")
+    assert updated_b.type is TransactionType.INCOME
+
+
+def test_convert_to_transfer_rejects_unknown_counterpart_account():
+    expense = _txn(id="a", account_id="chk", amount=Decimal("-50"))
+
+    with pytest.raises(ValueError):
+        convert_to_transfer(
+            [expense], ["chk"], "a", counterpart_account_id="ghost-account"
+        )
+
+
+def test_convert_to_transfer_rejects_unknown_transaction():
+    with pytest.raises(ValueError):
+        convert_to_transfer([], ["chk", "sav"], "ghost", counterpart_account_id="sav")
+
+
+def test_convert_to_transfer_rejects_an_already_transferred_row():
+    already = _txn(
+        id="a", account_id="chk", type=TransactionType.TRANSFER, transfer_id="x"
+    )
+
+    with pytest.raises(ValueError):
+        convert_to_transfer(
+            [already], ["chk", "sav"], "a", counterpart_account_id="sav"
+        )
+
+
+def test_convert_to_transfer_rejects_same_account_as_counterpart():
+    expense = _txn(id="a", account_id="chk", amount=Decimal("-50"))
+
+    with pytest.raises(ValueError):
+        convert_to_transfer(
+            [expense], ["chk", "sav"], "a", counterpart_account_id="chk"
+        )

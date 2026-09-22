@@ -447,6 +447,23 @@ in one `hx-vals`, the same "explicit empty overrides the sticky cookie" conventi
 control here already follows, rather than a new code path. Deliberately leaves `by_month`/
 `by_type` out of that `hx-vals` — grouping is a display preference, not a filter, so clearing
 filters doesn't also reset how the (now unfiltered) list is grouped.
+
+Every non-transfer row on `/transactions` then gained a third row-action icon (amber, matching the
+app's transfer color elsewhere) — "Convert to transfer" — for the case a manually-entered or
+imported row turns out to actually be money moving between the user's own accounts, something
+`find_transfer_matches`/`find_orphan_transfer_candidates` can only catch automatically when a bank
+export happened to record the counterparty account number. `services.transactions
+.convert_to_transfer` is the manual counterpart: given an existing row and a user-picked
+counterpart account (a `<select>` in a new dialog, `transactions/_convert_form.html`, excluding
+the row's own account), it first tries the exact same "existing opposite-sign, equal-magnitude row
+within `max_day_gap` days" match `find_transfer_matches` uses (via `merge_into_transfer`, in case
+the other leg already exists unnoticed), and only synthesizes a brand-new leg (via
+`synthesize_and_merge_transfer`) when nothing matches — reusing both existing transfer-merge
+primitives rather than a third implementation. The row's own id/date/amount/account never change,
+only its type/category/subcategory and the new shared `transfer_id`. The row-actions box needed
+the same one-rem-wider offset the mappings table's own three-icon rows already use
+(`#transactions-table-wrapper .row-actions`), since only non-transfer rows get the third icon while
+transfer rows keep two — harmless, since each row's box is positioned independently.
 See `docs/implementation-plan.md` for the full phased plan, finalized schemas, and per-phase status
 checkboxes/implementation notes.
 

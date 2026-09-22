@@ -12,6 +12,7 @@ from app.routers.htmx_events import toast
 from app.services.aggregation import grouped_transaction_view
 from app.services.categories import category_pair_exists
 from app.services.transactions import (
+    convert_to_transfer,
     ensure_category,
     new_transaction,
     remove_transaction,
@@ -677,3 +678,65 @@ def delete_transaction(request: Request, transaction_id: str) -> HTMLResponse:
         else "Transaction deleted"
     )
     return render_table(request, headers=toast(message))
+
+
+def _render_convert_form(
+    request: Request,
+    *,
+    transaction: Transaction,
+    error: str | None = None,
+) -> HTMLResponse:
+    """Render the "pick a counterpart account" form for converting to a transfer."""
+    accounts = [a for a in read_accounts() if a.id != transaction.account_id]
+    return templates.TemplateResponse(
+        request,
+        "transactions/_convert_form.html",
+        {"transaction": transaction, "accounts": accounts, "error": error},
+    )
+
+
+@router.get("/{transaction_id}/convert-to-transfer", response_class=HTMLResponse)
+def convert_to_transfer_form(request: Request, transaction_id: str) -> HTMLResponse:
+    """Render the counterpart-account picker for turning a row into a transfer."""
+    transaction = next((t for t in read_ledger() if t.id == transaction_id), None)
+    if transaction is None or transaction.type is TransactionType.TRANSFER:
+        return HTMLResponse(
+            "Transaction not found or already a transfer", status_code=404
+        )
+    return _render_convert_form(request, transaction=transaction)
+
+
+@router.post("/{transaction_id}/convert-to-transfer", response_class=HTMLResponse)
+def convert_to_transfer_route(
+    request: Request,
+    transaction_id: str,
+    counterpart_account_id: str = Form(...),
+) -> HTMLResponse:
+    """Turn an existing income/expense row into a transfer against the chosen account.
+
+    See ``services.transactions.convert_to_transfer`` — pairs with an
+    existing opposite-sign row already in that account if one matches,
+    otherwise synthesizes the missing leg there. The row's own id/date/
+    amount/account never change.
+    """
+    ledger = read_ledger()
+    transaction = next((t for t in ledger if t.id == transaction_id), None)
+    if transaction is None:
+        return HTMLResponse("Transaction not found", status_code=404)
+    account_ids = [a.id for a in read_accounts()]
+    try:
+        ledger = convert_to_transfer(
+            ledger,
+            account_ids,
+            transaction_id,
+            counterpart_account_id=counterpart_account_id,
+        )
+    except ValueError as exc:
+        return _render_convert_form(request, transaction=transaction, error=str(exc))
+
+    write_ledger(ledger)
+    return render_table(
+        request,
+        oob=True,
+        headers=toast("Converted to transfer", close_dialog=True),
+    )

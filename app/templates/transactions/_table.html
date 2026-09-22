@@ -1,4 +1,4 @@
-{% from "_icons.html" import edit_icon, delete_icon, search_icon %}
+{% from "_icons.html" import edit_icon, delete_icon, search_icon, transfer_icon %}
 {% from "_category_icons.html" import category_icon %}
 
 {% macro txn_row(txn, accounts, show_account, categories) %}
@@ -17,6 +17,13 @@
                 hx-confirm="Delete this transaction? This cannot be undone.">
           {{ delete_icon() }}
         </button>
+        {% if txn.type.value != 'transfer' %}
+          <button type="button" class="icon-convert" aria-label="Convert to transfer"
+                  hx-get="/transactions/{{ txn.id }}/convert-to-transfer"
+                  hx-target="#convert-dialog-content" hx-swap="innerHTML">
+            {{ transfer_icon() }}
+          </button>
+        {% endif %}
       </span>
       <span class="txn-date">{{ txn.date }}</span>
     </td>

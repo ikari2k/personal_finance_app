@@ -660,3 +660,83 @@ def synthesize_and_merge_transfer(
         to_description=existing.description,
     )
     return merge_into_transfer([*transactions, new_leg], match)
+
+
+def convert_to_transfer(
+    transactions: list[Transaction],
+    account_ids: Iterable[str],
+    transaction_id: str,
+    *,
+    counterpart_account_id: str,
+    max_day_gap: int = 3,
+) -> list[Transaction]:
+    """Turn an existing income/expense row into a transfer, user-picked counterpart.
+
+    The manual counterpart to ``find_transfer_matches``/
+    ``find_orphan_transfer_candidates`` — those only ever act on a row
+    whose ``counterparty_account`` was captured at import time; this is
+    for the common case where it wasn't (a manual entry, or a bank
+    export with no such column) and the user already knows, from
+    looking at the row, which of their own accounts it actually moved
+    money to/from. Tries the same "existing opposite-sign, equal-
+    magnitude row within ``max_day_gap`` days" match ``find_transfer_matches``
+    would (via ``merge_into_transfer``) first — the other leg may
+    already be sitting in ``counterpart_account_id``, just never
+    auto-detected — and only synthesizes a brand-new leg (via
+    ``synthesize_and_merge_transfer``) when nothing matches. Either way
+    the original row's own id/date/amount/account never change; only
+    its type/category/subcategory and the new shared ``transfer_id`` do.
+
+    Raises ``ValueError`` if ``counterpart_account_id`` is unknown, the
+    transaction doesn't exist, is already a transfer, or
+    ``counterpart_account_id`` is the transaction's own account.
+    """
+    if counterpart_account_id not in set(account_ids):
+        raise ValueError(f"unknown account_id '{counterpart_account_id}'")
+    existing = next((t for t in transactions if t.id == transaction_id), None)
+    if existing is None:
+        raise ValueError(f"no transaction with id '{transaction_id}'")
+    if existing.type is TransactionType.TRANSFER:
+        raise ValueError("transaction is already a transfer")
+    if existing.account_id == counterpart_account_id:
+        raise ValueError("a transfer must be between two different accounts")
+
+    best: Transaction | None = None
+    best_gap = None
+    for other in transactions:
+        if (
+            other.id == existing.id
+            or other.account_id != counterpart_account_id
+            or other.type is TransactionType.TRANSFER
+            or other.amount != -existing.amount
+        ):
+            continue
+        gap = abs((other.date - existing.date).days)
+        if gap > max_day_gap:
+            continue
+        if best is None or gap < best_gap:
+            best, best_gap = other, gap
+
+    if best is not None:
+        outflow, inflow = (existing, best) if existing.amount < 0 else (best, existing)
+        match = TransferMatch(
+            from_transaction_id=outflow.id,
+            to_transaction_id=inflow.id,
+            date=outflow.date,
+            from_account_id=outflow.account_id,
+            to_account_id=inflow.account_id,
+            amount=-outflow.amount,
+            from_description=outflow.description,
+            to_description=inflow.description,
+        )
+        return merge_into_transfer(transactions, match)
+
+    candidate = OrphanTransferCandidate(
+        transaction_id=existing.id,
+        date=existing.date,
+        account_id=existing.account_id,
+        counterparty_account_id=counterpart_account_id,
+        amount=existing.amount,
+        description=existing.description,
+    )
+    return synthesize_and_merge_transfer(transactions, candidate)

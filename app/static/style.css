@@ -271,6 +271,17 @@
   left: -6.65rem;
 }
 
+/* The transactions table's non-transfer rows get a third icon (Convert
+ * to transfer, alongside edit/delete) — same "one rem wider per icon"
+ * adjustment as the mappings table above. Transfer rows still only
+ * have two icons and so end up with a bit of extra empty space to
+ * their left instead of a third icon; harmless, since each row's own
+ * .row-actions is positioned independently and this never overlaps
+ * anything. */
+#transactions-table-wrapper .row-actions {
+  left: -6.65rem;
+}
+
 /* Every other row-actions table has exclusively short, single-line cell
  * content, so a row is never taller than one line and the icons'
  * row-height-centered position always lines up with the text. This
@@ -389,12 +400,22 @@ tr:focus-within .row-actions,
   color: #15803d;
 }
 
+/* Amber — same "transfer" semantic color as .btn-transfer/the transfer
+ * type-group header elsewhere in the app. */
+.row-actions .icon-convert {
+  color: #b45309;
+}
+
 .row-actions .icon-edit:hover {
   background: rgba(37, 99, 235, 0.12);
 }
 
 .row-actions .icon-delete:hover {
   background: rgba(185, 28, 28, 0.12);
+}
+
+.row-actions .icon-convert:hover {
+  background: rgba(180, 83, 9, 0.12);
 }
 
 .row-actions .icon-run:hover {

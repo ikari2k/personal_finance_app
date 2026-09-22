@@ -1058,6 +1058,114 @@ def test_inline_notes_update_rejects_unknown_id(client):
     assert response.status_code == 404
 
 
+def test_convert_to_transfer_form_shows_other_accounts(client):
+    _create_account(client, "chk")
+    _create_account(client, "sav")
+    client.post(
+        "/transactions",
+        data={
+            "account_id": "chk",
+            "date": "2026-01-15",
+            "type": "expense",
+            "category": "Groceries",
+            "subcategory": "",
+            "description": "actually a transfer",
+            "amount": "50.00",
+            "notes": "",
+        },
+    )
+    transaction_id = read_ledger(config.LEDGER_PATH)[0].id
+
+    response = client.get(f"/transactions/{transaction_id}/convert-to-transfer")
+
+    assert response.status_code == 200
+    assert "Sav" in response.text
+    assert "Chk" not in response.text
+
+
+def test_convert_to_transfer_form_rejects_a_transfer_leg(client):
+    _create_account(client, "chk")
+    _create_account(client, "sav")
+    client.post(
+        "/transfers",
+        data={
+            "from_account_id": "chk",
+            "to_account_id": "sav",
+            "date": "2026-01-15",
+            "amount": "50.00",
+            "description": "",
+            "notes": "",
+        },
+    )
+    transfer_leg_id = read_ledger(config.LEDGER_PATH)[0].id
+
+    response = client.get(f"/transactions/{transfer_leg_id}/convert-to-transfer")
+
+    assert response.status_code == 404
+
+
+def test_convert_to_transfer_synthesizes_missing_leg(client):
+    _create_account(client, "chk")
+    _create_account(client, "sav")
+    client.post(
+        "/transactions",
+        data={
+            "account_id": "chk",
+            "date": "2026-01-15",
+            "type": "expense",
+            "category": "Groceries",
+            "subcategory": "",
+            "description": "actually a transfer",
+            "amount": "50.00",
+            "notes": "",
+        },
+    )
+    transaction_id = read_ledger(config.LEDGER_PATH)[0].id
+
+    response = client.post(
+        f"/transactions/{transaction_id}/convert-to-transfer",
+        data={"counterpart_account_id": "sav"},
+    )
+
+    assert response.status_code == 200
+    ledger = read_ledger(config.LEDGER_PATH)
+    assert len(ledger) == 2
+    updated = next(t for t in ledger if t.id == transaction_id)
+    new_leg = next(t for t in ledger if t.id != transaction_id)
+    assert updated.type.value == "transfer"
+    assert new_leg.type.value == "transfer"
+    assert new_leg.account_id == "sav"
+    assert new_leg.amount == Decimal("50.00")
+    assert new_leg.transfer_id == updated.transfer_id
+
+
+def test_convert_to_transfer_rejects_unknown_account(client):
+    _create_account(client, "chk")
+    client.post(
+        "/transactions",
+        data={
+            "account_id": "chk",
+            "date": "2026-01-15",
+            "type": "expense",
+            "category": "Groceries",
+            "subcategory": "",
+            "description": "",
+            "amount": "50.00",
+            "notes": "",
+        },
+    )
+    transaction_id = read_ledger(config.LEDGER_PATH)[0].id
+
+    response = client.post(
+        f"/transactions/{transaction_id}/convert-to-transfer",
+        data={"counterpart_account_id": "ghost"},
+    )
+
+    assert response.status_code == 200
+    updated = next(t for t in read_ledger(config.LEDGER_PATH) if t.id == transaction_id)
+    assert updated.type.value == "expense"
+
+
 def test_transactions_list_shows_notes_instead_of_description_when_set(client):
     _create_account(client)
     client.post(

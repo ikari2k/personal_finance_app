@@ -59,4 +59,17 @@
            hx-on::after-swap="if (this.firstElementChild) { const d = this.closest('dialog'); if (!d.open) d.showModal(); }"></div>
     </article>
   </dialog>
+
+  <dialog id="convert-dialog" hx-on:close-dialog="this.close()"
+          hx-on:click="if (event.target === this) this.close()">
+    <article>
+      <header>
+        <button aria-label="Close" rel="prev"
+                onclick="document.getElementById('convert-dialog').close()"></button>
+        <strong>Convert to transfer</strong>
+      </header>
+      <div id="convert-dialog-content"
+           hx-on::after-swap="if (this.firstElementChild) { const d = this.closest('dialog'); if (!d.open) d.showModal(); }"></div>
+    </article>
+  </dialog>
 {% endblock %}

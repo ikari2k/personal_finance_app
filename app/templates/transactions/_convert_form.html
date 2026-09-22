@@ -1,0 +1,40 @@
+{#
+  Picks the *other* account for turning an existing income/expense row
+  into a transfer — see app.services.transactions.convert_to_transfer.
+  The row's own id/date/amount/account never change; the service either
+  pairs it with an existing opposite-sign row already sitting in the
+  chosen account, or synthesizes the missing leg there. Deliberately
+  offers no "create a new account" escape hatch, same reasoning as the
+  inline category picker — only accounts that already exist.
+#}
+<form id="convert-form"
+      hx-post="/transactions/{{ transaction.id }}/convert-to-transfer"
+      hx-target="#convert-dialog-content" hx-swap="innerHTML">
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <p>
+    Convert this {{ transaction.type.value }} of
+    <strong>{{ "%.2f"|format(transaction.amount|abs) }}</strong>
+    on {{ transaction.date }} ({{ transaction.description or "no description" }})
+    into a transfer.
+  </p>
+  {% if accounts %}
+    <label>{{ "Transferred to" if transaction.amount < 0 else "Transferred from" }}
+      <select name="counterpart_account_id" required>
+        {% for account in accounts %}
+          <option value="{{ account.id }}">{{ account.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <footer class="dialog-footer">
+      <button type="button" class="btn-outline"
+              onclick="document.getElementById('convert-dialog').close()">Cancel</button>
+      <button type="submit">Convert to transfer</button>
+    </footer>
+  {% else %}
+    <p class="muted">No other accounts registered — add one first.</p>
+    <footer class="dialog-footer">
+      <button type="button" class="btn-outline"
+              onclick="document.getElementById('convert-dialog').close()">Close</button>
+    </footer>
+  {% endif %}
+</form>
