@@ -4,9 +4,11 @@ This elaborates `finance-app-prd.md` into concrete technical decisions and a pha
 Phases are implemented one at a time, each its own reviewable unit of work with its own commit(s).
 `CLAUDE.md` is updated after each phase lands to reflect what became concrete during that phase.
 
-**Status**: Phases 0–5 complete, plus three out-of-sequence addenda inserted after 2.7 (transfer
+**Status**: Phases 0–6 complete, plus three out-of-sequence addenda inserted after 2.7 (transfer
 editing/dialog redesign, icon-set polish, and per-category/subcategory monthly budgets — see
-their entries below). Only Phase 6 (launcher & polish) remains.
+their entries below). All phases in this plan are now done; see `CLAUDE.md` for the substantial
+further work that has continued past Phase 6 as informal, undated addenda (dashboard, bulk
+transfer detection, reports drill-downs, toolbar redesigns, etc.).
 
 **Environment note**: `uv` is installed under pyenv's Python 3.13.7, not globally on PATH — the
 `uv` shim only resolves once a directory is pinned to that pyenv version. This repo has a
@@ -891,10 +893,34 @@ unit-testable without touching disk. `routers/` stays thin — HTTP/HTMX glue on
   count 2, split 1+1 across two subcategories) and that a long category name renders without
   wrapping inside `.table-scroll`.
 
-- [ ] **Phase 6 — Launcher & polish**: `scripts/launch.py` (starts uvicorn bound to
-  `127.0.0.1`, waits for readiness, opens browser via `webbrowser`), error-handling pass across
-  invalid-regex/malformed-CSV/lock-conflict paths. *Verify*: launcher script runs end-to-end with
-  no manual server start.
+- [x] **Phase 6 — Launcher & polish**: `scripts/launch.py` starts `uvicorn` as a subprocess bound
+  to `app.config.SERVER_HOST`/`SERVER_PORT` (loopback-only), polls `/health` until it responds (or
+  bails out early via `process.poll()` if uvicorn exits first — e.g. the port's already taken —
+  rather than waiting out the full readiness timeout on a server that already crashed), opens the
+  default browser via `webbrowser.open`, then blocks on `process.wait()`. `SIGINT`/`SIGTERM` (and a
+  `finally` block covering any other exit) terminate the subprocess, with a `kill()` fallback if it
+  doesn't exit within 5s — there's never an orphaned uvicorn left running in the background.
+  Invalid-regex (`services.categorizer.compile_pattern`, Phase 4) and malformed-CSV
+  (`app.routers.import_`'s `UnicodeDecodeError`/`LookupError`/`ValueError` handling, Phase 3 +
+  its addendum) error paths were already covered by the time this phase started — auditing them
+  was this phase's "error-handling pass" work for those two. **Lock-conflict was the one real gap
+  found**: `app.storage.lock.LockError` (raised when a write can't acquire its file lock within the
+  timeout) was never caught anywhere, so a rare two-tabs-writing-at-once collision would have
+  surfaced as a raw 500. Fixed with a single app-wide `@app.exception_handler(LockError)` in
+  `app/main.py` — one handler covers every write call site rather than threading a
+  `try/except LockError` through each router individually. Since the failing request's original
+  `hx-target` could be a dialog, a table fragment, or a single row, the handler doesn't attempt to
+  render an error into whatever that target was (risking replacing real content with an error
+  message); instead it reuses the existing `htmx_events.toast` helper to fire a "try again" toast
+  and sets `HX-Reswap: none` so the DOM is otherwise left untouched. *Verified*: an integration test
+  monkeypatches a router's `write_accounts` to raise `LockError` and confirms the response is a
+  toast (not a 500) with `HX-Reswap: none`
+  (`tests/integration/test_lock_error_handling.py`); full suite 508 passing; the launcher was run
+  live end-to-end — readiness-polling logic verified in isolation against both a delayed-200 dummy
+  server (correctly detects readiness) and a subprocess that exits immediately (correctly bails out
+  fast rather than waiting the full timeout), and the real fast-fail path was exercised against the
+  actual app with its normal port already occupied by another running instance, correctly printing
+  the "uvicorn exited before the server became ready" message rather than hanging.
 
 ## Code style
 

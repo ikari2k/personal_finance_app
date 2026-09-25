@@ -1223,6 +1223,17 @@ fieldset legend {
   margin-left: 0.75rem;
 }
 
+/* A dashed-line legend swatch, for a reference line rather than a fill
+   (the category chart's budget line) — same left-margin rhythm as
+   .chart-legend-swatch so it sits in the same legend row. */
+.chart-legend-line {
+  display: inline-block;
+  width: 0.9rem;
+  height: 0;
+  border-top: 2px dashed #b45309;
+  margin-left: 0.75rem;
+}
+
 .chart-legend-swatch:first-child {
   margin-left: 0;
 }
@@ -1451,6 +1462,59 @@ fieldset legend {
   gap: 0.4rem;
   flex: 1 1 260px;
   min-width: 0;
+}
+
+/* A horizontal, wrapped variant for a legend sitting above a wide chart
+   (the category-detail stacked-by-subcategory trend) rather than beside
+   a compact pie — same swatch/label/value classes, just laid out as a
+   wrapped row instead of a sidebar column. */
+.pie-legend-inline {
+  flex-direction: row;
+  flex-wrap: wrap;
+  column-gap: 1.25rem;
+  margin-bottom: 0.5rem;
+}
+.pie-legend-inline .pie-legend-item { flex: 0 0 auto; }
+
+/* The category-detail stacked chart's legend doubles as its subcategory
+   filter (app.routers.reports._svg_subcategory_stack_chart's `visible`)
+   — each item becomes a checkbox instead of a plain swatch+label, and
+   the whole legend is itself the <form> that resubmits the page on
+   change (same "plain GET form, not htmx" convention as
+   reports/_account_filter.html on this same page). */
+.pie-legend-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+}
+.pie-legend-checkbox input[type="checkbox"] { margin: 0; }
+
+/* A per-item shortcut that isolates just this one subcategory (checks
+   it, unchecks every sibling) instead of unchecking every other box by
+   hand. Always visible, not hover-revealed like this app's row-action
+   icons elsewhere (CLAUDE.md) — a chart-filter control on an already
+   two-line legend read as genuinely hard to find hidden behind hover,
+   per live feedback, unlike a rarely-used per-row edit/delete glyph. */
+.pie-legend-only {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--pico-muted-color);
+  padding: 0.05rem 0.4rem;
+  border: var(--pico-border-width) solid var(--pico-muted-border-color);
+  border-radius: 999px;
+  text-decoration: none;
+}
+.pie-legend-only:hover,
+.pie-legend-only:focus {
+  color: var(--pico-color);
+  border-color: var(--pico-color);
+}
+
+.pie-legend-reset {
+  align-self: center;
+  font-size: 0.85rem;
+  color: var(--pico-muted-color);
 }
 
 .pie-legend-item {
@@ -1823,3 +1887,162 @@ fieldset legend {
 @media (max-width: 520px) {
   .dash-hero { flex-direction: column; align-items: flex-start; }
 }
+
+/* ==========================================================================
+   Category detail (app/templates/reports/category.html, "how did this
+   category look over time") — reuses the dashboard's own .dash-widget/
+   .dash-grid stat-tile system, the reports pages' .chart-legend/
+   .breakdown-table/.table-link conventions, and .cat-cell-icon's income/
+   expense tint, rather than a third visual language for one more report
+   page.
+   ========================================================================== */
+
+.cat-detail-hero {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.cat-icon-tile-lg { width: 3rem; height: 3rem; }
+.cat-icon-tile-lg svg { width: 1.5rem; height: 1.5rem; }
+
+.cat-detail-titles { display: flex; flex-direction: column; gap: 0.3rem; }
+.cat-detail-titles h1 { margin: 0; font-size: 1.55rem; }
+.cat-detail-badges { display: flex; align-items: center; gap: 0.5rem; }
+
+.type-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.16rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+.type-pill-expense { background: rgba(185, 28, 28, 0.12); color: #b91c1c; }
+.type-pill-income { background: rgba(21, 128, 61, 0.12); color: #15803d; }
+
+.cat-detail-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.cat-detail-actions form.view-options { background: none; padding: 0; margin: 0; }
+
+.cat-cta-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.45rem 0.9rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  border-radius: var(--pico-border-radius);
+  border: var(--pico-border-width) solid var(--pico-muted-border-color);
+  color: var(--pico-color);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.cat-cta-link:hover,
+.cat-cta-link:focus { border-color: var(--pico-color); }
+
+/* A 3rd span size on the dashboard's own 12-col grid, for this page's
+   4-tile stat row (the dashboard itself only ever needs 4/6/12). */
+.dash-span-3 { grid-column: span 3; }
+@media (max-width: 900px) { .dash-span-3 { grid-column: span 6; } }
+@media (max-width: 560px) { .dash-span-3 { grid-column: span 12; } }
+
+.cat-stat-number {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+}
+.cat-stat-sub { margin-top: 0.3rem; font-size: 0.76rem; color: var(--pico-muted-color); }
+.cat-stat-delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-top: 0.35rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.cat-stat-delta.up { color: var(--pico-ins-color); }
+.cat-stat-delta.down { color: var(--pico-del-color); }
+.cat-stat-delta .muted { color: var(--pico-muted-color); font-weight: 500; }
+
+.cat-month-row { display: flex; align-items: center; gap: 0.7rem; }
+.cat-month-figures { font-size: 0.76rem; color: var(--pico-muted-color); margin-top: 0.15rem; }
+.cat-month-pct { font-size: 0.95rem; font-weight: 700; display: block; margin-top: 0.15rem; }
+
+/* Trend chart: same scrolling/pinned-axis mechanic as .net-worth-chart-*
+   (app/routers/reports.py's _svg_category_chart mirrors
+   _svg_net_worth_chart), a single bar series instead of a line+bars
+   pair. A bar segment past its month's budget line renders in the
+   *-over variant of the same hue at lower opacity, not a different
+   color — "over budget" is an emphasis on the overflow amount, not a
+   second series. */
+.cat-chart-scroll { overflow-x: auto; padding-bottom: 0.35rem; }
+.cat-chart-svg { display: block; }
+.cat-chart-fill .cat-chart-svg { width: 100%; height: auto; }
+
+.cat-bar-expense { fill: var(--pico-del-color); }
+.cat-bar-expense-over { fill: var(--pico-del-color); opacity: 0.55; }
+.cat-bar-income { fill: var(--pico-ins-color); }
+.cat-bar-income-over { fill: var(--pico-ins-color); opacity: 0.55; }
+
+.cat-budget-line { stroke: #b45309; stroke-width: 1.5; stroke-dasharray: 5 4; }
+.cat-budget-label { fill: #b45309; font-size: 12px; font-weight: 600; }
+
+.cat-scope-toggle {
+  display: inline-flex;
+  border: var(--pico-border-width) solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+  overflow: hidden;
+  margin-bottom: 0.75rem;
+}
+.cat-scope-toggle button {
+  all: unset;
+  cursor: pointer;
+  padding: 0.32rem 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--pico-muted-color);
+}
+.cat-scope-toggle button[aria-pressed="true"].cat-scope-toggle-expense {
+  background: var(--pico-del-color);
+  color: #fff;
+}
+.cat-scope-toggle button[aria-pressed="true"].cat-scope-toggle-income {
+  background: var(--pico-ins-color);
+  color: #fff;
+}
+
+.cat-subrow-fill-expense { background: var(--pico-del-color); }
+.cat-subrow-fill-income { background: var(--pico-ins-color); }
+
+.cat-detail-footer {
+  display: flex;
+  justify-content: center;
+  padding: 1.5rem 0 2.5rem;
+}
+
+/* The breakdown table's per-category link into /reports/category (see
+   _category_breakdown.html) — a small, muted-until-hover icon rather
+   than a second full-weight text link sitting right next to the
+   category name's own .table-link, so the row doesn't read as two
+   competing links. */
+.cat-trend-link {
+  display: inline-flex;
+  vertical-align: middle;
+  margin-left: 0.35rem;
+  color: var(--pico-muted-color);
+}
+.cat-trend-link svg { width: 0.9rem; height: 0.9rem; }
+.cat-trend-link:hover,
+.cat-trend-link:focus { color: var(--pico-color); }

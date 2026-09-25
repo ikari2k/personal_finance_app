@@ -1,0 +1,62 @@
+{#
+  One category's monthly trend, backing reports/category.html. Same
+  scrolling/pinned-axis mechanic as reports/_net_worth_chart.html (see
+  that partial's own comment) but a single bar series — expects `chart`
+  (from app.routers.reports._svg_category_chart) and `txn_type` in scope.
+#}
+{% if chart.has_data %}
+  <div class="cat-chart-scroll{{ '' if chart.needs_scroll else ' cat-chart-fill' }}"
+       id="cat-chart-scroll"
+       {% if chart.needs_scroll %}style="max-width: {{ chart.visible_width }}px;"{% endif %}>
+    <svg viewBox="0 0 {{ chart.width }} {{ chart.height }}"
+         {% if chart.needs_scroll %}width="{{ chart.width }}" height="{{ chart.height }}"{% endif %}
+         class="cat-chart-svg" role="img" aria-label="{{ category }} monthly {{ txn_type.value }} over time">
+      {% for tick in chart.y_ticks %}
+        <line x1="{{ chart.plot_left }}" y1="{{ tick.y }}" x2="{{ chart.plot_right }}" y2="{{ tick.y }}"
+              class="chart-gridline"/>
+      {% endfor %}
+      {% if chart.budget_y is not none %}
+        <line x1="{{ chart.plot_left }}" y1="{{ chart.budget_y }}" x2="{{ chart.plot_right }}" y2="{{ chart.budget_y }}"
+              class="cat-budget-line"/>
+        <text x="{{ chart.plot_right - 4 }}" y="{{ chart.budget_y - 6 }}" class="cat-budget-label"
+              text-anchor="end">{{ chart.budget_label }}</text>
+      {% endif %}
+      {% for bar in chart.bars %}
+        {% for segment in bar.segments %}
+          <rect x="{{ bar.x }}" y="{{ segment.y }}" width="{{ bar.bar_width }}" height="{{ segment.height }}"
+                class="cat-bar-{{ txn_type.value }}{{ '-over' if segment.over else '' }}">
+            <title>{{ bar.label }}: {{ bar.total_label }} ({{ bar.count }} txn{{ "s" if bar.count != 1 else "" }})</title>
+          </rect>
+        {% endfor %}
+      {% endfor %}
+      {% for xl in chart.x_labels %}
+        <text x="{{ xl.x }}" y="{{ chart.height - 26 }}" class="chart-x-label"
+              text-anchor="middle">{{ xl.month }}</text>
+        {% if xl.year %}
+          <text x="{{ xl.x }}" y="{{ chart.height - 9 }}" class="chart-x-label-year"
+                text-anchor="middle">{{ xl.year }}</text>
+        {% endif %}
+      {% endfor %}
+      <g id="cat-yaxis-pin">
+        <rect class="chart-axis-bg" x="0" y="0" width="{{ chart.plot_left }}" height="{{ chart.height }}"/>
+        {% for tick in chart.y_ticks %}
+          <text x="{{ chart.plot_left - 8 }}" y="{{ tick.y }}" class="chart-axis-label"
+                text-anchor="end" dominant-baseline="middle">{{ tick.label }}</text>
+        {% endfor %}
+      </g>
+    </svg>
+  </div>
+  <script>
+    (function () {
+      var wrap = document.getElementById("cat-chart-scroll");
+      var pin = document.getElementById("cat-yaxis-pin");
+      if (!wrap || !pin) return;
+      function sync() { pin.setAttribute("transform", "translate(" + wrap.scrollLeft + ",0)"); }
+      wrap.addEventListener("scroll", sync);
+      wrap.scrollLeft = wrap.scrollWidth;
+      sync();
+    })();
+  </script>
+{% else %}
+  <p>No transactions yet.</p>
+{% endif %}

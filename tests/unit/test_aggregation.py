@@ -9,7 +9,11 @@ from app.models.account import Account
 from app.models.transaction import Transaction, TransactionType
 from app.services.aggregation import (
     category_breakdown,
+    category_monthly_series,
     category_monthly_totals,
+    category_subcategory_monthly_series,
+    category_subcategory_shares,
+    category_yearly_series,
     group_by_month_and_type,
     grouped_transaction_view,
     merge_months,
@@ -863,3 +867,391 @@ def test_top_uncategorized_descriptions_respects_limit():
     ]
 
     assert len(top_uncategorized_descriptions(txns, limit=5)) == 5
+
+
+def test_category_monthly_series_raises_for_transfer_type():
+    with pytest.raises(ValueError):
+        category_monthly_series([], "Groceries", TransactionType.TRANSFER)
+
+
+def test_category_monthly_series_empty_for_no_transactions():
+    assert category_monthly_series([], "Groceries", TransactionType.EXPENSE) == []
+
+
+def test_category_monthly_series_zero_fills_gap_months():
+    txns = [
+        _txn(
+            id="t1", date=date(2026, 1, 5), category="Groceries", amount=Decimal("-50")
+        ),
+        # Some unrelated ledger activity keeps March in the whole-ledger range
+        # even though Groceries itself has no February activity.
+        _txn(
+            id="t2",
+            date=date(2026, 3, 10),
+            category="Other",
+            amount=Decimal("-5"),
+        ),
+        _txn(
+            id="t3", date=date(2026, 3, 15), category="Groceries", amount=Decimal("-30")
+        ),
+    ]
+
+    points = category_monthly_series(
+        txns, "Groceries", TransactionType.EXPENSE, today=date(2026, 3, 20)
+    )
+
+    assert [p.key for p in points] == ["2026-01", "2026-02", "2026-03"]
+    assert [p.total for p in points] == [Decimal("50"), Decimal("0"), Decimal("30")]
+    assert [p.count for p in points] == [1, 0, 1]
+
+
+def test_category_monthly_series_extends_through_today():
+    txns = [
+        _txn(
+            id="t1", date=date(2026, 1, 5), category="Groceries", amount=Decimal("-50")
+        ),
+    ]
+
+    points = category_monthly_series(
+        txns, "Groceries", TransactionType.EXPENSE, today=date(2026, 3, 1)
+    )
+
+    assert [p.key for p in points] == ["2026-01", "2026-02", "2026-03"]
+    assert points[-1].total == Decimal("0")
+
+
+def test_category_monthly_series_ignores_other_categories_and_types():
+    txns = [
+        _txn(
+            id="t1", date=date(2026, 1, 5), category="Groceries", amount=Decimal("-50")
+        ),
+        _txn(
+            id="t2", date=date(2026, 1, 6), category="Shopping", amount=Decimal("-20")
+        ),
+        _txn(
+            id="t3",
+            date=date(2026, 1, 7),
+            category="Groceries",
+            type=TransactionType.INCOME,
+            amount=Decimal("20"),
+        ),
+    ]
+
+    points = category_monthly_series(
+        txns, "Groceries", TransactionType.EXPENSE, today=date(2026, 1, 10)
+    )
+
+    assert [p.total for p in points] == [Decimal("50")]
+
+
+def test_category_yearly_series_raises_for_transfer_type():
+    with pytest.raises(ValueError):
+        category_yearly_series([], "Groceries", TransactionType.TRANSFER)
+
+
+def test_category_yearly_series_groups_by_year_newest_first():
+    txns = [
+        _txn(
+            id="t1", date=date(2024, 6, 1), category="Groceries", amount=Decimal("-100")
+        ),
+        _txn(
+            id="t2", date=date(2025, 6, 1), category="Groceries", amount=Decimal("-40")
+        ),
+        _txn(
+            id="t3", date=date(2025, 7, 1), category="Groceries", amount=Decimal("-60")
+        ),
+    ]
+
+    years = category_yearly_series(txns, "Groceries", TransactionType.EXPENSE)
+
+    assert [y.year for y in years] == [2025, 2024]
+    assert years[0].total == Decimal("100")
+    assert years[0].count == 2
+    assert years[1].total == Decimal("100")
+    assert years[1].count == 1
+
+
+def test_category_yearly_series_yoy_delta_against_prior_year():
+    txns = [
+        _txn(
+            id="t1", date=date(2024, 1, 1), category="Groceries", amount=Decimal("-100")
+        ),
+        _txn(
+            id="t2", date=date(2025, 1, 1), category="Groceries", amount=Decimal("-150")
+        ),
+    ]
+
+    years = category_yearly_series(txns, "Groceries", TransactionType.EXPENSE)
+
+    [year_2025, year_2024] = years
+    assert year_2024.yoy_delta is None
+    assert year_2025.yoy_delta == Decimal("50")
+
+
+def test_category_yearly_series_ignores_other_categories():
+    txns = [_txn(date=date(2026, 1, 1), category="Shopping", amount=Decimal("-100"))]
+
+    assert category_yearly_series(txns, "Groceries", TransactionType.EXPENSE) == []
+
+
+def test_category_subcategory_shares_raises_for_transfer_type():
+    with pytest.raises(ValueError):
+        category_subcategory_shares([], "Groceries", TransactionType.TRANSFER)
+
+
+def test_category_subcategory_shares_computes_pct_of_category_total():
+    txns = [
+        _txn(
+            id="t1",
+            category="Groceries",
+            subcategory="Supermarket",
+            amount=Decimal("-80"),
+        ),
+        _txn(
+            id="t2",
+            category="Groceries",
+            subcategory="Farmers Market",
+            amount=Decimal("-20"),
+        ),
+    ]
+
+    shares = category_subcategory_shares(txns, "Groceries", TransactionType.EXPENSE)
+
+    assert [s.name for s in shares] == ["Supermarket", "Farmers Market"]
+    assert shares[0].total == Decimal("80")
+    assert shares[0].count == 1
+    assert shares[0].pct == pytest.approx(80.0)
+    assert shares[1].pct == pytest.approx(20.0)
+
+
+def test_category_subcategory_shares_blank_subcategory_counts_toward_total_only():
+    txns = [
+        _txn(category="Groceries", subcategory="Supermarket", amount=Decimal("-50")),
+        _txn(category="Groceries", subcategory="", amount=Decimal("-50")),
+    ]
+
+    shares = category_subcategory_shares(txns, "Groceries", TransactionType.EXPENSE)
+
+    assert [s.name for s in shares] == ["Supermarket"]
+    # Supermarket is only half of the category's real total, since the
+    # blank-subcategory row still counts toward the denominator.
+    assert shares[0].pct == pytest.approx(50.0)
+
+
+def test_category_subcategory_shares_empty_for_no_activity():
+    assert category_subcategory_shares([], "Groceries", TransactionType.EXPENSE) == []
+
+
+def test_category_subcategory_shares_scoped_to_one_year():
+    txns = [
+        _txn(
+            id="t1",
+            date=date(2025, 1, 1),
+            category="Groceries",
+            subcategory="Supermarket",
+            amount=Decimal("-100"),
+        ),
+        _txn(
+            id="t2",
+            date=date(2026, 1, 1),
+            category="Groceries",
+            subcategory="Farmers Market",
+            amount=Decimal("-40"),
+        ),
+    ]
+
+    shares = category_subcategory_shares(
+        txns, "Groceries", TransactionType.EXPENSE, year=2026
+    )
+
+    assert [s.name for s in shares] == ["Farmers Market"]
+    assert shares[0].total == Decimal("40")
+
+
+def test_category_subcategory_monthly_series_raises_for_transfer_type():
+    with pytest.raises(ValueError):
+        category_subcategory_monthly_series([], "Groceries", TransactionType.TRANSFER)
+
+
+def test_category_subcategory_monthly_series_empty_for_no_transactions():
+    months, series = category_subcategory_monthly_series(
+        [], "Groceries", TransactionType.EXPENSE
+    )
+    assert months == []
+    assert series == []
+
+
+def test_category_subcategory_monthly_series_no_series_when_never_subcategorized():
+    txns = [
+        _txn(
+            date=date(2026, 1, 5),
+            category="Groceries",
+            subcategory="",
+            amount=Decimal("-50"),
+        ),
+    ]
+
+    months, series = category_subcategory_monthly_series(
+        txns, "Groceries", TransactionType.EXPENSE, today=date(2026, 1, 10)
+    )
+
+    assert len(months) == 1
+    assert months[0].total == Decimal("50")
+    assert series == []
+
+
+def test_category_subcategory_monthly_series_one_row_per_subcategory():
+    txns = [
+        _txn(
+            id="t1",
+            date=date(2026, 1, 5),
+            category="Groceries",
+            subcategory="Supermarket",
+            amount=Decimal("-50"),
+        ),
+        _txn(
+            id="t2",
+            date=date(2026, 1, 6),
+            category="Groceries",
+            subcategory="Farmers Market",
+            amount=Decimal("-10"),
+        ),
+        _txn(
+            id="t3",
+            date=date(2026, 2, 5),
+            category="Groceries",
+            subcategory="Supermarket",
+            amount=Decimal("-30"),
+        ),
+    ]
+
+    months, series = category_subcategory_monthly_series(
+        txns, "Groceries", TransactionType.EXPENSE, today=date(2026, 2, 10)
+    )
+
+    assert [m.key for m in months] == ["2026-01", "2026-02"]
+    by_name = {s.name: s.totals for s in series}
+    assert by_name["Supermarket"] == [Decimal("50"), Decimal("30")]
+    assert by_name["Farmers Market"] == [Decimal("10"), Decimal("0")]
+
+
+def test_category_subcategory_monthly_series_sorted_by_all_time_total_descending():
+    txns = [
+        _txn(category="Groceries", subcategory="Small", amount=Decimal("-5")),
+        _txn(category="Groceries", subcategory="Big", amount=Decimal("-500")),
+    ]
+
+    _, series = category_subcategory_monthly_series(
+        txns, "Groceries", TransactionType.EXPENSE, today=date(2026, 8, 1)
+    )
+
+    assert [s.name for s in series] == ["Big", "Small"]
+
+
+def test_category_subcategory_monthly_series_collapses_overflow_into_other():
+    txns = [
+        _txn(
+            id=f"t{i}",
+            category="Groceries",
+            subcategory=f"Sub{i}",
+            amount=Decimal(f"-{100 - i}"),
+        )
+        for i in range(12)
+    ]
+
+    _, series = category_subcategory_monthly_series(
+        txns, "Groceries", TransactionType.EXPENSE, today=date(2026, 8, 1), limit=9
+    )
+
+    assert len(series) == 10  # 9 named + one "Other"
+    assert series[-1].name == "Other"
+    # The 3 smallest (Sub9, Sub10, Sub11 -> amounts 91, 90, 89) collapse in.
+    assert series[-1].totals == [Decimal("91") + Decimal("90") + Decimal("89")]
+
+
+def test_category_subcategory_monthly_series_blank_subcategory_folds_into_other():
+    txns = [
+        _txn(
+            id="t1",
+            date=date(2026, 1, 5),
+            category="Groceries",
+            subcategory="Supermarket",
+            amount=Decimal("-50"),
+        ),
+        _txn(
+            id="t2",
+            date=date(2026, 1, 6),
+            category="Groceries",
+            subcategory="",
+            amount=Decimal("-20"),
+        ),
+    ]
+
+    months, series = category_subcategory_monthly_series(
+        txns, "Groceries", TransactionType.EXPENSE, today=date(2026, 1, 10)
+    )
+
+    by_name = {s.name: s.totals for s in series}
+    assert by_name["Supermarket"] == [Decimal("50")]
+    assert by_name["Other"] == [Decimal("20")]
+    # Every dollar in months[].total is still accounted for across series.
+    assert sum((t[0] for t in by_name.values()), Decimal("0")) == months[0].total
+
+
+def test_category_subcategory_monthly_series_stack_sums_to_category_total():
+    txns = [
+        _txn(
+            id="t1",
+            date=date(2026, 3, 1),
+            category="Groceries",
+            subcategory="Supermarket",
+            amount=Decimal("-40"),
+        ),
+        _txn(
+            id="t2",
+            date=date(2026, 3, 2),
+            category="Groceries",
+            subcategory="Farmers Market",
+            amount=Decimal("-15"),
+        ),
+        _txn(
+            id="t3",
+            date=date(2026, 4, 1),
+            category="Groceries",
+            subcategory="Supermarket",
+            amount=Decimal("-60"),
+        ),
+    ]
+
+    months, series = category_subcategory_monthly_series(
+        txns, "Groceries", TransactionType.EXPENSE, today=date(2026, 4, 10)
+    )
+
+    for i, month in enumerate(months):
+        stacked = sum((s.totals[i] for s in series), Decimal("0"))
+        assert stacked == month.total
+
+
+def test_category_subcategory_monthly_series_ignores_other_categories_and_types():
+    txns = [
+        _txn(
+            date=date(2026, 1, 5),
+            category="Shopping",
+            subcategory="Clothing",
+            amount=Decimal("-50"),
+        ),
+        _txn(
+            date=date(2026, 1, 6),
+            category="Groceries",
+            subcategory="Supermarket",
+            type=TransactionType.INCOME,
+            amount=Decimal("50"),
+        ),
+    ]
+
+    months, series = category_subcategory_monthly_series(
+        txns, "Groceries", TransactionType.EXPENSE, today=date(2026, 1, 10)
+    )
+
+    assert months[0].total == Decimal("0")
+    assert series == []

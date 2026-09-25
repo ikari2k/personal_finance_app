@@ -149,6 +149,8 @@ VALID_ICONS: frozenset[str] = frozenset(
         "luggage",
         "spade",
         "truck",
+        "smartphone",
+        "landmark",
     }
 )
 
@@ -238,4 +240,6 @@ ICON_HINTS: dict[str, str] = {
     "luggage": "Travel, luggage",
     "spade": "Card games, tabletop games",
     "truck": "Delivery, shipping",
+    "smartphone": "Apps, in-app purchases, mobile",
+    "landmark": "Museum, government building, civic",
 }

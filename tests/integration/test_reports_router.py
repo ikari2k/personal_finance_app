@@ -1,5 +1,7 @@
 """Integration tests for the reports router."""
 
+from datetime import date
+
 
 def _create_account(client, account_id="chk", starting_balance="1000.00"):
     client.post(
@@ -541,3 +543,397 @@ def test_month_detail_rejects_invalid_month(client):
     response = client.get("/reports/2026/13")
 
     assert response.status_code == 404
+
+
+def test_category_detail_rejects_transfer_type(client):
+    response = client.get(
+        "/reports/category", params={"txn_type": "transfer", "category": "Transfer"}
+    )
+
+    assert response.status_code == 404
+
+
+def test_category_detail_shows_no_data_message_for_unused_category(client):
+    client.post("/categories/expense", data={"name": "Groceries", "budget": ""})
+
+    response = client.get(
+        "/reports/category", params={"txn_type": "expense", "category": "Groceries"}
+    )
+
+    assert response.status_code == 200
+    assert "No transactions in this category yet" in response.text
+
+
+def test_category_detail_shows_total_and_trend_chart(client):
+    _create_account(client)
+    _create_transaction(
+        client, date="2026-01-10", type="expense", category="Groceries", amount="50"
+    )
+    _create_transaction(
+        client, date="2026-02-10", type="expense", category="Groceries", amount="30"
+    )
+
+    response = client.get(
+        "/reports/category", params={"txn_type": "expense", "category": "Groceries"}
+    )
+
+    assert response.status_code == 200
+    assert "Groceries" in response.text
+    assert "80.00" in response.text  # all-time total
+    assert "cat-chart-svg" in response.text
+    assert "Jan 2026" in response.text
+
+
+def test_category_detail_shows_budget_ring_for_current_month(client):
+    client.post("/categories/expense", data={"name": "Groceries", "budget": "100.00"})
+    _create_account(client)
+    today = date.today().isoformat()
+    _create_transaction(
+        client, date=today, type="expense", category="Groceries", amount="50"
+    )
+
+    response = client.get(
+        "/reports/category", params={"txn_type": "expense", "category": "Groceries"}
+    )
+
+    assert response.status_code == 200
+    assert "utilization-under" in response.text
+    assert "50% of budget" in response.text
+
+
+def test_category_detail_omits_ring_when_no_budget_set(client):
+    _create_account(client)
+    today = date.today().isoformat()
+    _create_transaction(
+        client, date=today, type="expense", category="Groceries", amount="50"
+    )
+
+    response = client.get(
+        "/reports/category", params={"txn_type": "expense", "category": "Groceries"}
+    )
+
+    assert response.status_code == 200
+    assert "No budget set for this category" in response.text
+
+
+def test_category_detail_shows_subcategory_breakdown(client):
+    _create_account(client)
+    today = date.today().isoformat()
+    _create_transaction(
+        client,
+        date=today,
+        type="expense",
+        category="Groceries",
+        subcategory="Supermarket",
+        amount="80",
+    )
+    _create_transaction(
+        client,
+        date=today,
+        type="expense",
+        category="Groceries",
+        subcategory="Farmers Market",
+        amount="20",
+    )
+
+    response = client.get(
+        "/reports/category", params={"txn_type": "expense", "category": "Groceries"}
+    )
+
+    assert response.status_code == 200
+    assert "Supermarket" in response.text
+    assert "Farmers Market" in response.text
+    assert "80.0%" in response.text
+    assert "20.0%" in response.text
+
+
+def test_category_detail_by_year_table_marks_current_year_in_progress(client):
+    _create_account(client)
+    _create_transaction(
+        client,
+        date=date(date.today().year, 1, 15).isoformat(),
+        type="expense",
+        category="Groceries",
+        amount="50",
+    )
+
+    response = client.get(
+        "/reports/category", params={"txn_type": "expense", "category": "Groceries"}
+    )
+
+    assert response.status_code == 200
+    assert "(in progress)" in response.text
+
+
+def test_category_detail_account_filter_round_trips(client):
+    _create_account(client, "chk")
+    _create_account(client, "sav")
+    _create_transaction(
+        client,
+        account_id="chk",
+        date="2026-01-10",
+        type="expense",
+        category="Groceries",
+        amount="50",
+    )
+    _create_transaction(
+        client,
+        account_id="sav",
+        date="2026-01-10",
+        type="expense",
+        category="Groceries",
+        amount="999",
+    )
+
+    response = client.get(
+        "/reports/category",
+        params={"txn_type": "expense", "category": "Groceries", "account_id": "chk"},
+    )
+
+    assert response.status_code == 200
+    assert "50.00" in response.text
+    assert "999.00" not in response.text
+    assert "account_id=chk" in response.text
+
+
+def test_year_detail_breakdown_table_links_to_category_detail(client):
+    client.post("/categories/expense", data={"name": "Groceries", "budget": ""})
+    _create_account(client)
+    _create_transaction(
+        client, date="2026-01-10", type="expense", category="Groceries", amount="50"
+    )
+
+    response = client.get("/reports/2026")
+
+    assert response.status_code == 200
+    assert "cat-trend-link" in response.text
+    assert "/reports/category?txn_type=expense&category=Groceries" in response.text
+
+
+def test_category_detail_shows_subcategory_stack_chart_when_any_exist(client):
+    _create_account(client)
+    _create_transaction(
+        client,
+        date="2026-01-10",
+        type="expense",
+        category="Groceries",
+        subcategory="Supermarket",
+        amount="50",
+    )
+
+    response = client.get(
+        "/reports/category", params={"txn_type": "expense", "category": "Groceries"}
+    )
+
+    assert response.status_code == 200
+    assert "by subcategory</h2>" in response.text
+    assert "cat-subcat-chart-scroll" in response.text
+    assert "pie-slice-0" in response.text
+    assert "Supermarket" in response.text.split("by subcategory</h2>")[1][:500]
+
+
+def test_category_detail_omits_subcategory_stack_chart_when_none_exist(client):
+    _create_account(client)
+    _create_transaction(
+        client, date="2026-01-10", type="expense", category="Groceries", amount="50"
+    )
+
+    response = client.get(
+        "/reports/category", params={"txn_type": "expense", "category": "Groceries"}
+    )
+
+    assert response.status_code == 200
+    assert "by subcategory</h2>" not in response.text
+    assert "cat-subcat-chart-scroll" not in response.text
+
+
+def test_category_detail_subcategory_stack_chart_collapses_overflow_into_other(client):
+    _create_account(client)
+    for i in range(11):
+        _create_transaction(
+            client,
+            date="2026-01-10",
+            type="expense",
+            category="Groceries",
+            subcategory=f"Sub{i}",
+            amount=str(100 - i),
+        )
+
+    response = client.get(
+        "/reports/category", params={"txn_type": "expense", "category": "Groceries"}
+    )
+
+    assert response.status_code == 200
+    legend = response.text.split("by subcategory</h2>")[1].split("</ul>")[0]
+    assert legend.count("pie-legend-item") == 10  # 9 named + "Other"
+    assert "pie-slice-other" in legend
+
+
+def test_category_detail_subcategory_filter_defaults_to_all_checked(client):
+    _create_account(client)
+    _create_transaction(
+        client,
+        date="2026-01-10",
+        type="expense",
+        category="Groceries",
+        subcategory="Supermarket",
+        amount="50",
+    )
+    _create_transaction(
+        client,
+        date="2026-01-11",
+        type="expense",
+        category="Groceries",
+        subcategory="Farmers Market",
+        amount="10",
+    )
+
+    response = client.get(
+        "/reports/category", params={"txn_type": "expense", "category": "Groceries"}
+    )
+
+    assert response.status_code == 200
+    legend = response.text.split("pie-legend-filter")[1].split("</form>")[0]
+    # "checked onchange" (the boolean attribute immediately followed by
+    # the checkbox's own onchange handler) is specific to a checked box —
+    # a bare "checked" substring also appears inside the "only" link's
+    # own onclick JS (`c.checked = ...`), which isn't what this asserts.
+    assert legend.count("checked onchange") == 2
+    assert "Show all" not in response.text
+
+
+def test_category_detail_subcategory_filter_narrows_the_chart(client):
+    _create_account(client)
+    _create_transaction(
+        client,
+        date="2026-01-10",
+        type="expense",
+        category="Groceries",
+        subcategory="Supermarket",
+        amount="50",
+    )
+    _create_transaction(
+        client,
+        date="2026-01-11",
+        type="expense",
+        category="Groceries",
+        subcategory="Farmers Market",
+        amount="10",
+    )
+
+    response = client.get(
+        "/reports/category",
+        params={
+            "txn_type": "expense",
+            "category": "Groceries",
+            "subcategories": "Farmers Market",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "Show all" in response.text
+    chart_svg = response.text.split("cat-subcat-chart-scroll")[1].split("</svg>")[0]
+    assert "Supermarket" not in chart_svg
+    assert "Farmers Market" in chart_svg
+    # Farmers Market is the smaller (2nd-ranked) subcategory, so its color
+    # class must stay pie-slice-1 even filtered down to just itself —
+    # never recolored to pie-slice-0 just because it's now the only one.
+    assert "pie-slice-1" in chart_svg
+    assert "pie-slice-0" not in chart_svg
+
+
+def test_category_detail_subcategory_filter_ignores_unknown_names(client):
+    _create_account(client)
+    _create_transaction(
+        client,
+        date="2026-01-10",
+        type="expense",
+        category="Groceries",
+        subcategory="Supermarket",
+        amount="50",
+    )
+
+    response = client.get(
+        "/reports/category",
+        params={
+            "txn_type": "expense",
+            "category": "Groceries",
+            "subcategories": "NotARealSubcategory",
+        },
+    )
+
+    assert response.status_code == 200
+    # An entirely-invalid selection falls back to showing everything
+    # rather than a confusingly empty chart.
+    assert "Show all" not in response.text
+    chart_svg = response.text.split("cat-subcat-chart-scroll")[1].split("</svg>")[0]
+    assert "Supermarket" in chart_svg
+
+
+def test_category_detail_subcategory_filter_round_trips_account_and_type(client):
+    _create_account(client)
+    _create_transaction(
+        client,
+        date="2026-01-10",
+        type="expense",
+        category="Groceries",
+        subcategory="Supermarket",
+        amount="50",
+    )
+    _create_transaction(
+        client,
+        date="2026-01-11",
+        type="expense",
+        category="Groceries",
+        subcategory="Farmers Market",
+        amount="10",
+    )
+
+    response = client.get(
+        "/reports/category",
+        params={
+            "txn_type": "expense",
+            "category": "Groceries",
+            "account_id": "chk",
+            "subcategories": "Supermarket",
+        },
+    )
+
+    assert response.status_code == 200
+    legend = response.text.split("pie-legend-filter")[1].split("</form>")[0]
+    assert 'name="txn_type" value="expense"' in legend
+    assert 'name="category" value="Groceries"' in legend
+    assert 'name="account_id" value="chk"' in legend
+
+
+def test_category_detail_subcategory_only_link_targets_single_subcategory(client):
+    _create_account(client)
+    _create_transaction(
+        client,
+        date="2026-01-10",
+        type="expense",
+        category="Groceries",
+        subcategory="Supermarket",
+        amount="50",
+    )
+    _create_transaction(
+        client,
+        date="2026-01-11",
+        type="expense",
+        category="Groceries",
+        subcategory="Farmers Market",
+        amount="10",
+    )
+
+    response = client.get(
+        "/reports/category", params={"txn_type": "expense", "category": "Groceries"}
+    )
+
+    assert response.status_code == 200
+    # A progressive-enhancement fallback: clicking "only" without JS still
+    # navigates straight to that single subcategory via its href.
+    assert (
+        "&subcategories=Supermarket" in response.text
+        or "&subcategories=Farmers+Market" in response.text
+    )
+    assert response.text.count("pie-legend-only") == 2

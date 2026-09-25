@@ -8,6 +8,7 @@ aggregation logic per view. Pure functions over in-memory data — no
 file I/O.
 """
 
+import calendar
 from collections import defaultdict
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field, replace
@@ -612,3 +613,308 @@ def top_uncategorized_descriptions(
         )
         for description, count in ranked
     ]
+
+
+def _full_ledger_month_range(
+    transactions: list[Transaction], today: date_
+) -> list[tuple[str, str]]:
+    """Return every ``("YYYY-MM", "Mon YYYY")`` pair spanning the whole ledger.
+
+    From the earliest transaction present (any category, any type — same
+    range ``net_worth_by_month`` effectively covers) through the later of
+    the latest transaction or ``today``, so the current month always has
+    an entry even before anything's been recorded for it yet. Shared by
+    ``category_monthly_series`` and ``category_subcategory_monthly_series``
+    so both walk the exact same continuous month axis rather than each
+    re-deriving it — a stacked-by-subcategory chart needs to line up
+    month-for-month with the single-series chart sitting above it.
+    """
+    all_dates = [t.date for t in transactions]
+    start = min(all_dates)
+    end = max(max(all_dates), today)
+
+    months = []
+    cursor = start.year * 12 + (start.month - 1)
+    last = end.year * 12 + (end.month - 1)
+    while cursor <= last:
+        year, zero_based_month = divmod(cursor, 12)
+        month = zero_based_month + 1
+        months.append(
+            (f"{year:04d}-{month:02d}", f"{calendar.month_abbr[month]} {year}")
+        )
+        cursor += 1
+    return months
+
+
+@dataclass
+class CategoryMonthPoint:
+    """One month's total (magnitude) and transaction count for one category."""
+
+    key: str
+    label: str
+    total: Decimal
+    count: int
+
+
+def category_monthly_series(
+    transactions: Iterable[Transaction],
+    category: str,
+    txn_type: TransactionType,
+    *,
+    today: date_ | None = None,
+) -> list[CategoryMonthPoint]:
+    """Return one point per month for ``category``, oldest first, zero-filled.
+
+    Backs the category-detail trend chart (``/reports/category``) — unlike
+    ``category_monthly_totals`` (one year, a month with no activity simply
+    absent from the dict), this spans the *whole ledger's* month range
+    (``_full_ledger_month_range``), not just this category's own active
+    months. Zero-filling gaps matters much more here than for a
+    whole-ledger view: a single category can easily go quiet for months
+    at a time, and a chart that silently skipped those months would
+    misleadingly compress the timeline. Raises on ``TRANSFER``, same as
+    ``category_breakdown``.
+    """
+    if txn_type is TransactionType.TRANSFER:
+        raise ValueError("transfers have no category breakdown")
+
+    transactions = list(transactions)
+    if not transactions:
+        return []
+
+    today = today if today is not None else date_.today()
+    month_range = _full_ledger_month_range(transactions, today)
+
+    totals: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
+    counts: dict[str, int] = defaultdict(int)
+    for transaction in transactions:
+        if transaction.type is not txn_type or transaction.category != category:
+            continue
+        key = f"{transaction.date.year:04d}-{transaction.date.month:02d}"
+        totals[key] += abs(transaction.amount)
+        counts[key] += 1
+
+    return [
+        CategoryMonthPoint(
+            key=key,
+            label=label,
+            total=totals.get(key, Decimal("0")),
+            count=counts.get(key, 0),
+        )
+        for key, label in month_range
+    ]
+
+
+@dataclass
+class SubcategoryMonthPoint:
+    """One subcategory's own monthly series, aligned to a shared month axis.
+
+    ``totals`` is positional, one entry per month in the ``months`` list
+    ``category_subcategory_monthly_series`` returns alongside it — not
+    keyed by month, since every series in the same result shares the
+    exact same month axis and a caller (the stacked chart geometry) needs
+    to walk them in lockstep.
+    """
+
+    name: str
+    totals: list[Decimal]
+
+
+def category_subcategory_monthly_series(
+    transactions: Iterable[Transaction],
+    category: str,
+    txn_type: TransactionType,
+    *,
+    today: date_ | None = None,
+    limit: int = 9,
+) -> tuple[list[CategoryMonthPoint], list[SubcategoryMonthPoint]]:
+    """Return ``(months, subcategory_series)`` for a stacked-by-subcategory trend.
+
+    ``months`` is the exact same shape ``category_monthly_series`` returns
+    (each month's *combined* total/count across every subcategory), so a
+    caller can share one x-axis between the plain category chart and this
+    stacked one. ``subcategory_series`` has one entry per subcategory
+    that ever had activity, sorted by all-time total descending,
+    collapsed past ``limit`` into one "Other" entry — same top-N-plus-
+    "Other" convention as ``_svg_pie_chart``. A blank subcategory ("" —
+    no subcategory set) is folded into "Other" too rather than silently
+    dropped, so every dollar in ``months``' own totals is still
+    accounted for somewhere in the stack; it's kept out of the ranking
+    key itself so a real subcategory can never collide with it. Returns
+    ``([], [])`` for no transactions, and ``(months, [])`` when the
+    category has activity but none of it is ever subcategorized — the
+    caller's cue that there's no per-subcategory chart worth drawing.
+    Raises on ``TRANSFER``, same as ``category_breakdown``.
+    """
+    if txn_type is TransactionType.TRANSFER:
+        raise ValueError("transfers have no category breakdown")
+
+    transactions = list(transactions)
+    if not transactions:
+        return [], []
+
+    today = today if today is not None else date_.today()
+    month_range = _full_ledger_month_range(transactions, today)
+    month_index = {key: i for i, (key, _) in enumerate(month_range)}
+    month_count = len(month_range)
+
+    category_totals: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
+    category_counts: dict[str, int] = defaultdict(int)
+    sub_totals: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
+    sub_month_totals: dict[str, list[Decimal]] = defaultdict(
+        lambda: [Decimal("0")] * month_count
+    )
+    blank_month_totals = [Decimal("0")] * month_count
+    blank_total = Decimal("0")
+
+    for transaction in transactions:
+        if transaction.type is not txn_type or transaction.category != category:
+            continue
+        key = f"{transaction.date.year:04d}-{transaction.date.month:02d}"
+        amount = abs(transaction.amount)
+        category_totals[key] += amount
+        category_counts[key] += 1
+        idx = month_index[key]
+        if transaction.subcategory:
+            sub_totals[transaction.subcategory] += amount
+            sub_month_totals[transaction.subcategory][idx] += amount
+        else:
+            blank_total += amount
+            blank_month_totals[idx] += amount
+
+    months = [
+        CategoryMonthPoint(
+            key=key,
+            label=label,
+            total=category_totals.get(key, Decimal("0")),
+            count=category_counts.get(key, 0),
+        )
+        for key, label in month_range
+    ]
+
+    if not sub_totals:
+        return months, []
+
+    ranked = sorted(sub_totals.items(), key=lambda item: item[1], reverse=True)
+    top = ranked[:limit]
+    overflow = ranked[limit:]
+
+    series = [
+        SubcategoryMonthPoint(name=name, totals=sub_month_totals[name])
+        for name, _ in top
+    ]
+    if overflow or blank_total:
+        combined = list(blank_month_totals)
+        for name, _ in overflow:
+            for i, value in enumerate(sub_month_totals[name]):
+                combined[i] += value
+        series.append(SubcategoryMonthPoint(name="Other", totals=combined))
+
+    return months, series
+
+
+@dataclass
+class CategoryYearTotal:
+    """One calendar year's total/count for one category, with a YoY delta."""
+
+    year: int
+    total: Decimal
+    count: int
+    yoy_delta: Decimal | None
+
+
+def category_yearly_series(
+    transactions: Iterable[Transaction], category: str, txn_type: TransactionType
+) -> list[CategoryYearTotal]:
+    """Return one ``CategoryYearTotal`` per year with activity, newest first.
+
+    The category-scoped counterpart to ``yearly_totals_with_yoy`` — same
+    plain total-vs-immediately-prior-year convention (not adjusted for a
+    currently in-progress year; the caller decides how to present that,
+    same simplification ``yearly_totals_with_yoy`` already accepts).
+    Raises on ``TRANSFER``, same as ``category_breakdown``.
+    """
+    if txn_type is TransactionType.TRANSFER:
+        raise ValueError("transfers have no category breakdown")
+
+    totals: dict[int, Decimal] = defaultdict(lambda: Decimal("0"))
+    counts: dict[int, int] = defaultdict(int)
+    for transaction in transactions:
+        if transaction.type is not txn_type or transaction.category != category:
+            continue
+        totals[transaction.date.year] += abs(transaction.amount)
+        counts[transaction.date.year] += 1
+
+    results = []
+    previous_total: Decimal | None = None
+    for year in sorted(totals):
+        total = totals[year]
+        yoy_delta = total - previous_total if previous_total is not None else None
+        results.append(
+            CategoryYearTotal(
+                year=year, total=total, count=counts[year], yoy_delta=yoy_delta
+            )
+        )
+        previous_total = total
+    return list(reversed(results))
+
+
+@dataclass
+class SubcategoryShare:
+    """One subcategory's total/count and its share of the category's total."""
+
+    name: str
+    total: Decimal
+    count: int
+    pct: float
+
+
+def category_subcategory_shares(
+    transactions: Iterable[Transaction],
+    category: str,
+    txn_type: TransactionType,
+    *,
+    year: int | None = None,
+) -> list[SubcategoryShare]:
+    """Return ``category``'s subcategory breakdown, sorted by total descending.
+
+    Scoped to one calendar year when ``year`` is given, else the
+    category's entire history. A blank subcategory (no subcategory set)
+    doesn't get its own row — same treatment as ``category_breakdown``'s
+    subcategory list — but its amount still counts toward the category
+    total each row's ``pct`` is a share of, so the rows shown are
+    honestly allowed to add up to less than 100%. Raises on ``TRANSFER``,
+    same as ``category_breakdown``.
+    """
+    if txn_type is TransactionType.TRANSFER:
+        raise ValueError("transfers have no category breakdown")
+
+    category_total = Decimal("0")
+    sub_totals: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
+    sub_counts: dict[str, int] = defaultdict(int)
+    for transaction in transactions:
+        if transaction.type is not txn_type or transaction.category != category:
+            continue
+        if year is not None and transaction.date.year != year:
+            continue
+        amount = abs(transaction.amount)
+        category_total += amount
+        if transaction.subcategory:
+            sub_totals[transaction.subcategory] += amount
+            sub_counts[transaction.subcategory] += 1
+
+    if category_total == 0:
+        return []
+    return sorted(
+        (
+            SubcategoryShare(
+                name=name,
+                total=total,
+                count=sub_counts[name],
+                pct=float(total / category_total * 100),
+            )
+            for name, total in sub_totals.items()
+        ),
+        key=lambda s: s.total,
+        reverse=True,
+    )

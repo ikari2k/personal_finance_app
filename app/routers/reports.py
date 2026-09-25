@@ -18,18 +18,25 @@ this function and the template, not ``services.aggregation``'s data.
 import math
 from calendar import month_abbr, month_name, monthrange
 from collections.abc import Callable
+from datetime import date
 from decimal import Decimal
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 
 from app.models.category import CategoriesByType
 from app.models.transaction import TransactionType
 from app.services.aggregation import (
+    CategoryMonthPoint,
     CategoryTotal,
+    SubcategoryMonthPoint,
     category_breakdown,
+    category_monthly_series,
     category_monthly_totals,
+    category_subcategory_monthly_series,
+    category_subcategory_shares,
     category_totals_for_month,
+    category_yearly_series,
     monthly_totals_with_mom,
     net_worth_by_month,
     subcategory_monthly_totals,
@@ -413,6 +420,116 @@ def _svg_net_worth_chart(
     }
 
 
+def _svg_category_chart(
+    points: list[CategoryMonthPoint],
+    *,
+    budget: Decimal | None,
+    per_month_width: int = PER_MONTH_W,
+    height: int = 380,
+    pad_left: int = 84,
+    pad_right: int = 16,
+    pad_top: int = 16,
+    pad_bottom: int = 42,
+    tick_step: float | None = None,
+) -> dict:
+    """Build one category's monthly-trend chart geometry (``/reports/category``).
+
+    Same fixed-per-month-width, scrolling, pinned-axis mechanic as
+    ``_svg_net_worth_chart``, simplified to a single bar series — one
+    category's monthly totals are one magnitude, not an income/expense
+    pair sharing an axis. When ``budget`` is set (expense categories
+    only — income categories never carry one, see
+    ``app.models.category``), a bar's portion above the budget line
+    renders as a second, more transparent rect of the *same* fill color
+    rather than a different hue: the bar's color is the mark's identity
+    (this category, this transaction type), so "over budget" is encoded
+    as an emphasis on the overflow segment instead of a second, colliding
+    color meaning.
+    """
+    if not points:
+        return {"has_data": False}
+
+    totals = [float(p.total) for p in points]
+    all_values = totals + ([float(budget)] if budget else [])
+    step = (
+        tick_step if tick_step is not None else _nice_step(max(all_values, default=0))
+    )
+    y_min, y_max = _tick_bounds(all_values, step)
+
+    count = len(points)
+    plot_left = pad_left
+    width = pad_left + per_month_width * count + pad_right
+    plot_right = width - pad_right
+    plot_bottom = height - pad_bottom
+    plot_height = plot_bottom - pad_top
+    bar_width = per_month_width * 0.5
+
+    def y_at(value: float) -> float:
+        return pad_top + plot_height * (1 - (value - y_min) / (y_max - y_min))
+
+    zero_y = y_at(0)
+    budget_value = float(budget) if budget else None
+    budget_y = y_at(budget_value) if budget_value is not None else None
+
+    bars = []
+    x_labels = []
+    previous_year = None
+    for index, point in enumerate(points):
+        center = plot_left + per_month_width * (index + 0.5)
+        total = float(point.total)
+        total_y = y_at(total)
+        if budget_value is not None and total > budget_value:
+            segments = [
+                {"y": budget_y, "height": zero_y - budget_y, "over": False},
+                {"y": total_y, "height": budget_y - total_y, "over": True},
+            ]
+        else:
+            segments = [{"y": total_y, "height": zero_y - total_y, "over": False}]
+        bars.append(
+            {
+                "x": center - bar_width / 2,
+                "bar_width": bar_width,
+                "segments": segments,
+                "label": point.label,
+                "total_label": f"{point.total:,.2f}",
+                "count": point.count,
+            }
+        )
+        year, month = point.key.split("-")
+        x_labels.append(
+            {
+                "x": center,
+                "month": _MONTH_ABBR[int(month)],
+                "year": year if year != previous_year else "",
+            }
+        )
+        previous_year = year
+
+    step_count = round((y_max - y_min) / step)
+    y_ticks = [
+        {
+            "y": y_at(y_min + i * step),
+            "label": f"{y_min + i * step:,.0f}",
+        }
+        for i in range(step_count + 1)
+    ]
+
+    return {
+        "has_data": True,
+        "width": width,
+        "height": height,
+        "plot_left": plot_left,
+        "plot_right": plot_right,
+        "bars": bars,
+        "x_labels": x_labels,
+        "y_ticks": y_ticks,
+        "budget_y": budget_y,
+        "budget_label": f"Budget {budget:,.2f}/mo" if budget else None,
+        "visible_width": pad_left + per_month_width * min(count, VISIBLE_MONTHS),
+        "needs_scroll": count > VISIBLE_MONTHS,
+    }
+
+
 # Fixed-order categorical colors for the spending pie chart's top slices —
 # same "assign identity by fixed order, never cycle" convention as any
 # other categorical series in the app. "Other" (the collapsed tail past
@@ -547,6 +664,158 @@ def _svg_pie_chart(
     return {"has_data": True, "size": size, "slices": slices, "total": total}
 
 
+def _svg_subcategory_stack_chart(
+    months: list[CategoryMonthPoint],
+    series: list[SubcategoryMonthPoint],
+    *,
+    visible: set[str] | None = None,
+    per_month_width: int = PER_MONTH_W,
+    height: int = 380,
+    pad_left: int = 84,
+    pad_right: int = 16,
+    pad_top: int = 16,
+    pad_bottom: int = 42,
+    tick_step: float | None = None,
+) -> dict:
+    """Build a category's monthly trend stacked by subcategory.
+
+    Same fixed-per-month-width, scrolling, pinned-axis mechanic as
+    ``_svg_category_chart``, but each bar is a stack of one segment per
+    visible ``series`` entry instead of a single fill — colored via the
+    ``pie-slice-N``/``pie-slice-other`` CSS classes ``_svg_pie_chart``
+    already uses (fixed categorical order, "Other" always a muted gray),
+    so a subcategory's color means the same thing whether it's looked up
+    on the month drill-down's pie chart or here. No budget line: unlike
+    ``_svg_category_chart``, there's no single figure here to compare a
+    *stack* against — a category's own budget is checked against its
+    combined total, not any one subcategory's slice of it.
+
+    ``visible`` (a set of subcategory names) backs the legend's own
+    filter checkboxes — ``None`` means "everything" (every subcategory in
+    ``series``). A hidden subcategory's segments are left out of the
+    stack entirely and the y-axis rescales to whatever's actually
+    visible, rather than staying pinned to the full, unfiltered range —
+    filtering down to one subcategory should let you read its own trend
+    at a readable scale, not as a sliver against the old full-stack
+    height. Colors are still assigned from each entry's position in the
+    *full* ``series`` list, never the filtered one, so hiding one
+    subcategory never recolors the ones still shown — color is the
+    mark's identity and must survive a filter that changes which marks
+    are drawn (see the dataviz "color follows the entity, never its
+    rank" rule). Returns ``{"has_data": False, "legend": []}`` for no
+    months/series (the caller — a category with no subcategorized
+    activity at all — already skips calling this).
+    """
+    if not months or not series:
+        return {"has_data": False, "legend": []}
+
+    visible_names = visible if visible is not None else {s.name for s in series}
+    month_count = len(months)
+    stack_totals = [
+        sum((s.totals[i] for s in series if s.name in visible_names), Decimal("0"))
+        for i in range(month_count)
+    ]
+    step = (
+        tick_step
+        if tick_step is not None
+        else _nice_step(max((float(v) for v in stack_totals), default=0))
+    )
+    y_min, y_max = _tick_bounds([float(v) for v in stack_totals], step)
+
+    plot_left = pad_left
+    width = pad_left + per_month_width * month_count + pad_right
+    plot_right = width - pad_right
+    plot_bottom = height - pad_bottom
+    plot_height = plot_bottom - pad_top
+    bar_width = per_month_width * 0.5
+
+    def y_at(value: float) -> float:
+        return pad_top + plot_height * (1 - (value - y_min) / (y_max - y_min))
+
+    bars = []
+    x_labels = []
+    previous_year = None
+    for index, month in enumerate(months):
+        center = plot_left + per_month_width * (index + 0.5)
+        running = Decimal("0")
+        segments = []
+        for series_index, one_series in enumerate(series):
+            if one_series.name not in visible_names:
+                continue
+            amount = one_series.totals[index]
+            if amount <= 0:
+                continue
+            top_y = y_at(float(running + amount))
+            bottom_y = y_at(float(running))
+            is_other = one_series.name == "Other"
+            segments.append(
+                {
+                    "y": top_y,
+                    "height": bottom_y - top_y,
+                    "css_class": (
+                        "pie-slice-other"
+                        if is_other
+                        else f"pie-slice-{series_index % 10}"
+                    ),
+                    "name": one_series.name,
+                    "amount_label": f"{amount:,.2f}",
+                }
+            )
+            running += amount
+        bars.append(
+            {
+                "x": center - bar_width / 2,
+                "bar_width": bar_width,
+                "segments": segments,
+                "label": month.label,
+                "total_label": f"{stack_totals[index]:,.2f}",
+            }
+        )
+        year, month_num = month.key.split("-")
+        x_labels.append(
+            {
+                "x": center,
+                "month": _MONTH_ABBR[int(month_num)],
+                "year": year if year != previous_year else "",
+            }
+        )
+        previous_year = year
+
+    step_count = round((y_max - y_min) / step)
+    y_ticks = [
+        {"y": y_at(y_min + i * step), "label": f"{y_min + i * step:,.0f}"}
+        for i in range(step_count + 1)
+    ]
+
+    legend = [
+        {
+            "name": one_series.name,
+            "css_class": (
+                "pie-slice-other"
+                if one_series.name == "Other"
+                else f"pie-slice-{series_index % 10}"
+            ),
+            "total": sum(one_series.totals, Decimal("0")),
+            "visible": one_series.name in visible_names,
+        }
+        for series_index, one_series in enumerate(series)
+    ]
+
+    return {
+        "has_data": True,
+        "width": width,
+        "height": height,
+        "plot_left": plot_left,
+        "plot_right": plot_right,
+        "bars": bars,
+        "x_labels": x_labels,
+        "y_ticks": y_ticks,
+        "legend": legend,
+        "visible_width": pad_left + per_month_width * min(month_count, VISIBLE_MONTHS),
+        "needs_scroll": month_count > VISIBLE_MONTHS,
+    }
+
+
 def _filter_by_account(transactions: list, account_id: str) -> list:
     """Filter the ledger to one account before aggregating, or return it unchanged.
 
@@ -624,9 +893,16 @@ def reports_overview(request: Request, account_id: str = "") -> HTMLResponse:
     )
 
 
-@router.get("/{year}", response_class=HTMLResponse)
+@router.get("/{year:int}", response_class=HTMLResponse)
 def year_detail(request: Request, year: int, account_id: str = "") -> HTMLResponse:
-    """Render one year's monthly breakdown and income/expense category drill-down."""
+    """Render one year's monthly breakdown and income/expense category drill-down.
+
+    The path uses an explicit ``{year:int}`` converter (not just a plain
+    ``{year}``, which Starlette matches against *any* single path
+    segment before FastAPI's own ``year: int`` coercion ever runs) so a
+    static sibling route like ``/reports/category`` can never be
+    swallowed here and turned into a spurious 422.
+    """
     accounts = read_accounts()
     transactions = _filter_by_account(read_ledger(), account_id)
     categories = read_categories()
@@ -710,7 +986,7 @@ def _adjacent_month(year: int, month: int, delta: int) -> tuple[int, int]:
     return total // 12, total % 12 + 1
 
 
-@router.get("/{year}/{month}", response_class=HTMLResponse)
+@router.get("/{year:int}/{month:int}", response_class=HTMLResponse)
 def month_detail(
     request: Request, year: int, month: int, account_id: str = ""
 ) -> HTMLResponse:
@@ -757,3 +1033,148 @@ def month_detail(
             "next_label": f"{month_name[next_month]} {next_year}",
         },
     )
+
+
+@router.get("/category", response_class=HTMLResponse)
+def category_detail(
+    request: Request,
+    txn_type: TransactionType,
+    category: str,
+    account_id: str = "",
+    subcategories: list[str] = Query(default=[]),
+) -> HTMLResponse:
+    """Render one category's full-history trend, year rollup, and subcategory shares.
+
+    ``category`` is a query param, not a path segment — same convention
+    every other category-scoped link in the app already uses
+    (``_category_breakdown.html``'s own ``_txn_link``), which also
+    sidesteps a category name that happens to contain a literal ``/``
+    breaking path routing. ``txn_type`` must be ``INCOME`` or
+    ``EXPENSE``; rejected the same way ``/transactions/new/{txn_type}``
+    already rejects ``TRANSFER`` — transfers use a fixed category outside
+    the managed tree, so there's nothing here to show a trend for.
+
+    ``subcategories`` (repeated query param, e.g. ``?subcategories=A&
+    subcategories=B``) filters the by-subcategory stacked chart to just
+    those names — a plain GET-and-resubmit form, same convention as the
+    account filter on this same page, rather than an htmx fragment swap,
+    since a stacked chart's y-axis has to rescale to whatever's actually
+    visible and that's simplest to get right as one full render. An
+    absent or entirely-invalid selection (a stale link after a
+    category's subcategories changed, say) falls back to showing every
+    subcategory rather than a confusing empty chart.
+    """
+    if txn_type is TransactionType.TRANSFER:
+        return HTMLResponse("Invalid transaction type", status_code=404)
+
+    accounts = read_accounts()
+    transactions = _filter_by_account(read_ledger(), account_id)
+    categories = read_categories()
+    config = _category_config(categories, txn_type).get(
+        category, {"icon": "", "budget": None}
+    )
+
+    monthly = category_monthly_series(transactions, category, txn_type)
+    context = {
+        "category": category,
+        "txn_type": txn_type,
+        "config": config,
+        "accounts": accounts,
+        "account_id": account_id,
+        "has_data": bool(monthly),
+    }
+    if not monthly:
+        return templates.TemplateResponse(request, "reports/category.html", context)
+
+    today = date.today()
+    all_time_total = sum((p.total for p in monthly), Decimal("0"))
+    all_time_count = sum(p.count for p in monthly)
+
+    this_year_points = [p for p in monthly if p.key.startswith(f"{today.year:04d}-")]
+    this_year_total = sum((p.total for p in this_year_points), Decimal("0"))
+    # A same-months-last-year comparison, not "this partial year vs the
+    # prior full year" — the by-year table below uses that simpler
+    # (if less honest for an in-progress year) plain-total convention
+    # instead, same as yearly_totals_with_yoy elsewhere, so the two
+    # aren't trying to answer quite the same question.
+    last_year_same_span_total = sum(
+        (
+            p.total
+            for p in monthly
+            if p.key.startswith(f"{today.year - 1:04d}-")
+            and int(p.key.split("-")[1]) <= today.month
+        ),
+        Decimal("0"),
+    )
+    ytd_delta = (
+        this_year_total - last_year_same_span_total
+        if last_year_same_span_total
+        else None
+    )
+
+    current_key = f"{today.year:04d}-{today.month:02d}"
+    current_month_point = next((p for p in monthly if p.key == current_key), None)
+    current_month_ring = (
+        _ring_geometry(current_month_point.total, config["budget"])
+        if current_month_point
+        else None
+    )
+
+    highest_month = (
+        max(monthly, key=lambda p: p.total) if any(p.total for p in monthly) else None
+    )
+
+    sub_months, sub_series = category_subcategory_monthly_series(
+        transactions, category, txn_type, today=today
+    )
+    available_subcategories = [s.name for s in sub_series]
+    selected_subcategories = [
+        name for name in subcategories if name in available_subcategories
+    ]
+    visible_subcategories = set(selected_subcategories or available_subcategories)
+    subcategory_chart = (
+        _svg_subcategory_stack_chart(
+            sub_months, sub_series, visible=visible_subcategories
+        )
+        if sub_series
+        else None
+    )
+    # True once the user has actually narrowed the selection (as opposed
+    # to nothing being selected yet, which falls back to "everything") —
+    # the template uses this to decide whether "Show all" is worth
+    # showing at all.
+    subcategory_filter_active = bool(
+        selected_subcategories
+        and len(selected_subcategories) < len(available_subcategories)
+    )
+
+    context.update(
+        {
+            "chart": _svg_category_chart(monthly, budget=config["budget"]),
+            "subcategory_chart": subcategory_chart,
+            "subcategory_filter_active": subcategory_filter_active,
+            "monthly": list(reversed(monthly)),
+            "all_time_total": all_time_total,
+            "all_time_count": all_time_count,
+            "avg_per_month": all_time_total / len(monthly),
+            "months_covered": len(monthly),
+            "first_month_label": monthly[0].label,
+            "last_month_label": monthly[-1].label,
+            "this_year": today.year,
+            "current_month": today.month,
+            "this_year_total": this_year_total,
+            "ytd_delta": ytd_delta,
+            "current_month_label": f"{month_abbr[today.month]} {today.year}",
+            "current_month_point": current_month_point,
+            "current_month_ring": current_month_ring,
+            "highest_month": highest_month,
+            "years": category_yearly_series(transactions, category, txn_type),
+            "all_time_shares": category_subcategory_shares(
+                transactions, category, txn_type
+            ),
+            "this_year_shares": category_subcategory_shares(
+                transactions, category, txn_type, year=today.year
+            ),
+        }
+    )
+    return templates.TemplateResponse(request, "reports/category.html", context)

@@ -463,7 +463,94 @@ primitives rather than a third implementation. The row's own id/date/amount/acco
 only its type/category/subcategory and the new shared `transfer_id`. The row-actions box needed
 the same one-rem-wider offset the mappings table's own three-icon rows already use
 (`#transactions-table-wrapper .row-actions`), since only non-transfer rows get the third icon while
-transfer rows keep two — harmless, since each row's box is positioned independently.
+transfer rows keep two — harmless, since each row's box is positioned independently. Phase 6
+(launcher & polish) is now also complete: `scripts/launch.py` starts `uvicorn` as a subprocess
+bound to `app.config.SERVER_HOST`/`SERVER_PORT`, polls `/health` until it responds (bailing out
+early via `process.poll()` if uvicorn exits first — e.g. the port's already taken — rather than
+waiting out the full readiness timeout against a server that's already dead), opens the default
+browser via `webbrowser.open`, then blocks on `process.wait()`; `SIGINT`/`SIGTERM` and a `finally`
+block terminate the subprocess (with a `kill()` fallback after a 5s grace period) so there's never
+an orphaned server process left running. The accompanying error-handling pass found invalid-regex
+(Phase 4's `compile_pattern`) and malformed-CSV (Phase 3's decode/parse handling in
+`app.routers.import_`) already covered; the one real gap was `app.storage.lock.LockError` — a
+write's lock-acquisition timeout — never being caught anywhere, which would have surfaced as a raw
+500 on the rare two-tabs-writing-at-once collision. Fixed with one app-wide
+`@app.exception_handler(LockError)` in `app/main.py` rather than threading a `try/except` through
+every write call site individually: since the failing request's original `hx-target` could be a
+dialog, a table fragment, or a single row, the handler doesn't try to render an error into whatever
+that target was (risking clobbering real content) — it reuses the existing `htmx_events.toast`
+helper to fire a "please try again" toast and sets `HX-Reswap: none` so the DOM is otherwise left
+untouched. Most recently, a new `/reports/category` drill-down answers "how did this category look
+over time" — a category's full ledger history, not scoped to one year like every other report view.
+`services.aggregation` gained three category-scoped functions: `category_monthly_series` (one point
+per calendar month across the *whole ledger's* date range — not just this category's own active
+months — zero-filled where the category had no activity that month, extended through `date.today()`
+so the current month always has a point even before anything's posted to it yet; deliberately more
+generous than `net_worth_by_month`'s "only months with any activity" convention, since a single
+category goes quiet for stretches far more often than the whole ledger does), `category_yearly_series`
+(one row per year, newest first, same plain total-vs-prior-year delta convention as
+`yearly_totals_with_yoy` — not adjusted for an in-progress current year, which the router/template
+instead flags with an explicit "(in progress)" label rather than showing a misleading delta), and
+`category_subcategory_shares` (a category's subcategory breakdown as a percentage of its own total,
+scoped to one year or all time — a blank-subcategory row still counts toward the denominator, so
+shown rows are honestly allowed to add up to less than 100%). `app.routers.reports._svg_category_chart`
+mirrors `_svg_net_worth_chart`'s fixed-per-month-width/scrolling/pinned-y-axis mechanic but as a single
+bar series; a month over its budget renders its overflow portion as a second, more transparent rect of
+the *same* fill color rather than a different hue, so "over budget" reads as emphasis on one mark, not
+a second, colliding color meaning. The page itself (`reports/category.html`) leads with 4 stat tiles
+(all-time total, this-year-to-date with a same-months-last-year delta, this month's budget-utilization
+ring reusing `_ring_geometry` verbatim, and the highest month on record) on the dashboard's own
+`.dash-widget`/`.dash-grid` system (grown a `.dash-span-3` for this page's 4-tile row), then the trend
+chart, a by-year table, and a by-subcategory breakdown with an all-time/this-year toggle (two
+pre-rendered blocks, `hidden`-attribute swapped by a plain onclick — no round trip, same
+"client-side toggle for a pure display preference" precedent as the transactions list's own
+expand/collapse-all). `/reports/{year}`'s and `/reports/{year}/{month}`'s shared category-breakdown
+table (`reports/_category_breakdown.html`) gained a small muted trend-icon link next to each category
+name (not subcategory rows — the new page is category-scoped only) pointing here — the one entry point
+the addition asked for, deliberately not also added to `/categories` or the dashboard's own top-categories
+widget. Required adding an explicit `{year:int}`/`{month:int}` path converter to the two existing
+numeric report routes — a bare `{year}` matches *any* single path segment at Starlette's routing layer
+before FastAPI's own `year: int` coercion ever runs, which would have swallowed the new static
+`/reports/category` path and turned it into a spurious 422 instead of ever reaching its own route.
+Design pass done via the `artifact-design` skill — a mockup (fake sample data, never the real ledger)
+was published as an Artifact first, reviewed, then implemented against the app's real vendored
+Pico/JetBrains Mono/style.css system rather than the mockup's own inline styling. A follow-up request
+added a second chart to that same page: the category's monthly trend stacked by subcategory, shown
+only when the category actually has any subcategorized activity (a category with none at all — e.g.
+`Salary` — simply doesn't render the section). `services.aggregation` gained
+`category_subcategory_monthly_series` (one row per subcategory aligned to the exact same month axis
+`category_monthly_series` uses — both now share a `_full_ledger_month_range` helper so the two charts
+line up month-for-month — collapsed past a `limit` of 9 into one "Other" row, same top-N-plus-"Other"
+convention as the month drill-down's own spending pie chart; a blank subcategory folds into "Other"
+too rather than being silently dropped, so every dollar in the category's own monthly total is still
+accounted for somewhere in the stack) and returns `(months, [])` — not an error — when a category has
+activity but none of it was ever subcategorized, which is exactly the router's cue to skip the second
+chart. `app.routers.reports._svg_subcategory_stack_chart` reuses the pie chart's own fixed-order
+`pie-slice-0`..`pie-slice-9`/`pie-slice-other` CSS classes for each stacked segment rather than
+inventing a second categorical palette, so a subcategory's color means the same thing whether it's
+looked up here or on the month drill-down's pie chart; no budget line on this one; unlike the
+single-series chart above it, there's no one figure in a *stack* to compare against a category-level
+budget. Hit one real bug during the build: the new partial (`reports/_category_subcategory_chart.html`)
+was first written expecting a variable named `chart` (matching `_category_chart.html`'s own
+convention), but `{% include %}` inherits the *including* template's entire context — since
+`reports/category.html` already has its own `chart` (the single-series one) in scope, the stacked
+chart's own geometry was silently shadowed and every field the wrong shape resolved to blank. Fixed
+by naming the new partial's expected variable `subcategory_chart` throughout, matching the actual
+context key — a reminder that two chart partials included on the same page can never both expect a
+same-named variable, no matter how each is documented internally. That stacked chart's legend then
+became its own filter: each legend row is now a checkbox (`GET /reports/category`'s new repeated
+`subcategories` query param), letting the stack narrow to a chosen subset of subcategories rather than
+always showing every one — a plain GET-and-resubmit `<form>` wrapping the legend itself (same
+convention as this page's own account filter), not an htmx fragment swap, since narrowing the
+selection also has to rescale the y-axis to whatever's actually visible, which is simplest to get
+right as one full page render. `_svg_subcategory_stack_chart` gained a `visible` parameter: a hidden
+subcategory's segments are left out of the stack and the axis rescales to the visible subset, but
+every color is still assigned from each subcategory's position in the *full*, unfiltered series list
+— never the filtered one — so narrowing the selection can never recolor the subcategories still shown
+(the dataviz "color follows the entity, never its rank" rule; verified live that Farmers Market keeps
+its own color even filtered down to being the only series drawn). An entirely-unrecognized selection
+(a stale link after a category's subcategories changed) falls back to showing everything rather than
+a confusingly empty chart, same defensive-fallback instinct as elsewhere in the app.
 See `docs/implementation-plan.md` for the full phased plan, finalized schemas, and per-phase status
 checkboxes/implementation notes.
 

@@ -1,0 +1,247 @@
+{% extends "base.html" %}
+{% from "_category_icons.html" import category_icon %}
+{% from "reports/_account_filter.html" import account_filter %}
+{% block title %}{{ category }} — Reports — Finance Tracker{% endblock %}
+{% block content %}
+  {% set txn_link = "/transactions?txn_type=" + txn_type.value + "&category=" + (category | urlencode) + ("&account_id=" + account_id if account_id else "") %}
+  <p><a href="/reports{{ '?account_id=' + account_id if account_id }}">&larr; Back to reports</a></p>
+
+  {% if not has_data %}
+    <h1>{{ category }}</h1>
+    <p>No transactions in this category yet.</p>
+  {% else %}
+    <div class="cat-detail-hero">
+      {% if config.icon %}
+        <span class="cat-cell-icon cat-cell-icon-{{ txn_type.value }} cat-icon-tile-lg">
+          {{ category_icon(config.icon) }}
+        </span>
+      {% endif %}
+      <div class="cat-detail-titles">
+        <h1>{{ category }}</h1>
+        <div class="cat-detail-badges">
+          <span class="type-pill type-pill-{{ txn_type.value }}">{{ txn_type.value }}</span>
+          {% if config.budget %}
+            <span class="budget-pill">{{ "%.2f"|format(config.budget) }}/mo</span>
+          {% endif %}
+        </div>
+      </div>
+      <div class="cat-detail-actions">
+        {{ account_filter(accounts, account_id) }}
+        <a class="cat-cta-link" href="{{ txn_link }}">All {{ category }} transactions &rsaquo;</a>
+      </div>
+    </div>
+
+    <div class="dash-grid" style="margin-top: 1.25rem;">
+      <div class="dash-widget dash-widget-bordered dash-span-3">
+        <div class="dash-widget-head"><span class="dash-widget-title">All-time total</span></div>
+        <div class="cat-stat-number">{{ "%.2f"|format(all_time_total) }}</div>
+        <div class="cat-stat-sub">
+          {{ all_time_count }} transaction{{ "s" if all_time_count != 1 else "" }} &middot;
+          {{ "%.2f"|format(avg_per_month) }}/mo avg &middot;
+          {{ first_month_label }}&ndash;{{ last_month_label }}
+        </div>
+      </div>
+
+      <div class="dash-widget dash-widget-bordered dash-span-3">
+        <div class="dash-widget-head"><span class="dash-widget-title">This year (YTD)</span></div>
+        <div class="cat-stat-number">{{ "%.2f"|format(this_year_total) }}</div>
+        {% if ytd_delta is not none %}
+          {% set rising = ytd_delta >= 0 %}
+          {% set good = (rising and txn_type.value == "income") or (not rising and txn_type.value == "expense") %}
+          <div class="cat-stat-delta {{ 'up' if good else 'down' }}">
+            {{ '▲' if rising else '▼' }} {{ '+' if rising else '' }}{{ "%.2f"|format(ytd_delta) }}
+            <span class="muted">vs same months last year</span>
+          </div>
+        {% endif %}
+      </div>
+
+      <div class="dash-widget dash-widget-bordered dash-span-3">
+        <div class="dash-widget-head"><span class="dash-widget-title">This month &middot; {{ current_month_label }}</span></div>
+        {% if current_month_ring %}
+          <div class="cat-month-row">
+            <span class="utilization utilization-{{ current_month_ring.tier }}">
+              <svg width="52" height="52" viewBox="0 0 20 20" class="utilization-ring">
+                <circle cx="10" cy="10" r="7" class="ring-track"/>
+                <circle cx="10" cy="10" r="7" class="ring-fill"
+                        stroke-dasharray="{{ current_month_ring.dash }} {{ current_month_ring.gap }}"
+                        transform="rotate(-90 10 10)">
+                  <title>{{ category }}, {{ current_month_label }}: {{ current_month_ring.pct_label }} of budget</title>
+                </circle>
+              </svg>
+            </span>
+            <span>
+              <span class="cat-month-pct utilization-{{ current_month_ring.tier }}">{{ current_month_ring.pct_label }}</span>
+              <span class="cat-month-figures">{{ "%.2f"|format(current_month_point.total) }} / {{ "%.2f"|format(config.budget) }} budget</span>
+            </span>
+          </div>
+        {% else %}
+          <div class="cat-stat-number">{{ "%.2f"|format(current_month_point.total) if current_month_point else "0.00" }}</div>
+          <div class="cat-stat-sub">No budget set for this category</div>
+        {% endif %}
+      </div>
+
+      <div class="dash-widget dash-widget-bordered dash-span-3">
+        <div class="dash-widget-head"><span class="dash-widget-title">Highest month</span></div>
+        {% if highest_month and highest_month.total %}
+          <div class="cat-stat-number">{{ "%.2f"|format(highest_month.total) }}</div>
+          <div class="cat-stat-sub">{{ highest_month.label }}</div>
+        {% else %}
+          <div class="cat-stat-number">0.00</div>
+          <div class="cat-stat-sub">No activity yet</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <article style="margin-top: 1.5rem;">
+      <h2 style="margin-bottom: 0.15rem;">{{ category }} over time</h2>
+      <p class="muted" style="margin-top: 0;">
+        Monthly {{ txn_type.value }}, {{ first_month_label }} &ndash; {{ last_month_label }}.
+        {% if chart.needs_scroll %}Scroll to see earlier months.{% endif %}
+      </p>
+      <p class="chart-legend">
+        <span class="chart-legend-swatch bar-{{ txn_type.value }}"></span> {{ category }}
+        {% if config.budget %}
+          <span class="chart-legend-line"></span> Budget ({{ "%.2f"|format(config.budget) }}/mo)
+        {% endif %}
+      </p>
+      {% include "reports/_category_chart.html" %}
+
+      <details style="margin-top: 0.75rem;">
+        <summary>View as table</summary>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Month</th><th>Total</th>
+                {% if config.budget %}<th>vs budget</th>{% endif %}
+                <th># Txns</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for m in monthly %}
+                <tr>
+                  <td>{{ m.label }}</td>
+                  <td>{{ "%.2f"|format(m.total) }}</td>
+                  {% if config.budget %}
+                    <td class="{{ 'amount-negative' if m.total > config.budget else 'amount-positive' }}">
+                      {{ "%.0f"|format(m.total / config.budget * 100) }}%
+                    </td>
+                  {% endif %}
+                  <td>{{ m.count }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </details>
+    </article>
+
+    {% if subcategory_chart %}
+      <article style="margin-top: 1.5rem;">
+        <h2 style="margin-bottom: 0.15rem;">{{ category }} by subcategory</h2>
+        <p class="muted" style="margin-top: 0;">
+          Same monthly {{ txn_type.value }}, split by subcategory.
+          {% if chart.needs_scroll %}Scroll to see earlier months.{% endif %}
+        </p>
+        {% include "reports/_category_subcategory_chart.html" %}
+      </article>
+    {% endif %}
+
+    <div class="report-columns" style="margin-top: 1.5rem;">
+      <div>
+        <h2>By year</h2>
+        <div class="table-scroll">
+          <table class="breakdown-table">
+            <thead><tr><th>Year</th><th>Total</th><th>Avg/mo</th><th># Txns</th><th>vs prior year</th></tr></thead>
+            <tbody>
+              {% for y in years %}
+                <tr>
+                  <td>
+                    {{ y.year }}
+                    {% if y.year == this_year %}<span class="muted">(in progress)</span>{% endif %}
+                  </td>
+                  <td>{{ "%.2f"|format(y.total) }}</td>
+                  <td>{{ "%.2f"|format(y.total / (current_month if y.year == this_year else 12)) }}</td>
+                  <td>{{ y.count }}</td>
+                  <td>
+                    {% if y.year == this_year %}
+                      <span class="muted">&mdash;</span>
+                    {% elif y.yoy_delta is not none %}
+                      <span class="{{ 'amount-negative' if y.yoy_delta >= 0 else 'amount-positive' }}">
+                        {{ '+' if y.yoy_delta >= 0 else '' }}{{ "%.2f"|format(y.yoy_delta) }}
+                      </span>
+                    {% else %}
+                      <span class="muted">&mdash;</span>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div>
+        <h2>By subcategory</h2>
+        <div class="cat-scope-toggle" role="group" aria-label="Time range">
+          <button type="button" class="cat-scope-toggle-{{ txn_type.value }}" aria-pressed="true"
+                  onclick="document.getElementById('cat-shares-year').hidden=false; document.getElementById('cat-shares-all').hidden=true; this.setAttribute('aria-pressed','true'); this.nextElementSibling.setAttribute('aria-pressed','false');">This year</button>
+          <button type="button" class="cat-scope-toggle-{{ txn_type.value }}" aria-pressed="false"
+                  onclick="document.getElementById('cat-shares-year').hidden=true; document.getElementById('cat-shares-all').hidden=false; this.setAttribute('aria-pressed','true'); this.previousElementSibling.setAttribute('aria-pressed','false');">All time</button>
+        </div>
+
+        <div id="cat-shares-year">
+          {% if this_year_shares %}
+            <div class="dash-cat-bars">
+              {% for s in this_year_shares %}
+                {% set sub_icon = config.subcategories.get(s.name, {}).get('icon', '') %}
+                <div class="dash-cat-bar-row">
+                  {% if sub_icon %}<span class="dash-cat-glyph">{{ category_icon(sub_icon) }}</span>{% endif %}
+                  <span class="dash-cat-bar-main">
+                    <span class="dash-cat-bar-top">
+                      <a class="table-link dash-cat-bar-name" href="{{ txn_link }}&subcategory={{ s.name | urlencode }}&date_from={{ this_year }}-01-01&date_to={{ this_year }}-12-31">{{ s.name }}</a>
+                      <span class="dash-cat-bar-amount">{{ "%.2f"|format(s.total) }} &middot; {{ "%.1f"|format(s.pct) }}% &middot; {{ s.count }} txns</span>
+                    </span>
+                    <span class="dash-cat-bar-track">
+                      <span class="dash-cat-bar-fill cat-subrow-fill-{{ txn_type.value }}" style="width: {{ s.pct }}%"></span>
+                    </span>
+                  </span>
+                </div>
+              {% endfor %}
+            </div>
+          {% else %}
+            <p class="muted">No subcategorized activity this year.</p>
+          {% endif %}
+        </div>
+
+        <div id="cat-shares-all" hidden>
+          {% if all_time_shares %}
+            <div class="dash-cat-bars">
+              {% for s in all_time_shares %}
+                {% set sub_icon = config.subcategories.get(s.name, {}).get('icon', '') %}
+                <div class="dash-cat-bar-row">
+                  {% if sub_icon %}<span class="dash-cat-glyph">{{ category_icon(sub_icon) }}</span>{% endif %}
+                  <span class="dash-cat-bar-main">
+                    <span class="dash-cat-bar-top">
+                      <a class="table-link dash-cat-bar-name" href="{{ txn_link }}&subcategory={{ s.name | urlencode }}">{{ s.name }}</a>
+                      <span class="dash-cat-bar-amount">{{ "%.2f"|format(s.total) }} &middot; {{ "%.1f"|format(s.pct) }}% &middot; {{ s.count }} txns</span>
+                    </span>
+                    <span class="dash-cat-bar-track">
+                      <span class="dash-cat-bar-fill cat-subrow-fill-{{ txn_type.value }}" style="width: {{ s.pct }}%"></span>
+                    </span>
+                  </span>
+                </div>
+              {% endfor %}
+            </div>
+          {% else %}
+            <p class="muted">No subcategorized activity.</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="cat-detail-footer">
+      <a class="cat-cta-link" href="{{ txn_link }}">View all {{ category }} transactions &rsaquo;</a>
+    </div>
+  {% endif %}
+{% endblock %}

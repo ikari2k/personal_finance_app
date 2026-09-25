@@ -1,0 +1,83 @@
+{#
+  A category's monthly trend, stacked by subcategory — backs
+  reports/category.html's "by subcategory over time" section, shown only
+  when the category actually has any subcategorized activity (see
+  app.routers.reports.category_detail: `subcategory_chart` is None
+  otherwise). Same scrolling/pinned-axis mechanic as
+  reports/_category_chart.html, but each bar is a stack of segments
+  colored via the pie-slice-N/pie-slice-other classes _svg_pie_chart
+  already uses, instead of one solid fill. Expects `subcategory_chart` in scope.
+#}
+{% if subcategory_chart.has_data %}
+  <form method="get" class="pie-legend pie-legend-inline pie-legend-filter">
+    <input type="hidden" name="txn_type" value="{{ txn_type.value }}">
+    <input type="hidden" name="category" value="{{ category }}">
+    {% if account_id %}<input type="hidden" name="account_id" value="{{ account_id }}">{% endif %}
+    {% for item in subcategory_chart.legend %}
+      <label class="pie-legend-item pie-legend-checkbox">
+        <input type="checkbox" name="subcategories" value="{{ item.name }}"
+               {{ 'checked' if item.visible }} onchange="this.form.submit()">
+        <span class="pie-legend-swatch {{ item.css_class }}"></span>
+        <span class="pie-legend-label">{{ item.name }}</span>
+        <span class="pie-legend-value">{{ "%.2f"|format(item.total) }}</span>
+        <a class="pie-legend-only" href="?txn_type={{ txn_type.value }}&category={{ category | urlencode }}{{ '&account_id=' + account_id if account_id }}&subcategories={{ item.name | urlencode }}"
+           onclick="event.preventDefault(); event.stopPropagation();
+                    var mine = this.closest('label').querySelector('input[type=checkbox]');
+                    var f = this.closest('form');
+                    f.querySelectorAll('input[type=checkbox]').forEach(function (c) { c.checked = (c === mine); });
+                    f.submit();">only</a>
+      </label>
+    {% endfor %}
+    {% if subcategory_filter_active %}
+      <a class="pie-legend-reset"
+         href="?txn_type={{ txn_type.value }}&category={{ category | urlencode }}{{ '&account_id=' + account_id if account_id }}">Show all</a>
+    {% endif %}
+  </form>
+
+  <div class="cat-chart-scroll{{ '' if subcategory_chart.needs_scroll else ' cat-chart-fill' }}"
+       id="cat-subcat-chart-scroll"
+       {% if subcategory_chart.needs_scroll %}style="max-width: {{ subcategory_chart.visible_width }}px;"{% endif %}>
+    <svg viewBox="0 0 {{ subcategory_chart.width }} {{ subcategory_chart.height }}"
+         {% if subcategory_chart.needs_scroll %}width="{{ subcategory_chart.width }}" height="{{ subcategory_chart.height }}"{% endif %}
+         class="cat-chart-svg" role="img" aria-label="{{ category }} monthly {{ txn_type.value }} by subcategory">
+      {% for tick in subcategory_chart.y_ticks %}
+        <line x1="{{ subcategory_chart.plot_left }}" y1="{{ tick.y }}" x2="{{ subcategory_chart.plot_right }}" y2="{{ tick.y }}"
+              class="chart-gridline"/>
+      {% endfor %}
+      {% for bar in subcategory_chart.bars %}
+        {% for segment in bar.segments %}
+          <rect x="{{ bar.x }}" y="{{ segment.y }}" width="{{ bar.bar_width }}" height="{{ segment.height }}"
+                class="{{ segment.css_class }}">
+            <title>{{ bar.label }} &middot; {{ segment.name }}: {{ segment.amount_label }}</title>
+          </rect>
+        {% endfor %}
+      {% endfor %}
+      {% for xl in subcategory_chart.x_labels %}
+        <text x="{{ xl.x }}" y="{{ subcategory_chart.height - 26 }}" class="chart-x-label"
+              text-anchor="middle">{{ xl.month }}</text>
+        {% if xl.year %}
+          <text x="{{ xl.x }}" y="{{ subcategory_chart.height - 9 }}" class="chart-x-label-year"
+                text-anchor="middle">{{ xl.year }}</text>
+        {% endif %}
+      {% endfor %}
+      <g id="cat-subcat-yaxis-pin">
+        <rect class="chart-axis-bg" x="0" y="0" width="{{ subcategory_chart.plot_left }}" height="{{ subcategory_chart.height }}"/>
+        {% for tick in subcategory_chart.y_ticks %}
+          <text x="{{ subcategory_chart.plot_left - 8 }}" y="{{ tick.y }}" class="chart-axis-label"
+                text-anchor="end" dominant-baseline="middle">{{ tick.label }}</text>
+        {% endfor %}
+      </g>
+    </svg>
+  </div>
+  <script>
+    (function () {
+      var wrap = document.getElementById("cat-subcat-chart-scroll");
+      var pin = document.getElementById("cat-subcat-yaxis-pin");
+      if (!wrap || !pin) return;
+      function sync() { pin.setAttribute("transform", "translate(" + wrap.scrollLeft + ",0)"); }
+      wrap.addEventListener("scroll", sync);
+      wrap.scrollLeft = wrap.scrollWidth;
+      sync();
+    })();
+  </script>
+{% endif %}
