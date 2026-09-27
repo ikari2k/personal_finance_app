@@ -13,6 +13,7 @@ from app.services.aggregation import (
     category_monthly_series,
     category_monthly_totals,
     category_movers,
+    category_recent_monthly_totals,
     category_subcategory_monthly_series,
     category_subcategory_shares,
     category_yearly_series,
@@ -1311,6 +1312,46 @@ def test_category_movers_new_category_has_no_prior_total_or_delta():
     assert pets.prior_total is None
     assert pets.delta is None
     assert pets.pct_delta is None
+
+
+def test_category_recent_monthly_totals_raises_for_transfer_type():
+    with pytest.raises(ValueError):
+        category_recent_monthly_totals(
+            [], TransactionType.TRANSFER, today=date(2026, 6, 1)
+        )
+
+
+def test_category_recent_monthly_totals_spans_last_n_months_zero_filled():
+    txns = [
+        _txn(
+            id="a", date=date(2026, 1, 15), category="Groceries", amount=Decimal("-40")
+        ),
+        _txn(
+            id="b", date=date(2026, 3, 1), category="Groceries", amount=Decimal("-60")
+        ),
+    ]
+
+    keys, totals = category_recent_monthly_totals(
+        txns, TransactionType.EXPENSE, today=date(2026, 3, 10), months=3
+    )
+
+    assert keys == ["2026-01", "2026-02", "2026-03"]
+    assert totals["Groceries"] == [Decimal("40"), Decimal("0"), Decimal("60")]
+
+
+def test_category_recent_monthly_totals_ignores_months_outside_the_window():
+    txns = [
+        _txn(
+            id="a", date=date(2025, 1, 1), category="Groceries", amount=Decimal("-999")
+        ),
+    ]
+
+    keys, totals = category_recent_monthly_totals(
+        txns, TransactionType.EXPENSE, today=date(2026, 3, 10), months=3
+    )
+
+    assert "Groceries" not in totals
+    assert keys == ["2026-01", "2026-02", "2026-03"]
 
 
 def test_category_mom_deltas_raises_for_transfer_type():

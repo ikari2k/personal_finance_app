@@ -1207,6 +1207,30 @@ fieldset legend {
   fill: var(--pico-del-color);
 }
 
+/* Categories index (/reports/categories) row sparkline — same
+ * income/expense color convention as the bars above, applied as a
+ * stroke instead of a fill since the line itself is the mark here (the
+ * area beneath it, filled via .bar-income/.bar-expense at low opacity,
+ * is just a quiet backdrop). */
+.cat-index-spark {
+  display: block;
+  overflow: visible;
+}
+.cat-index-spark .spark-area {
+  opacity: 0.15;
+}
+.cat-index-spark .spark-line {
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.cat-index-spark .spark-line.line-income {
+  stroke: var(--pico-ins-color);
+}
+.cat-index-spark .spark-line.line-expense {
+  stroke: var(--pico-del-color);
+}
+
 .chart-legend {
   display: flex;
   align-items: center;

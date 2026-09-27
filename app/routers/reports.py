@@ -20,6 +20,7 @@ from calendar import month_abbr, month_name, monthrange
 from collections.abc import Callable
 from datetime import date
 from decimal import Decimal
+from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
@@ -36,6 +37,7 @@ from app.services.aggregation import (
     category_monthly_series,
     category_monthly_totals,
     category_movers,
+    category_recent_monthly_totals,
     category_subcategory_monthly_series,
     category_subcategory_shares,
     category_totals_for_month,
@@ -145,6 +147,7 @@ def _ring_geometry(amount: Decimal, budget: Decimal | None) -> dict | None:
         "gap": _RING_CIRCUMFERENCE - dash,
         "tier": tier,
         "pct_label": f"{pct:.0f}%",
+        "pct": pct,
     }
 
 
@@ -1053,6 +1056,145 @@ def reports_overview(request: Request, account_id: str = "") -> HTMLResponse:
     )
 
 
+def _sparkline_geometry(values: list[Decimal]) -> dict:
+    """Return a compact sparkline's line/area path geometry for one category.
+
+    Purely presentational (same "router computes it, template just draws
+    it" split as ``_svg_net_worth_chart``) — a 100x28 viewBox, y-axis
+    clamped to start at 0 (a total is never negative here, see
+    ``category_recent_monthly_totals``) so an all-zero stretch reads as a
+    flat line at the bottom rather than wobbling from autoscaling on
+    noise. ``has_data`` is ``False`` when every month is zero (nothing to
+    meaningfully draw a shape from) or fewer than 2 points exist.
+    """
+    width, height, pad = 100.0, 28.0, 3.0
+    floats = [float(v) for v in values]
+    max_value = max(floats) if floats else 0.0
+    if max_value <= 0 or len(floats) < 2:
+        return {"has_data": False, "width": width, "height": height}
+
+    step = (width - pad * 2) / (len(floats) - 1)
+    points = [
+        (pad + i * step, pad + (height - pad * 2) * (1 - value / max_value))
+        for i, value in enumerate(floats)
+    ]
+    line = "M " + " L ".join(f"{x:.1f},{y:.1f}" for x, y in points)
+    area = (
+        line
+        + f" L {points[-1][0]:.1f},{height - pad:.1f}"
+        + f" L {points[0][0]:.1f},{height - pad:.1f} Z"
+    )
+    return {
+        "has_data": True,
+        "line": line,
+        "area": area,
+        "width": width,
+        "height": height,
+    }
+
+
+_CATEGORY_INDEX_SORTS = {"growth", "total", "budget"}
+
+
+@router.get("/categories", response_class=HTMLResponse)
+def categories_index(
+    request: Request,
+    txn_type: str = "expense",
+    sort: str = "growth",
+    account_id: str = "",
+) -> HTMLResponse:
+    """Render a sortable index of every category's recent trend and budget status.
+
+    The browsable counterpart to ``/reports/category``, which needs a
+    category already in mind — sorting by "growth" (the default) instead
+    surfaces savings candidates without one, ranking by the same
+    YTD-vs-same-months-last-year delta the landing page's "Biggest
+    movers" list uses (``category_movers``). Registered as a static
+    ``/categories`` path ahead of ``/{year:int}`` for the same reason
+    ``/category`` already is — Starlette's routing never actually
+    confuses the two (``int("categories")`` fails cleanly), but keeping
+    every non-numeric reports path grouped together above the numeric
+    ones documents that they're deliberately distinct siblings.
+
+    ``txn_type``/``sort`` are plain strings, not enums — both are UI
+    toggle state read back from a query param, so an invalid value (a
+    stale link, a hand-edited URL) falls back to the default rather than
+    404ing.
+    """
+    resolved_type = txn_type if txn_type in ("income", "expense") else "expense"
+    type_enum = TransactionType(resolved_type)
+    resolved_sort = sort if sort in _CATEGORY_INDEX_SORTS else "growth"
+
+    accounts = read_accounts()
+    transactions = _filter_by_account(read_ledger(), account_id)
+    categories = read_categories()
+    config = _category_config(categories, type_enum)
+    today = date.today()
+
+    movers = category_movers(transactions, type_enum, today)
+    month_keys, sparklines = category_recent_monthly_totals(
+        transactions, type_enum, today
+    )
+    current_month_totals = {
+        cat.name: cat.total
+        for cat in category_totals_for_month(
+            transactions, today.year, today.month, type_enum
+        )
+    }
+    grand_total = sum((m.ytd_total for m in movers), Decimal("0"))
+
+    rows = []
+    for mover in movers:
+        cat_config = config.get(mover.name, {"icon": "", "budget": None})
+        ring = _ring_geometry(
+            current_month_totals.get(mover.name, Decimal("0")), cat_config["budget"]
+        )
+        rows.append(
+            {
+                "name": mover.name,
+                "icon": cat_config["icon"],
+                "sparkline": _sparkline_geometry(
+                    sparklines.get(mover.name, [Decimal("0")] * len(month_keys))
+                ),
+                "ytd_total": mover.ytd_total,
+                "pct_of_total": (
+                    float(mover.ytd_total / grand_total * 100) if grand_total else 0.0
+                ),
+                "delta": mover.delta,
+                "pct_delta": mover.pct_delta,
+                "ring": ring,
+                "detail_link": (
+                    f"/reports/category?txn_type={resolved_type}"
+                    f"&category={quote(mover.name)}"
+                    + (f"&account_id={quote(account_id)}" if account_id else "")
+                ),
+            }
+        )
+
+    if resolved_sort == "total":
+        rows.sort(key=lambda r: r["ytd_total"], reverse=True)
+    elif resolved_sort == "budget":
+        rows.sort(
+            key=lambda r: (r["ring"] is None, -(r["ring"]["pct"] if r["ring"] else 0))
+        )
+    else:
+        rows.sort(key=lambda r: (r["delta"] is None, -(r["delta"] or Decimal("0"))))
+
+    return templates.TemplateResponse(
+        request,
+        "reports/categories.html",
+        {
+            "accounts": accounts,
+            "account_id": account_id,
+            "txn_type": resolved_type,
+            "sort": resolved_sort,
+            "rows": rows,
+            "sparkline_month_count": len(month_keys),
+            "breadcrumbs": breadcrumbs.for_categories_index(account_id),
+        },
+    )
+
+
 @router.get("/{year:int}", response_class=HTMLResponse)
 def year_detail(request: Request, year: int, account_id: str = "") -> HTMLResponse:
     """Render one year's monthly breakdown and income/expense category drill-down.
@@ -1348,7 +1490,9 @@ def category_detail(
         "accounts": accounts,
         "account_id": account_id,
         "has_data": bool(monthly),
-        "breadcrumbs": breadcrumbs.for_category(category, account_id),
+        "breadcrumbs": breadcrumbs.for_category(
+            category, account_id, txn_type=txn_type.value
+        ),
     }
     if not monthly:
         return templates.TemplateResponse(request, "reports/category.html", context)

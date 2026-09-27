@@ -991,6 +991,51 @@ def category_movers(
     return results
 
 
+def category_recent_monthly_totals(
+    transactions: Iterable[Transaction],
+    txn_type: TransactionType,
+    today: date_,
+    months: int = 12,
+) -> tuple[list[str], dict[str, list[Decimal]]]:
+    """Return the last ``months`` calendar months' totals per category, aligned.
+
+    ``months`` counts back from (and including) ``today``'s own month,
+    oldest first — e.g. 12 months as of March 2026 spans April 2025
+    through March 2026. Every category gets a value for every returned
+    key (zero-filled), same convention as ``category_monthly_series``, so
+    a categories-index sparkline can plot any category on the same axis
+    regardless of which months it was actually active in. Raises on
+    TRANSFER, same as ``category_breakdown``.
+    """
+    if txn_type is TransactionType.TRANSFER:
+        raise ValueError("transfers have no category breakdown")
+
+    end = today.year * 12 + (today.month - 1)
+    start = end - months + 1
+    keys = []
+    for cursor in range(start, end + 1):
+        year, zero_based_month = divmod(cursor, 12)
+        keys.append(f"{year:04d}-{zero_based_month + 1:02d}")
+    key_set = set(keys)
+
+    totals: dict[str, dict[str, Decimal]] = defaultdict(
+        lambda: defaultdict(lambda: Decimal("0"))
+    )
+    for transaction in transactions:
+        if transaction.type is not txn_type:
+            continue
+        key = f"{transaction.date.year:04d}-{transaction.date.month:02d}"
+        if key not in key_set:
+            continue
+        totals[transaction.category][key] += abs(transaction.amount)
+
+    result = {
+        name: [month_totals.get(key, Decimal("0")) for key in keys]
+        for name, month_totals in totals.items()
+    }
+    return keys, result
+
+
 @dataclass
 class CategoryMoM:
     """One category's total vs. its immediately preceding calendar month.

@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% from "_category_icons.html" import category_icon %}
+{% from "reports/_category_breakdown.html" import budget_ring_cell %}
+{% from "_breadcrumb.html" import breadcrumb %}
+{% block title %}Categories — Reports — Finance Tracker{% endblock %}
+{% macro sparkline_svg(spark, txn_type) %}
+  {% if spark.has_data %}
+    <svg width="70" height="20" viewBox="0 0 {{ spark.width }} {{ spark.height }}" class="cat-index-spark">
+      <path d="{{ spark.area }}" class="bar-{{ txn_type }}"/>
+      <path d="{{ spark.line }}" class="spark-line line-{{ txn_type }}" fill="none"/>
+    </svg>
+  {% else %}
+    <span class="muted">—</span>
+  {% endif %}
+{% endmacro %}
+{% block content %}
+  {{ breadcrumb(breadcrumbs) }}
+  <h1>Categories</h1>
+  <p class="muted" style="margin-top: 0;">
+    Every {{ txn_type }} category's recent trend and budget status in one place — sort by
+    "Fastest growing" to browse for savings opportunities without already having one in mind.
+  </p>
+
+  <form method="get" class="view-options">
+    <span class="view-options-label">Type</span>
+    <select name="txn_type" onchange="this.form.submit()">
+      <option value="expense" {{ 'selected' if txn_type == 'expense' }}>Expense</option>
+      <option value="income" {{ 'selected' if txn_type == 'income' }}>Income</option>
+    </select>
+    <span class="view-options-label">Sort by</span>
+    <select name="sort" onchange="this.form.submit()">
+      <option value="growth" {{ 'selected' if sort == 'growth' }}>Fastest growing</option>
+      <option value="total" {{ 'selected' if sort == 'total' }}>Total (high to low)</option>
+      <option value="budget" {{ 'selected' if sort == 'budget' }}>Budget usage</option>
+    </select>
+    <span class="view-options-label">Account</span>
+    <select name="account_id" onchange="this.form.submit()">
+      <option value="" {{ 'selected' if not account_id }}>All accounts</option>
+      {% for account in accounts %}
+        <option value="{{ account.id }}" {{ 'selected' if account.id == account_id }}>{{ account.name }}</option>
+      {% endfor %}
+    </select>
+  </form>
+
+  {% if rows %}
+    <div class="table-scroll">
+      <table class="breakdown-table">
+        <thead>
+          <tr>
+            <th>Category</th>
+            <th>{{ sparkline_month_count }}-month trend</th>
+            <th>This month's budget</th>
+            <th>YTD vs last year</th>
+            <th>YTD total</th>
+            <th>% of {{ txn_type }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td>
+                {% if row.icon %}
+                  <span class="cat-cell-icon cat-cell-icon-{{ txn_type }}">{{ category_icon(row.icon) }}</span>
+                {% endif %}
+                <a class="table-link" href="{{ row.detail_link }}">{{ row.name }}</a>
+              </td>
+              <td>{{ sparkline_svg(row.sparkline, txn_type) }}</td>
+              <td>{{ budget_ring_cell(row.ring) }}</td>
+              <td>
+                {% if row.pct_delta is not none %}
+                  <span class="{{ 'amount-negative' if row.delta >= 0 else 'amount-positive' }}">
+                    {{ '+' if row.delta >= 0 else '' }}{{ "%.0f"|format(row.pct_delta) }}%
+                  </span>
+                {% else %}
+                  <span class="muted">new</span>
+                {% endif %}
+              </td>
+              <td>{{ "%.2f"|format(row.ytd_total) }}</td>
+              <td class="muted">{{ "%.0f"|format(row.pct_of_total) }}%</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p>No {{ txn_type }} transactions yet.</p>
+  {% endif %}
+{% endblock %}

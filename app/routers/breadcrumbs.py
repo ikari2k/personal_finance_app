@@ -76,11 +76,35 @@ def for_month(year: int, month: int, account_id: str = "") -> list[Crumb]:
     ]
 
 
-def for_category(category: str, account_id: str = "") -> list[Crumb]:
-    """Breadcrumb trail for ``/reports/category``."""
+def _categories_link(txn_type: str, account_id: str) -> str:
+    params = [f"txn_type={txn_type}"] if txn_type else []
+    if account_id:
+        params.append(f"account_id={quote(account_id)}")
+    query = "&".join(params)
+    return f"/reports/categories?{query}" if query else "/reports/categories"
+
+
+def for_category(
+    category: str, account_id: str = "", txn_type: str = ""
+) -> list[Crumb]:
+    """Breadcrumb trail for ``/reports/category``.
+
+    ``txn_type`` (when given) points the middle "Categories" crumb at
+    ``/reports/categories`` already scoped to the right income/expense
+    toggle, rather than always landing on its own default.
+    """
     return [
         Crumb("Reports", _report_link("/reports", account_id)),
+        Crumb("Categories", _categories_link(txn_type, account_id)),
         Crumb(category, None),
+    ]
+
+
+def for_categories_index(account_id: str = "") -> list[Crumb]:
+    """Breadcrumb trail for ``/reports/categories``."""
+    return [
+        Crumb("Reports", _report_link("/reports", account_id)),
+        Crumb("Categories", None),
     ]
 
 
@@ -166,6 +190,7 @@ def from_transaction_filters(
         )
 
     if has_category:
+        crumbs.append(Crumb("Categories", _categories_link(txn_type, account_id)))
         cat_url = f"/reports/category?txn_type={txn_type}&category={quote(category)}"
         if account_id:
             cat_url += f"&account_id={quote(account_id)}"
