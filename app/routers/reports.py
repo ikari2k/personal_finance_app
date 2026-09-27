@@ -26,6 +26,7 @@ from fastapi.responses import HTMLResponse
 
 from app.models.category import CategoriesByType
 from app.models.transaction import TransactionType
+from app.routers import breadcrumbs
 from app.services.aggregation import (
     CategoryMonthPoint,
     CategoryTotal,
@@ -881,6 +882,14 @@ def reports_overview(request: Request, account_id: str = "") -> HTMLResponse:
     transactions = _filter_by_account(read_ledger(), account_id)
     chart = _net_worth_chart(transactions, accounts, account_id)
     years = yearly_totals_with_yoy(transactions)
+    year_txn_links = {
+        y.year: breadcrumbs.transactions_link(
+            date_from=f"{y.year:04d}-01-01",
+            date_to=f"{y.year:04d}-12-31",
+            account_id=account_id,
+        )
+        for y in years
+    }
     return templates.TemplateResponse(
         request,
         "reports/list.html",
@@ -889,6 +898,7 @@ def reports_overview(request: Request, account_id: str = "") -> HTMLResponse:
             "chart": chart,
             "accounts": accounts,
             "account_id": account_id,
+            "year_txn_links": year_txn_links,
         },
     )
 
@@ -936,6 +946,17 @@ def year_detail(request: Request, year: int, account_id: str = "") -> HTMLRespon
     # this exact time span — the whole year for the annual breakdown
     # table, one specific month per cell in the month-to-month matrix.
     month_bounds = {key: _month_date_bounds(key) for key in month_keys}
+    month_txn_links = {
+        key: breadcrumbs.transactions_link(
+            date_from=bounds[0], date_to=bounds[1], account_id=account_id
+        )
+        for key, bounds in month_bounds.items()
+    }
+    year_txn_link = breadcrumbs.transactions_link(
+        date_from=f"{year:04d}-01-01",
+        date_to=f"{year:04d}-12-31",
+        account_id=account_id,
+    )
     return templates.TemplateResponse(
         request,
         "reports/year.html",
@@ -949,6 +970,9 @@ def year_detail(request: Request, year: int, account_id: str = "") -> HTMLRespon
             "date_from": f"{year:04d}-01-01",
             "date_to": f"{year:04d}-12-31",
             "month_bounds": month_bounds,
+            "month_txn_links": month_txn_links,
+            "year_txn_link": year_txn_link,
+            "breadcrumbs": breadcrumbs.for_year(year, account_id),
             "income_breakdown": income_breakdown,
             "expense_breakdown": expense_breakdown,
             "income_config": income_config,
@@ -1009,6 +1033,9 @@ def month_detail(
     prev_year, prev_month = _adjacent_month(year, month, -1)
     next_year, next_month = _adjacent_month(year, month, 1)
     month_date_from, month_date_to = _month_date_bounds(f"{year:04d}-{month:02d}")
+    month_txn_link = breadcrumbs.transactions_link(
+        date_from=month_date_from, date_to=month_date_to, account_id=account_id
+    )
     return templates.TemplateResponse(
         request,
         "reports/month.html",
@@ -1020,6 +1047,8 @@ def month_detail(
             "label": f"{month_name[month]} {year}",
             "date_from": month_date_from,
             "date_to": month_date_to,
+            "month_txn_link": month_txn_link,
+            "breadcrumbs": breadcrumbs.for_month(year, month, account_id),
             "spending_pie": spending_pie,
             "income_breakdown": income_breakdown,
             "expense_breakdown": expense_breakdown,
@@ -1082,6 +1111,7 @@ def category_detail(
         "accounts": accounts,
         "account_id": account_id,
         "has_data": bool(monthly),
+        "breadcrumbs": breadcrumbs.for_category(category, account_id),
     }
     if not monthly:
         return templates.TemplateResponse(request, "reports/category.html", context)

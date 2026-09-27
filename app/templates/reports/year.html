@@ -1,11 +1,14 @@
 {% extends "base.html" %}
 {% from "reports/_category_breakdown.html" import breakdown_table, month_matrix_table %}
 {% from "reports/_account_filter.html" import account_filter %}
+{% from "_breadcrumb.html" import breadcrumb %}
+{% from "_icons.html" import txn_link_icon %}
 {% block title %}{{ year }} — Reports — Finance Tracker{% endblock %}
 {% block content %}
-  <p><a href="/reports{{ '?account_id=' + account_id if account_id }}">&larr; Back to reports</a></p>
+  {{ breadcrumb(breadcrumbs) }}
   <h1>{{ year }}</h1>
   {{ account_filter(accounts, account_id) }}
+  <p><a class="cat-cta-link" href="{{ year_txn_link }}">All {{ year }} transactions &rsaquo;</a></p>
 
   <article>
     <h2>Net worth over time</h2>
@@ -22,7 +25,10 @@
         <tbody>
           {% for m in months %}
             <tr>
-              <td><a href="/reports/{{ year }}/{{ (m.key.split('-')[1])|int }}{{ '?account_id=' + account_id if account_id }}">{{ m.label }}</a></td>
+              <td>
+                <a href="/reports/{{ year }}/{{ (m.key.split('-')[1])|int }}{{ '?account_id=' + account_id if account_id }}">{{ m.label }}</a>
+                {{ txn_link_icon(month_txn_links[m.key], "View " + m.label + " transactions") }}
+              </td>
               <td class="amount-positive">{{ "%.2f"|format(m.income_total) }}</td>
               <td class="amount-negative">{{ "%.2f"|format(m.expense_total) }}</td>
               <td class="muted">{{ "%.2f"|format(m.transfer_volume) if m.transfer_volume else "—" }}</td>

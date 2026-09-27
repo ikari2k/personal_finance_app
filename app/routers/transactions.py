@@ -8,6 +8,7 @@ from fastapi.responses import HTMLResponse
 
 from app.models.category import CategoriesByType
 from app.models.transaction import Transaction, TransactionType
+from app.routers import breadcrumbs
 from app.routers.htmx_events import toast
 from app.services.aggregation import grouped_transaction_view
 from app.services.categories import category_pair_exists
@@ -298,6 +299,14 @@ def list_transactions(
         "search": resolved_search,
         "date_from": resolved_date_from,
         "date_to": resolved_date_to,
+        "breadcrumbs": breadcrumbs.from_transaction_filters(
+            account_id=resolved_account_id,
+            category=resolved_category,
+            subcategory=resolved_subcategory,
+            txn_type=resolved_txn_type,
+            date_from=resolved_date_from,
+            date_to=resolved_date_to,
+        ),
         "any_filter_active": bool(
             resolved_account_id
             or resolved_category

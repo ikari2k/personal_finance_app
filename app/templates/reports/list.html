@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "reports/_account_filter.html" import account_filter %}
+{% from "_icons.html" import txn_link_icon %}
 {% block title %}Reports — Finance Tracker{% endblock %}
 {% block content %}
   <h1>Reports</h1>
@@ -20,7 +21,10 @@
         <tbody>
           {% for y in years %}
             <tr>
-              <td><a href="/reports/{{ y.year }}{{ '?account_id=' + account_id if account_id }}">{{ y.year }}</a></td>
+              <td>
+                <a href="/reports/{{ y.year }}{{ '?account_id=' + account_id if account_id }}">{{ y.year }}</a>
+                {{ txn_link_icon(year_txn_links[y.year], "View " + y.year|string + " transactions") }}
+              </td>
               <td class="amount-positive">{{ "%.2f"|format(y.income_total) }}</td>
               <td class="amount-negative">{{ "%.2f"|format(y.expense_total) }}</td>
               <td class="muted">{{ "%.2f"|format(y.transfer_volume) if y.transfer_volume else "—" }}</td>

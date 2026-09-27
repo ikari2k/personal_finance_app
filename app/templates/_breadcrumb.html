@@ -1,0 +1,19 @@
+{# Shared breadcrumb-trail renderer — takes a list of app.routers.breadcrumbs.Crumb
+   (or anything with .label/.url), each with url=None marking a segment that
+   shouldn't be a link (typically the current page). #}
+{% macro breadcrumb(crumbs) %}
+  {% if crumbs %}
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      {% for c in crumbs %}
+        {%- if c.url -%}
+          <a href="{{ c.url }}">{{ c.label }}</a>
+        {%- elif loop.last -%}
+          <span aria-current="page">{{ c.label }}</span>
+        {%- else -%}
+          <span>{{ c.label }}</span>
+        {%- endif -%}
+        {%- if not loop.last %}<span class="breadcrumb-sep">/</span>{% endif -%}
+      {% endfor %}
+    </nav>
+  {% endif %}
+{% endmacro %}

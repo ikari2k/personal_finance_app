@@ -1,9 +1,10 @@
 {% extends "base.html" %}
 {% from "reports/_category_breakdown.html" import breakdown_table, pie_chart %}
 {% from "reports/_account_filter.html" import account_filter %}
+{% from "_breadcrumb.html" import breadcrumb %}
 {% block title %}{{ label }} — Reports — Finance Tracker{% endblock %}
 {% block content %}
-  <p><a href="/reports/{{ year }}{{ '?account_id=' + account_id if account_id }}">&larr; Back to {{ year }}</a></p>
+  {{ breadcrumb(breadcrumbs) }}
   <div class="month-nav">
     <a href="/reports/{{ prev_year }}/{{ prev_month }}{{ '?account_id=' + account_id if account_id }}" class="month-nav-prev">
       &larr; {{ prev_label }}
@@ -14,6 +15,7 @@
     </a>
   </div>
   {{ account_filter(accounts, account_id) }}
+  <p><a class="cat-cta-link" href="{{ month_txn_link }}">All {{ label }} transactions &rsaquo;</a></p>
 
   <h2>Top spending categories</h2>
   {{ pie_chart(spending_pie) }}

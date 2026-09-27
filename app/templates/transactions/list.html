@@ -1,6 +1,8 @@
 {% extends "base.html" %}
+{% from "_breadcrumb.html" import breadcrumb %}
 {% block title %}Transactions — Finance Tracker{% endblock %}
 {% block content %}
+  {{ breadcrumb(breadcrumbs) }}
   <div class="page-header-row">
     <h1>Transactions</h1>
     <div class="cta-row">

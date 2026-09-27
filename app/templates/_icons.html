@@ -39,6 +39,10 @@
 </svg>
 {% endmacro %}
 
+{% macro txn_link_icon(url, title="View transactions") %}
+<a class="row-txn-link" href="{{ url }}" title="{{ title }}">{{ search_icon() }}</a>
+{% endmacro %}
+
 {% macro warning_icon() %}
 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor"
      stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">

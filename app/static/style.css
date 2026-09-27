@@ -1388,6 +1388,54 @@ fieldset legend {
   text-decoration: underline;
 }
 
+/* Reports breadcrumb trail (app/templates/_breadcrumb.html), and its
+ * reconstruction on /transactions once a drill-down link lands there
+ * (app.routers.breadcrumbs.from_transaction_filters) — same muted-until-
+ * hovered treatment as .table-link, not a new visual language. The
+ * current/unlinked segment is bolded via [aria-current] instead of a
+ * color/weight change on a single word elsewhere in the trail. */
+.breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: var(--pico-muted-color);
+  margin-bottom: 1rem;
+}
+.breadcrumb a {
+  color: var(--pico-muted-color);
+  text-decoration: none;
+}
+.breadcrumb a:hover,
+.breadcrumb a:focus {
+  color: var(--pico-color);
+  text-decoration: underline;
+}
+.breadcrumb span[aria-current] {
+  color: var(--pico-color);
+  font-weight: 600;
+}
+.breadcrumb-sep {
+  color: var(--pico-muted-border-color);
+}
+
+/* Per-row "view these transactions" affordance — a table with no other
+ * row-level action (unlike the hover-reveal edit/delete icons elsewhere,
+ * see CLAUDE.md's row-actions convention) can show this one inline and
+ * always-visible, since there's nothing else in the row competing for
+ * the same spot. */
+.row-txn-link {
+  display: inline-flex;
+  color: var(--pico-muted-color);
+  margin-left: 0.4rem;
+  vertical-align: middle;
+}
+.row-txn-link:hover,
+.row-txn-link:focus {
+  color: var(--pico-color);
+}
+
 /* The annual category-breakdown table sits in a half-width
  * .report-columns cell, narrow enough that a long category/subcategory
  * name would otherwise wrap onto a second line and throw off row

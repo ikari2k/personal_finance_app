@@ -1,10 +1,11 @@
 {% extends "base.html" %}
 {% from "_category_icons.html" import category_icon %}
 {% from "reports/_account_filter.html" import account_filter %}
+{% from "_breadcrumb.html" import breadcrumb %}
 {% block title %}{{ category }} — Reports — Finance Tracker{% endblock %}
 {% block content %}
   {% set txn_link = "/transactions?txn_type=" + txn_type.value + "&category=" + (category | urlencode) + ("&account_id=" + account_id if account_id else "") %}
-  <p><a href="/reports{{ '?account_id=' + account_id if account_id }}">&larr; Back to reports</a></p>
+  {{ breadcrumb(breadcrumbs) }}
 
   {% if not has_data %}
     <h1>{{ category }}</h1>
