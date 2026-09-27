@@ -32,8 +32,10 @@ from app.services.aggregation import (
     CategoryTotal,
     SubcategoryMonthPoint,
     category_breakdown,
+    category_mom_deltas,
     category_monthly_series,
     category_monthly_totals,
+    category_movers,
     category_subcategory_monthly_series,
     category_subcategory_shares,
     category_totals_for_month,
@@ -49,6 +51,17 @@ from app.storage.ledger import read_ledger
 from app.templating import templates
 
 router = APIRouter(prefix="/reports", tags=["reports"])
+
+
+def _savings_rate(net_total: Decimal, income_total: Decimal) -> Decimal | None:
+    """Return ``net_total`` as a % of ``income_total``, or ``None`` if unearned.
+
+    ``None`` (rendered as "—") rather than a division-by-zero or a
+    meaningless 0% for a period with no income at all — same "nothing to
+    compare against yields None" convention as every other delta in this
+    module (e.g. ``YearlyTotal.yoy_delta``).
+    """
+    return (net_total / income_total * 100) if income_total else None
 
 
 def _month_date_bounds(key: str) -> tuple[str, str]:
@@ -204,6 +217,54 @@ def _category_month_matrix(
                     "total": sub.total,
                 }
             )
+    return rows
+
+
+def _month_breakdown_rows(
+    breakdown: list[CategoryTotal],
+    config: dict,
+    deltas: dict[str, object],
+) -> list[dict]:
+    """Build expense-by-category rows for the month drill-down's budget/MoM table.
+
+    Precomputes each row's ring geometry (``_ring_geometry``) and MoM
+    delta here rather than in the template — same "geometry is a router
+    concern, not a Jinja concern" split as ``_category_month_matrix``.
+    ``deltas`` is ``category_mom_deltas``'s result; a category/subcategory
+    missing from it (no activity in either month, or type mismatch) gets
+    ``delta=None`` rather than a KeyError.
+    """
+    rows = []
+    for category in breakdown:
+        cat_config = config.get(category.name, {})
+        cat_mom = deltas.get(category.name)
+        sub_configs = cat_config.get("subcategories", {})
+        sub_rows = []
+        for sub in category.subcategories:
+            sub_config = sub_configs.get(sub.name, {})
+            sub_rows.append(
+                {
+                    "name": sub.name,
+                    "icon": sub_config.get("icon", ""),
+                    "total": sub.total,
+                    "count": sub.count,
+                    "ring": _ring_geometry(sub.total, sub_config.get("budget")),
+                    "delta": (
+                        cat_mom.subcategory_deltas.get(sub.name) if cat_mom else None
+                    ),
+                }
+            )
+        rows.append(
+            {
+                "name": category.name,
+                "icon": cat_config.get("icon", ""),
+                "total": category.total,
+                "count": category.count,
+                "ring": _ring_geometry(category.total, cat_config.get("budget")),
+                "delta": cat_mom.delta if cat_mom else None,
+                "subcategories": sub_rows,
+            }
+        )
     return rows
 
 
@@ -875,13 +936,57 @@ def _net_worth_chart(
     )
 
 
+def _ytd_income_expense(
+    transactions: list, year: int, cutoff_month: int
+) -> tuple[Decimal, Decimal]:
+    """Return ``(income_total, expense_total)`` for Jan 1 through ``cutoff_month``.
+
+    Signed, same convention as ``YearlyTotal`` (income positive, expense
+    negative). Backs the landing page's YTD-vs-same-months-last-year hero
+    stats — same "compare like-for-like calendar span" convention as
+    ``category_detail``'s own YTD tile, generalized to the whole ledger
+    instead of one category.
+    """
+    income_total = Decimal("0")
+    expense_total = Decimal("0")
+    for transaction in transactions:
+        if transaction.date.year != year or transaction.date.month > cutoff_month:
+            continue
+        if transaction.type is TransactionType.INCOME:
+            income_total += transaction.amount
+        elif transaction.type is TransactionType.EXPENSE:
+            expense_total += transaction.amount
+    return income_total, expense_total
+
+
+def _year_stats(years: list, today: date) -> dict[int, dict]:
+    """Return per-year ``{"avg_per_month", "savings_rate"}`` for the annual table.
+
+    ``avg_per_month`` divides by the months actually elapsed for the
+    current, still-in-progress year (so it reads as a monthly run rate,
+    not diluted by months that haven't happened yet) and by 12 for every
+    completed year.
+    """
+    stats = {}
+    for y in years:
+        months_elapsed = today.month if y.year == today.year else 12
+        stats[y.year] = {
+            "avg_per_month": y.net_total / months_elapsed,
+            "savings_rate": _savings_rate(y.net_total, y.income_total),
+        }
+    return stats
+
+
 @router.get("", response_class=HTMLResponse)
 def reports_overview(request: Request, account_id: str = "") -> HTMLResponse:
     """Render the reports landing page: net worth chart + annual summary."""
     accounts = read_accounts()
     transactions = _filter_by_account(read_ledger(), account_id)
+    categories = read_categories()
+    expense_config = _category_config(categories, TransactionType.EXPENSE)
     chart = _net_worth_chart(transactions, accounts, account_id)
     years = yearly_totals_with_yoy(transactions)
+    today = date.today()
     year_txn_links = {
         y.year: breadcrumbs.transactions_link(
             date_from=f"{y.year:04d}-01-01",
@@ -890,6 +995,45 @@ def reports_overview(request: Request, account_id: str = "") -> HTMLResponse:
         )
         for y in years
     }
+    movers = [
+        m
+        for m in category_movers(transactions, TransactionType.EXPENSE, today)
+        if m.delta is not None
+    ][:5]
+    movers_txn_links = {
+        m.name: breadcrumbs.transactions_link(
+            category=m.name,
+            txn_type=TransactionType.EXPENSE.value,
+            account_id=account_id,
+        )
+        for m in movers
+    }
+
+    this_income, this_expense = _ytd_income_expense(
+        transactions, today.year, today.month
+    )
+    last_income, last_expense = _ytd_income_expense(
+        transactions, today.year - 1, today.month
+    )
+    this_net = this_income + this_expense
+    last_net = last_income + last_expense
+    this_savings_rate = _savings_rate(this_net, this_income)
+    last_savings_rate = _savings_rate(last_net, last_income)
+    ytd_stats = {
+        "income_total": this_income,
+        "expense_total": this_expense,
+        "net_total": this_net,
+        "savings_rate": this_savings_rate,
+        "income_delta": this_income - last_income if last_income else None,
+        "expense_delta": this_expense - last_expense if last_expense else None,
+        "net_delta": this_net - last_net if last_income or last_expense else None,
+        "savings_rate_delta": (
+            this_savings_rate - last_savings_rate
+            if this_savings_rate is not None and last_savings_rate is not None
+            else None
+        ),
+    }
+
     return templates.TemplateResponse(
         request,
         "reports/list.html",
@@ -899,6 +1043,12 @@ def reports_overview(request: Request, account_id: str = "") -> HTMLResponse:
             "accounts": accounts,
             "account_id": account_id,
             "year_txn_links": year_txn_links,
+            "year_stats": _year_stats(years, today),
+            "movers": movers,
+            "movers_txn_links": movers_txn_links,
+            "expense_config": expense_config,
+            "ytd_stats": ytd_stats,
+            "current_year": today.year,
         },
     )
 
@@ -1036,6 +1186,87 @@ def month_detail(
     month_txn_link = breadcrumbs.transactions_link(
         date_from=month_date_from, date_to=month_date_to, account_id=account_id
     )
+
+    by_key = {m.key: m for m in monthly_totals_with_mom(transactions)}
+    zero_month = {
+        "income_total": Decimal("0"),
+        "expense_total": Decimal("0"),
+        "net_total": Decimal("0"),
+    }
+    current_month = by_key.get(f"{year:04d}-{month:02d}")
+    previous_month = by_key.get(f"{prev_year:04d}-{prev_month:02d}")
+    current_stats = (
+        {
+            "income_total": current_month.income_total,
+            "expense_total": current_month.expense_total,
+            "net_total": current_month.net_total,
+        }
+        if current_month
+        else zero_month
+    )
+    previous_stats = (
+        {
+            "income_total": previous_month.income_total,
+            "expense_total": previous_month.expense_total,
+            "net_total": previous_month.net_total,
+        }
+        if previous_month
+        else zero_month
+    )
+    current_savings_rate = _savings_rate(
+        current_stats["net_total"], current_stats["income_total"]
+    )
+    previous_savings_rate = _savings_rate(
+        previous_stats["net_total"], previous_stats["income_total"]
+    )
+    month_stats = {
+        "income_total": current_stats["income_total"],
+        "expense_total": current_stats["expense_total"],
+        "net_total": current_stats["net_total"],
+        "savings_rate": current_savings_rate,
+        "income_delta": (
+            current_stats["income_total"] - previous_stats["income_total"]
+            if previous_month
+            else None
+        ),
+        "expense_delta": (
+            current_stats["expense_total"] - previous_stats["expense_total"]
+            if previous_month
+            else None
+        ),
+        "net_delta": (
+            current_stats["net_total"] - previous_stats["net_total"]
+            if previous_month
+            else None
+        ),
+        "savings_rate_delta": (
+            current_savings_rate - previous_savings_rate
+            if current_savings_rate is not None and previous_savings_rate is not None
+            else None
+        ),
+    }
+
+    mom_deltas = category_mom_deltas(transactions, year, month, TransactionType.EXPENSE)
+    movers = sorted(
+        (
+            {"name": cat.name, "delta": mom_deltas[cat.name].delta}
+            for cat in expense_breakdown
+            if cat.name in mom_deltas
+        ),
+        key=lambda m: abs(m["delta"]),
+        reverse=True,
+    )[:5]
+    movers_txn_links = {
+        m["name"]: breadcrumbs.transactions_link(
+            category=m["name"],
+            txn_type=TransactionType.EXPENSE.value,
+            date_from=month_date_from,
+            date_to=month_date_to,
+            account_id=account_id,
+        )
+        for m in movers
+    }
+
     return templates.TemplateResponse(
         request,
         "reports/month.html",
@@ -1054,6 +1285,12 @@ def month_detail(
             "expense_breakdown": expense_breakdown,
             "income_config": income_config,
             "expense_config": expense_config,
+            "expense_month_rows": _month_breakdown_rows(
+                expense_breakdown, expense_config, mom_deltas
+            ),
+            "month_stats": month_stats,
+            "movers": movers,
+            "movers_txn_links": movers_txn_links,
             "prev_year": prev_year,
             "prev_month": prev_month,
             "prev_label": f"{month_name[prev_month]} {prev_year}",
@@ -1154,6 +1391,37 @@ def category_detail(
         max(monthly, key=lambda p: p.total) if any(p.total for p in monthly) else None
     )
 
+    this_year_count = sum(p.count for p in this_year_points)
+    last_year_same_span_count = sum(
+        p.count
+        for p in monthly
+        if p.key.startswith(f"{today.year - 1:04d}-")
+        and int(p.key.split("-")[1]) <= today.month
+    )
+    this_year_avg_txn = this_year_total / this_year_count if this_year_count else None
+    last_year_avg_txn = (
+        last_year_same_span_total / last_year_same_span_count
+        if last_year_same_span_count
+        else None
+    )
+    avg_txn_delta = (
+        this_year_avg_txn - last_year_avg_txn
+        if this_year_avg_txn is not None and last_year_avg_txn is not None
+        else None
+    )
+
+    budget_streak = None
+    if config["budget"]:
+        last_12 = monthly[-12:]
+        dots = [
+            "under" if point.total <= config["budget"] else "over" for point in last_12
+        ]
+        budget_streak = {
+            "dots": dots,
+            "under_count": dots.count("under"),
+            "total_count": len(dots),
+        }
+
     sub_months, sub_series = category_subcategory_monthly_series(
         transactions, category, txn_type, today=today
     )
@@ -1205,6 +1473,19 @@ def category_detail(
             "this_year_shares": category_subcategory_shares(
                 transactions, category, txn_type, year=today.year
             ),
+            "avg_transaction_size": (
+                all_time_total / all_time_count if all_time_count else None
+            ),
+            "avg_txn_delta": avg_txn_delta,
+            "this_year_txns_per_month": (
+                this_year_count / len(this_year_points) if this_year_points else 0
+            ),
+            "last_year_txns_per_month": (
+                last_year_same_span_count / len(this_year_points)
+                if this_year_points
+                else 0
+            ),
+            "budget_streak": budget_streak,
         }
     )
     return templates.TemplateResponse(request, "reports/category.html", context)

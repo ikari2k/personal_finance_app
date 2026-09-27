@@ -1,7 +1,8 @@
 {% extends "base.html" %}
-{% from "reports/_category_breakdown.html" import breakdown_table, pie_chart %}
+{% from "reports/_category_breakdown.html" import breakdown_table, expense_month_breakdown_table, pie_chart %}
 {% from "reports/_account_filter.html" import account_filter %}
 {% from "_breadcrumb.html" import breadcrumb %}
+{% from "_category_icons.html" import category_icon %}
 {% block title %}{{ label }} — Reports — Finance Tracker{% endblock %}
 {% block content %}
   {{ breadcrumb(breadcrumbs) }}
@@ -17,6 +18,79 @@
   {{ account_filter(accounts, account_id) }}
   <p><a class="cat-cta-link" href="{{ month_txn_link }}">All {{ label }} transactions &rsaquo;</a></p>
 
+  <div class="dash-grid" style="margin-bottom: 1.5rem;">
+    <div class="dash-widget dash-widget-bordered dash-span-3">
+      <div class="dash-widget-head"><span class="dash-widget-title">Income</span></div>
+      <div class="cat-stat-number">{{ "%.2f"|format(month_stats.income_total) }}</div>
+      {% if month_stats.income_delta is not none %}
+        <div class="cat-stat-delta {{ 'up' if month_stats.income_delta >= 0 else 'down' }}">
+          {{ '▲' if month_stats.income_delta >= 0 else '▼' }} {{ '+' if month_stats.income_delta >= 0 else '' }}{{ "%.2f"|format(month_stats.income_delta) }}
+          <span class="muted">vs {{ prev_label }}</span>
+        </div>
+      {% endif %}
+    </div>
+    <div class="dash-widget dash-widget-bordered dash-span-3">
+      <div class="dash-widget-head"><span class="dash-widget-title">Expenses</span></div>
+      <div class="cat-stat-number">{{ "%.2f"|format(month_stats.expense_total|abs) }}</div>
+      {% if month_stats.expense_delta is not none %}
+        {% set expense_rising = month_stats.expense_delta < 0 %}
+        <div class="cat-stat-delta {{ 'down' if expense_rising else 'up' }}">
+          {{ '▲' if expense_rising else '▼' }} {{ "%.2f"|format(month_stats.expense_delta|abs) }}
+          <span class="muted">vs {{ prev_label }}</span>
+        </div>
+      {% endif %}
+    </div>
+    <div class="dash-widget dash-widget-bordered dash-span-3">
+      <div class="dash-widget-head"><span class="dash-widget-title">Net</span></div>
+      <div class="cat-stat-number {{ 'amount-negative' if month_stats.net_total < 0 else 'amount-positive' }}">{{ "%.2f"|format(month_stats.net_total) }}</div>
+      {% if month_stats.net_delta is not none %}
+        <div class="cat-stat-delta {{ 'up' if month_stats.net_delta >= 0 else 'down' }}">
+          {{ '▲' if month_stats.net_delta >= 0 else '▼' }} {{ '+' if month_stats.net_delta >= 0 else '' }}{{ "%.2f"|format(month_stats.net_delta) }}
+          <span class="muted">vs {{ prev_label }}</span>
+        </div>
+      {% endif %}
+    </div>
+    <div class="dash-widget dash-widget-bordered dash-span-3">
+      <div class="dash-widget-head"><span class="dash-widget-title">Savings rate</span></div>
+      {% if month_stats.savings_rate is not none %}
+        <div class="cat-stat-number">{{ "%.1f"|format(month_stats.savings_rate) }}%</div>
+        {% if month_stats.savings_rate_delta is not none %}
+          <div class="cat-stat-delta {{ 'up' if month_stats.savings_rate_delta >= 0 else 'down' }}">
+            {{ '▲' if month_stats.savings_rate_delta >= 0 else '▼' }} {{ '+' if month_stats.savings_rate_delta >= 0 else '' }}{{ "%.1f"|format(month_stats.savings_rate_delta) }}pp
+            <span class="muted">vs {{ prev_label }}</span>
+          </div>
+        {% endif %}
+      {% else %}
+        <div class="cat-stat-number">—</div>
+        <div class="cat-stat-sub">No income this month</div>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if movers %}
+    <h2 style="margin-bottom: 0.15rem;">Biggest movers this month</h2>
+    <p class="muted" style="margin-top: 0;">Expense categories with the largest change vs. {{ prev_label }}.</p>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Category</th><th>Change</th></tr></thead>
+        <tbody>
+          {% for m in movers %}
+            {% set icon = expense_config.get(m.name, {}).get('icon', '') %}
+            <tr>
+              <td>
+                {% if icon %}<span class="cat-cell-icon cat-cell-icon-expense">{{ category_icon(icon) }}</span>{% endif %}
+                <a class="table-link" href="{{ movers_txn_links[m.name] }}">{{ m.name }}</a>
+              </td>
+              <td class="{{ 'amount-negative' if m.delta >= 0 else 'amount-positive' }}">
+                {{ '+' if m.delta >= 0 else '' }}{{ "%.2f"|format(m.delta) }}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+
   <h2>Top spending categories</h2>
   {{ pie_chart(spending_pie) }}
 
@@ -27,7 +101,7 @@
     </div>
     <div>
       <h2>Expense by category</h2>
-      {{ breakdown_table(expense_breakdown, expense_config, "expense", date_from, date_to, account_id) }}
+      {{ expense_month_breakdown_table(expense_month_rows, date_from, date_to, account_id) }}
     </div>
   </div>
 {% endblock %}

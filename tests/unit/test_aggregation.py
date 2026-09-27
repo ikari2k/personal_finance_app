@@ -9,8 +9,10 @@ from app.models.account import Account
 from app.models.transaction import Transaction, TransactionType
 from app.services.aggregation import (
     category_breakdown,
+    category_mom_deltas,
     category_monthly_series,
     category_monthly_totals,
+    category_movers,
     category_subcategory_monthly_series,
     category_subcategory_shares,
     category_yearly_series,
@@ -1255,3 +1257,138 @@ def test_category_subcategory_monthly_series_ignores_other_categories_and_types(
 
     assert months[0].total == Decimal("0")
     assert series == []
+
+
+def test_category_movers_raises_for_transfer_type():
+    with pytest.raises(ValueError):
+        category_movers([], TransactionType.TRANSFER, today=date(2026, 6, 1))
+
+
+def test_category_movers_ranks_by_ytd_vs_same_months_last_year():
+    txns = [
+        # Groceries: Jan-Jun 2025 = 100, Jan-Jun 2026 = 180 -> delta +80
+        _txn(
+            id="g25",
+            date=date(2025, 3, 1),
+            category="Groceries",
+            amount=Decimal("-100"),
+        ),
+        _txn(
+            id="g26",
+            date=date(2026, 3, 1),
+            category="Groceries",
+            amount=Decimal("-180"),
+        ),
+        # Dining: Jan-Jun 2025 = 50, Jan-Jun 2026 = 30 -> delta -20
+        _txn(id="d25", date=date(2025, 2, 1), category="Dining", amount=Decimal("-50")),
+        _txn(id="d26", date=date(2026, 2, 1), category="Dining", amount=Decimal("-30")),
+        # Outside the Jan-Jun cutoff, must not count towards either total
+        _txn(
+            id="g25b",
+            date=date(2025, 9, 1),
+            category="Groceries",
+            amount=Decimal("-999"),
+        ),
+    ]
+
+    movers = category_movers(txns, TransactionType.EXPENSE, today=date(2026, 6, 15))
+
+    by_name = {m.name: m for m in movers}
+    assert by_name["Groceries"].ytd_total == Decimal("180")
+    assert by_name["Groceries"].prior_total == Decimal("100")
+    assert by_name["Groceries"].delta == Decimal("80")
+    assert by_name["Dining"].delta == Decimal("-20")
+    assert [m.name for m in movers] == ["Groceries", "Dining"]
+
+
+def test_category_movers_new_category_has_no_prior_total_or_delta():
+    txns = [_txn(date=date(2026, 1, 5), category="Pets", amount=Decimal("-40"))]
+
+    movers = category_movers(txns, TransactionType.EXPENSE, today=date(2026, 6, 1))
+
+    [pets] = movers
+    assert pets.ytd_total == Decimal("40")
+    assert pets.prior_total is None
+    assert pets.delta is None
+    assert pets.pct_delta is None
+
+
+def test_category_mom_deltas_raises_for_transfer_type():
+    with pytest.raises(ValueError):
+        category_mom_deltas([], 2026, 6, TransactionType.TRANSFER)
+
+
+def test_category_mom_deltas_compares_to_immediately_preceding_month():
+    txns = [
+        _txn(
+            id="a", date=date(2026, 8, 1), category="Groceries", amount=Decimal("-100")
+        ),
+        _txn(
+            id="b", date=date(2026, 9, 1), category="Groceries", amount=Decimal("-150")
+        ),
+    ]
+
+    deltas = category_mom_deltas(txns, 2026, 9, TransactionType.EXPENSE)
+
+    assert deltas["Groceries"].delta == Decimal("50")
+
+
+def test_category_mom_deltas_handles_year_boundary():
+    txns = [
+        _txn(
+            id="a", date=date(2025, 12, 1), category="Groceries", amount=Decimal("-100")
+        ),
+        _txn(
+            id="b", date=date(2026, 1, 1), category="Groceries", amount=Decimal("-80")
+        ),
+    ]
+
+    deltas = category_mom_deltas(txns, 2026, 1, TransactionType.EXPENSE)
+
+    assert deltas["Groceries"].delta == Decimal("-20")
+
+
+def test_category_mom_deltas_includes_subcategory_deltas_and_skips_blank():
+    txns = [
+        _txn(
+            id="a",
+            date=date(2026, 8, 1),
+            category="Groceries",
+            subcategory="Supermarket",
+            amount=Decimal("-100"),
+        ),
+        _txn(
+            id="b",
+            date=date(2026, 9, 1),
+            category="Groceries",
+            subcategory="Supermarket",
+            amount=Decimal("-130"),
+        ),
+        _txn(
+            id="c",
+            date=date(2026, 9, 1),
+            category="Groceries",
+            subcategory="",
+            amount=Decimal("-10"),
+        ),
+    ]
+
+    deltas = category_mom_deltas(txns, 2026, 9, TransactionType.EXPENSE)
+
+    assert deltas["Groceries"].subcategory_deltas == {"Supermarket": Decimal("30")}
+    assert deltas["Groceries"].delta == Decimal("40")
+
+
+def test_category_mom_deltas_missing_side_treated_as_zero():
+    # Active in September (the "current" month) but not August (the
+    # "previous" one) -- the missing prior-month side should read as 0,
+    # not be silently omitted from the result.
+    txns = [
+        _txn(
+            id="a", date=date(2026, 9, 1), category="Groceries", amount=Decimal("-100")
+        ),
+    ]
+
+    deltas = category_mom_deltas(txns, 2026, 9, TransactionType.EXPENSE)
+
+    assert deltas["Groceries"].delta == Decimal("100")

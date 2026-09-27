@@ -92,6 +92,94 @@
   {% endif %}
 {% endmacro %}
 
+{#
+  The month drill-down's expense-by-category table gets two columns the
+  plain ``breakdown_table`` above doesn't: budget utilization (a ring,
+  same geometry/markup as the year page's own month-matrix cells) and
+  the change vs. the immediately preceding month (``app.routers.reports
+  ._month_breakdown_rows`` precomputes both per row — ring geometry and
+  a delta are a router concern, not a Jinja one, same split as
+  ``month_matrix_table`` below). Expense-only: budgets and a
+  month-over-month "did I overspend" signal are both meaningless for
+  income, so the month page's income breakdown keeps using the plain
+  ``breakdown_table`` above instead.
+#}
+{% macro expense_month_breakdown_table(rows, date_from, date_to, account_id="") %}
+  {% if rows %}
+    <div class="table-scroll">
+      <table class="breakdown-table">
+        <thead>
+          <tr><th>Category</th><th>Total</th><th># Txns</th><th>Budget</th><th>vs last month</th></tr>
+        </thead>
+        <tbody>
+          {% for cat in rows %}
+            <tr>
+              <td>
+                {% if cat.icon %}
+                  <span class="cat-cell-icon cat-cell-icon-expense">{{ category_icon(cat.icon) }}</span>
+                {% endif %}
+                <a class="table-link" href="{{ _txn_link('expense', cat.name, '', date_from, date_to, account_id) }}">{{ cat.name }}</a>
+                <a class="cat-trend-link" title="View {{ cat.name }} over time"
+                   href="/reports/category?txn_type=expense&category={{ cat.name | urlencode }}{{ '&account_id=' + account_id if account_id }}">
+                  {{ category_icon('trending-up') }}
+                </a>
+              </td>
+              <td>{{ "%.2f"|format(cat.total) }}</td>
+              <td>{{ cat.count }}</td>
+              <td>{{ budget_ring_cell(cat.ring) }}</td>
+              <td>{{ mom_delta_cell(cat.delta) }}</td>
+            </tr>
+            {% for sub in cat.subcategories %}
+              <tr class="subcategory-row">
+                <td class="indent">
+                  {% if sub.icon %}
+                    <span class="cat-cell-icon cat-cell-icon-expense">{{ category_icon(sub.icon) }}</span>
+                  {% endif %}
+                  <a class="table-link" href="{{ _txn_link('expense', cat.name, sub.name, date_from, date_to, account_id) }}">{{ sub.name }}</a>
+                </td>
+                <td>{{ "%.2f"|format(sub.total) }}</td>
+                <td>{{ sub.count }}</td>
+                <td>{{ budget_ring_cell(sub.ring) }}</td>
+                <td>{{ mom_delta_cell(sub.delta) }}</td>
+              </tr>
+            {% endfor %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p>No data.</p>
+  {% endif %}
+{% endmacro %}
+
+{% macro budget_ring_cell(ring) %}
+  {% if ring %}
+    <span class="utilization utilization-{{ ring.tier }}">
+      <svg width="16" height="16" viewBox="0 0 20 20" class="utilization-ring">
+        <circle cx="10" cy="10" r="7" class="ring-track"/>
+        <circle cx="10" cy="10" r="7" class="ring-fill"
+                stroke-dasharray="{{ ring.dash }} {{ ring.gap }}"
+                transform="rotate(-90 10 10)">
+          <title>{{ ring.pct_label }} of budget</title>
+        </circle>
+      </svg>
+      <span class="utilization-pct">{{ ring.pct_label }}</span>
+    </span>
+  {% else %}
+    <span class="muted">—</span>
+  {% endif %}
+{% endmacro %}
+
+{% macro mom_delta_cell(delta) %}
+  {% if delta is not none %}
+    <span class="{{ 'amount-negative' if delta < 0 else 'amount-positive' }}">
+      {{ '+' if delta >= 0 else '' }}{{ "%.2f"|format(delta) }}
+    </span>
+  {% else %}
+    <span class="muted">—</span>
+  {% endif %}
+{% endmacro %}
+
 {% macro month_matrix_table(rows, month_labels, txn_type, date_from, date_to, month_bounds, account_id="") %}
   {% if rows %}
     <div class="table-scroll">

@@ -1360,6 +1360,28 @@ fieldset legend {
   font-weight: 600;
 }
 
+/* Category detail's budget-adherence streak — one dot per of the last
+ * 12 months, oldest to newest. Only two states (unlike the ring's three
+ * tiers above): a streak either was or wasn't under budget that month,
+ * so it reuses the same under/over colors rather than a third amber. */
+.streak-strip {
+  display: flex;
+  gap: 0.3rem;
+  margin-top: 0.5rem;
+}
+.streak-dot {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  background: var(--pico-muted-border-color);
+}
+.streak-dot.under {
+  background: var(--pico-ins-color);
+}
+.streak-dot.over {
+  background: var(--pico-del-color);
+}
+
 .utilization-legend-ring {
   display: inline-block;
   width: 0.65rem;

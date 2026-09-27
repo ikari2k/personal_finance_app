@@ -918,3 +918,151 @@ def category_subcategory_shares(
         key=lambda s: s.total,
         reverse=True,
     )
+
+
+@dataclass
+class CategoryMover:
+    """One category's year-to-date total vs. the same months last year.
+
+    Same "compare like-for-like calendar span" convention the category
+    detail page's own YTD tile already uses (see
+    ``app.routers.reports.category_detail``'s ``ytd_delta``), generalized
+    across every category at once — this is what lets the reports
+    landing page answer "which categories moved the most this year, in
+    dollars" without already having one category in mind. ``prior_total``
+    is ``None`` when the category had no activity in the same span last
+    year (nothing to compare against, so ``delta``/``pct_delta`` are also
+    ``None`` — a brand-new category doesn't get a misleading "infinite"
+    percentage).
+    """
+
+    name: str
+    ytd_total: Decimal
+    prior_total: Decimal | None
+    delta: Decimal | None
+    pct_delta: float | None
+
+
+def category_movers(
+    transactions: Iterable[Transaction], txn_type: TransactionType, today: date_
+) -> list[CategoryMover]:
+    """Return every category's YTD total vs. the same months last year, ranked by delta.
+
+    Sorted by ``delta`` descending (categories with no comparable
+    prior-year data sort last, since there's nothing to rank them by).
+    ``today`` is the as-of date (injected, not read internally — same
+    convention as ``_full_ledger_month_range``), defining both "year to
+    date" and "the same months" cutoff. Raises on ``TRANSFER``, same as
+    ``category_breakdown``.
+    """
+    if txn_type is TransactionType.TRANSFER:
+        raise ValueError("transfers have no category breakdown")
+
+    this_year, cutoff_month = today.year, today.month
+    ytd_totals: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
+    prior_totals: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
+    prior_seen: set[str] = set()
+    for transaction in transactions:
+        if transaction.type is not txn_type or transaction.date.month > cutoff_month:
+            continue
+        if transaction.date.year == this_year:
+            ytd_totals[transaction.category] += abs(transaction.amount)
+        elif transaction.date.year == this_year - 1:
+            prior_totals[transaction.category] += abs(transaction.amount)
+            prior_seen.add(transaction.category)
+
+    names = set(ytd_totals) | prior_seen
+    results = []
+    for name in names:
+        ytd_total = ytd_totals.get(name, Decimal("0"))
+        prior_total = prior_totals[name] if name in prior_seen else None
+        delta = ytd_total - prior_total if prior_total is not None else None
+        pct_delta = float(delta / prior_total * 100) if prior_total else None
+        results.append(
+            CategoryMover(
+                name=name,
+                ytd_total=ytd_total,
+                prior_total=prior_total,
+                delta=delta,
+                pct_delta=pct_delta,
+            )
+        )
+    results.sort(key=lambda m: (m.delta is None, -(m.delta or Decimal("0"))))
+    return results
+
+
+@dataclass
+class CategoryMoM:
+    """One category's total vs. its immediately preceding calendar month.
+
+    ``delta`` is signed (a decrease is negative) — same "plain
+    total-vs-prior-period" convention as ``CategoryTotal.yoy_delta``, one
+    rung down in timescale. ``subcategory_deltas`` maps subcategory name
+    to its own signed delta (a blank subcategory is excluded, same as
+    ``CategoryTotal.subcategories``) — computing this alongside the
+    category-level delta is effectively free (both months' transactions
+    are already being walked), unlike the YoY case where subcategory-level
+    comparison was deliberately skipped as a second nested pass (see
+    ``category_breakdown``'s docstring).
+    """
+
+    delta: Decimal
+    subcategory_deltas: dict[str, Decimal]
+
+
+def category_mom_deltas(
+    transactions: Iterable[Transaction],
+    year: int,
+    month: int,
+    txn_type: TransactionType,
+) -> dict[str, CategoryMoM]:
+    """Return ``{category: CategoryMoM}`` for one calendar month vs. the one before it.
+
+    Handles the year boundary itself (January's previous month is
+    December of the prior year) — same predicate-based reuse of
+    ``_category_totals`` as ``category_totals_for_month``. A category
+    present in only one of the two months still gets an entry (the
+    missing side treated as zero), so a brand-new or fully-dropped
+    category still shows up as a real swing rather than being silently
+    absent. Raises on ``TRANSFER``, same as ``category_breakdown``.
+    """
+    if txn_type is TransactionType.TRANSFER:
+        raise ValueError("transfers have no category breakdown")
+
+    prev_year, prev_month = (year, month - 1) if month > 1 else (year - 1, 12)
+    transactions = list(transactions)
+    current = _category_totals(
+        transactions, txn_type, lambda d: d.year == year and d.month == month
+    )
+    previous = _category_totals(
+        transactions, txn_type, lambda d: d.year == prev_year and d.month == prev_month
+    )
+
+    def _totals(
+        buckets: dict[str, dict[str, _CategoryAccumulator]],
+    ) -> dict[str, Decimal]:
+        return {
+            name: sum((bucket.total for bucket in subs.values()), Decimal("0"))
+            for name, subs in buckets.items()
+        }
+
+    current_totals = _totals(current)
+    previous_totals = _totals(previous)
+    names = set(current_totals) | set(previous_totals)
+
+    result = {}
+    for name in names:
+        cur_subs = current.get(name, {})
+        prev_subs = previous.get(name, {})
+        sub_names = (set(cur_subs) | set(prev_subs)) - {""}
+        subcategory_deltas = {
+            sub: cur_subs.get(sub, _CategoryAccumulator()).total
+            - prev_subs.get(sub, _CategoryAccumulator()).total
+            for sub in sub_names
+        }
+        result[name] = CategoryMoM(
+            delta=current_totals.get(name, Decimal("0"))
+            - previous_totals.get(name, Decimal("0")),
+            subcategory_deltas=subcategory_deltas,
+        )
+    return result
