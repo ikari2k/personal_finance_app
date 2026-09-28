@@ -170,9 +170,17 @@
   {% endif %}
 {% endmacro %}
 
+{#
+  Expense-only (this whole table is), so unlike the plain sign-based
+  coloring on the YoY delta column above (shared by both income and
+  expense breakdown tables, where "more" is ambiguous without knowing
+  the type), a bigger number here is unambiguously spending *more* —
+  red for an increase, green for a decrease, same sense as the
+  landing/monthly "Biggest movers" lists' own delta coloring.
+#}
 {% macro mom_delta_cell(delta) %}
   {% if delta is not none %}
-    <span class="{{ 'amount-negative' if delta < 0 else 'amount-positive' }}">
+    <span class="{{ 'amount-negative' if delta >= 0 else 'amount-positive' }}">
       {{ '+' if delta >= 0 else '' }}{{ "%.2f"|format(delta) }}
     </span>
   {% else %}
