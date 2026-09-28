@@ -158,13 +158,25 @@ def _ring_geometry(amount: Decimal, budget: Decimal | None) -> dict | None:
 def _month_cells(
     month_amounts: dict[str, Decimal], budget: Decimal | None, month_keys: list[str]
 ) -> list[dict]:
-    """Build one row's per-month cells: an amount plus ring geometry, if budgeted."""
-    cells = []
-    for key in month_keys:
-        amount = month_amounts.get(key, Decimal("0"))
-        cells.append(
-            {"key": key, "amount": amount, "ring": _ring_geometry(amount, budget)}
-        )
+    """Build one row's per-month cells: an amount, ring geometry, and extreme marking.
+
+    ``extreme`` is ``"max"``/``"min"`` on the row's single highest/lowest
+    month (the first chronological occurrence if there's a tie), or
+    ``None`` on every other cell — including every cell when the row
+    doesn't vary at all (a flat or all-zero row has no real "extreme" to
+    call out). Lets the month-matrix table highlight each category's
+    best/worst month without a reader having to scan every cell by eye.
+    """
+    cells = [
+        {"key": key, "amount": month_amounts.get(key, Decimal("0")), "extreme": None}
+        for key in month_keys
+    ]
+    amounts = [cell["amount"] for cell in cells]
+    if amounts and max(amounts) != min(amounts):
+        cells[amounts.index(max(amounts))]["extreme"] = "max"
+        cells[amounts.index(min(amounts))]["extreme"] = "min"
+    for cell in cells:
+        cell["ring"] = _ring_geometry(cell["amount"], budget)
     return cells
 
 

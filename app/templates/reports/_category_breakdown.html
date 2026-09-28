@@ -213,9 +213,12 @@
               </td>
               {% for cell in row.monthly %}
                 {% set bounds = month_bounds[cell.key] %}
-                <td class="budget-cell">
+                <td class="budget-cell{{ ' month-extreme-' + cell.extreme if cell.extreme }}">
                   <span class="budget-cell-row">
                     <a class="table-link budget-amount" href="{{ _txn_link(txn_type, row.category, row_subcategory, bounds[0], bounds[1], account_id) }}">{{ "%.2f"|format(cell.amount) if cell.amount else "—" }}</a>
+                    {% if cell.extreme %}
+                      <span class="month-extreme-badge" title="{{ row.name }}&#8217;s {{ 'highest' if cell.extreme == 'max' else 'lowest' }} month this year">{{ '▲' if cell.extreme == 'max' else '▼' }}</span>
+                    {% endif %}
                     {% if cell.ring %}
                       <span class="utilization utilization-{{ cell.ring.tier }}">
                         <svg width="16" height="16" viewBox="0 0 20 20" class="utilization-ring">

@@ -1329,6 +1329,25 @@ fieldset legend {
   white-space: nowrap;
 }
 
+/* Each category/subcategory row's single highest/lowest month
+ * (app.routers.reports._month_cells' "extreme" marking) — reuses
+ * Pico's own mark/highlight tokens (light/dark theme aware already)
+ * rather than red/green, since "this was the extreme month" isn't a
+ * good/bad judgment the way a budget ring or a MoM delta is. Max and
+ * min share the same tint; only the small ▲/▼ badge (with its own
+ * tooltip) tells them apart. */
+.month-extreme-max .budget-amount,
+.month-extreme-min .budget-amount {
+  background-color: var(--pico-mark-background-color);
+  color: var(--pico-mark-color);
+  padding: 0.1rem 0.3rem;
+  border-radius: var(--pico-border-radius);
+}
+.month-extreme-badge {
+  font-size: 0.68rem;
+  color: var(--pico-muted-color);
+}
+
 /* Amount and its ring/percentage sit on one line, not stacked — a
  * wider cell than a plain amount-only column, which is exactly what
  * .table-scroll (already wrapping this table) and the sticky category
