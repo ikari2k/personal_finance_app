@@ -18,31 +18,54 @@
   {{ account_filter(accounts, account_id) }}
   <p><a class="cat-cta-link" href="{{ year_txn_link }}">All {{ year }} transactions &rsaquo;</a></p>
 
-  <article>
-    <h2 style="margin-bottom: 0.15rem;">Average daily spend</h2>
-    <p class="muted" style="margin-top: 0;">
-      Rolling averages as of {{ rolling_average_as_of.strftime("%b %-d, %Y") }}{{ " (year in progress)" if year_in_progress else "" }}.
-    </p>
-    <div class="dash-rolling-avg-row">
-      {% for row in rolling_averages %}
-        <div class="dash-rolling-avg-tile">
-          <span class="dash-rolling-avg-label">{{ row.days }} days</span>
-          {% if row.value is not none %}
-            <span class="dash-rolling-avg-value">{{ "%.2f"|format(row.value) }}<span class="dash-rolling-avg-unit">/day</span></span>
-          {% else %}
-            <span class="dash-rolling-avg-value muted">—</span>
-          {% endif %}
+  <div class="dash-grid" style="margin-bottom: 1.5rem;">
+    <div class="dash-widget dash-widget-bordered dash-span-3">
+      <div class="dash-widget-head"><span class="dash-widget-title">Income</span></div>
+      <div class="cat-stat-number">{{ "%.2f"|format(year_stats.income_total) }}</div>
+      {% if year_stats.income_delta is not none %}
+        <div class="cat-stat-delta {{ 'up' if year_stats.income_delta >= 0 else 'down' }}">
+          {{ '▲' if year_stats.income_delta >= 0 else '▼' }} {{ '+' if year_stats.income_delta >= 0 else '' }}{{ "%.2f"|format(year_stats.income_delta) }}
+          <span class="muted">vs {{ year - 1 }}</span>
         </div>
-      {% endfor %}
+      {% endif %}
     </div>
-    {% if rolling_average_trend_pct is not none %}
-      <div class="dash-rolling-avg-trend {{ 'down' if rolling_average_trend_pct >= 0 else 'up' }}">
-        {{ '▲' if rolling_average_trend_pct >= 0 else '▼' }}
-        Recent {{ rolling_averages[0].days }}-day pace is {{ "%.0f"|format(rolling_average_trend_pct|abs) }}%
-        {{ 'above' if rolling_average_trend_pct >= 0 else 'below' }} the {{ rolling_averages[-1].days }}-day average
-      </div>
-    {% endif %}
-  </article>
+    <div class="dash-widget dash-widget-bordered dash-span-3">
+      <div class="dash-widget-head"><span class="dash-widget-title">Expenses</span></div>
+      <div class="cat-stat-number">{{ "%.2f"|format(year_stats.expense_total|abs) }}</div>
+      {% if year_stats.expense_delta is not none %}
+        {% set expense_rising = year_stats.expense_delta < 0 %}
+        <div class="cat-stat-delta {{ 'down' if expense_rising else 'up' }}">
+          {{ '▲' if expense_rising else '▼' }} {{ "%.2f"|format(year_stats.expense_delta|abs) }}
+          <span class="muted">vs {{ year - 1 }}</span>
+        </div>
+      {% endif %}
+    </div>
+    <div class="dash-widget dash-widget-bordered dash-span-3">
+      <div class="dash-widget-head"><span class="dash-widget-title">Net</span></div>
+      <div class="cat-stat-number {{ 'amount-negative' if year_stats.net_total < 0 else 'amount-positive' }}">{{ "%.2f"|format(year_stats.net_total) }}</div>
+      {% if year_stats.net_delta is not none %}
+        <div class="cat-stat-delta {{ 'up' if year_stats.net_delta >= 0 else 'down' }}">
+          {{ '▲' if year_stats.net_delta >= 0 else '▼' }} {{ '+' if year_stats.net_delta >= 0 else '' }}{{ "%.2f"|format(year_stats.net_delta) }}
+          <span class="muted">vs {{ year - 1 }}</span>
+        </div>
+      {% endif %}
+    </div>
+    <div class="dash-widget dash-widget-bordered dash-span-3">
+      <div class="dash-widget-head"><span class="dash-widget-title">Savings rate</span></div>
+      {% if year_stats.savings_rate is not none %}
+        <div class="cat-stat-number">{{ "%.1f"|format(year_stats.savings_rate) }}%</div>
+        {% if year_stats.savings_rate_delta is not none %}
+          <div class="cat-stat-delta {{ 'up' if year_stats.savings_rate_delta >= 0 else 'down' }}">
+            {{ '▲' if year_stats.savings_rate_delta >= 0 else '▼' }} {{ '+' if year_stats.savings_rate_delta >= 0 else '' }}{{ "%.1f"|format(year_stats.savings_rate_delta) }}pp
+            <span class="muted">vs {{ year - 1 }}</span>
+          </div>
+        {% endif %}
+      {% else %}
+        <div class="cat-stat-number">—</div>
+        <div class="cat-stat-sub">No income this year</div>
+      {% endif %}
+    </div>
+  </div>
 
   <article>
     <h2>Net worth over time</h2>
