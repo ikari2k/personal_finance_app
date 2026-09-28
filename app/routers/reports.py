@@ -16,6 +16,7 @@ this function and the template, not ``services.aggregation``'s data.
 """
 
 import math
+import statistics
 from calendar import month_abbr, month_name, monthrange
 from collections.abc import Callable
 from datetime import date
@@ -188,6 +189,21 @@ def _month_cells(
     return cells
 
 
+def _row_avg_and_median(cells: list[dict]) -> tuple[Decimal, Decimal]:
+    """Return a month-matrix row's mean and median across its shown months.
+
+    Both are computed over every shown month, zero-filled ones included
+    — same "divide by every month, not just active ones" convention as
+    the category detail page's own Avg/mo figure (``category_detail``'s
+    ``avg_per_month``), so "typical month" reads consistently with the
+    rest of the app rather than skewed high by skipping quiet months.
+    """
+    amounts = [cell["amount"] for cell in cells]
+    average = sum(amounts, Decimal("0")) / len(amounts)
+    median = statistics.median(amounts)
+    return average, median
+
+
 def _category_month_matrix(
     breakdown: list[CategoryTotal],
     monthly_totals: dict[str, dict[str, Decimal]],
@@ -207,41 +223,50 @@ def _category_month_matrix(
     ring geometry via ``_ring_geometry`` — that month's spend against
     the category's (or subcategory's) own single configured budget,
     since ``config/categories.toml`` has one budget per category, not a
-    separate one per month.
+    separate one per month. Each row also carries its own ``avg``/
+    ``median`` across those same months (see ``_row_avg_and_median``).
     """
     rows = []
     for category in breakdown:
         cat_config = config.get(category.name, {})
+        cat_monthly = _month_cells(
+            monthly_totals.get(category.name, {}),
+            cat_config.get("budget"),
+            month_keys,
+        )
+        cat_avg, cat_median = _row_avg_and_median(cat_monthly)
         rows.append(
             {
                 "name": category.name,
                 "category": category.name,
                 "icon": cat_config.get("icon", ""),
                 "indent": False,
-                "monthly": _month_cells(
-                    monthly_totals.get(category.name, {}),
-                    cat_config.get("budget"),
-                    month_keys,
-                ),
+                "monthly": cat_monthly,
                 "total": category.total,
+                "avg": cat_avg,
+                "median": cat_median,
             }
         )
         sub_monthly = subcategory_monthly.get(category.name, {})
         sub_configs = cat_config.get("subcategories", {})
         for sub in category.subcategories:
             sub_config = sub_configs.get(sub.name, {})
+            sub_cells = _month_cells(
+                sub_monthly.get(sub.name, {}),
+                sub_config.get("budget"),
+                month_keys,
+            )
+            sub_avg, sub_median = _row_avg_and_median(sub_cells)
             rows.append(
                 {
                     "name": sub.name,
                     "category": category.name,
                     "icon": sub_config.get("icon", ""),
                     "indent": True,
-                    "monthly": _month_cells(
-                        sub_monthly.get(sub.name, {}),
-                        sub_config.get("budget"),
-                        month_keys,
-                    ),
+                    "monthly": sub_cells,
                     "total": sub.total,
+                    "avg": sub_avg,
+                    "median": sub_median,
                 }
             )
     return rows

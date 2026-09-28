@@ -199,6 +199,8 @@
             <th>Category</th>
             {% for label in month_labels %}<th>{{ label }}</th>{% endfor %}
             <th>Total</th>
+            <th>Avg</th>
+            <th>Median</th>
           </tr>
         </thead>
         <tbody>
@@ -236,6 +238,8 @@
                 </td>
               {% endfor %}
               <td>{{ "%.2f"|format(row.total) }}</td>
+              <td class="muted">{{ "%.2f"|format(row.avg) }}</td>
+              <td class="muted">{{ "%.2f"|format(row.median) }}</td>
             </tr>
           {% endfor %}
         </tbody>
