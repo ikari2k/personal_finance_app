@@ -55,9 +55,12 @@ from app.templating import templates
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
-# Shared by the landing page's and the month drill-down's own "Biggest
-# movers" lists — how many ranked categories each shows.
+# The month drill-down's own "Biggest movers" list — how many ranked
+# categories it shows.
 MOVERS_LIMIT = 10
+# The landing page's "Top spending categories" preview — how many rows
+# it shows before pointing at the full /reports/categories index.
+TOP_SPENDING_CATEGORIES_LIMIT = 10
 
 
 def _savings_rate(net_total: Decimal, income_total: Decimal) -> Decimal | None:
@@ -1047,18 +1050,27 @@ def reports_overview(request: Request, account_id: str = "") -> HTMLResponse:
         )
         for y in years
     }
-    movers = [
-        m
-        for m in category_movers(transactions, TransactionType.EXPENSE, today)
-        if m.delta is not None
-    ][:MOVERS_LIMIT]
-    movers_txn_links = {
+    # "Top spending categories" preview — same YTD totals /reports
+    # /categories itself ranks by, just capped and sorted by total here
+    # rather than by growth, with a link to that full sortable index.
+    all_categories = category_movers(transactions, TransactionType.EXPENSE, today)
+    expense_ytd_total = sum((m.ytd_total for m in all_categories), Decimal("0"))
+    top_categories = sorted(all_categories, key=lambda m: m.ytd_total, reverse=True)[
+        :TOP_SPENDING_CATEGORIES_LIMIT
+    ]
+    top_categories_pct = {
+        m.name: (
+            float(m.ytd_total / expense_ytd_total * 100) if expense_ytd_total else 0.0
+        )
+        for m in top_categories
+    }
+    top_categories_txn_links = {
         m.name: breadcrumbs.transactions_link(
             category=m.name,
             txn_type=TransactionType.EXPENSE.value,
             account_id=account_id,
         )
-        for m in movers
+        for m in top_categories
     }
 
     this_income, this_expense = _ytd_income_expense(
@@ -1096,8 +1108,9 @@ def reports_overview(request: Request, account_id: str = "") -> HTMLResponse:
             "account_id": account_id,
             "year_txn_links": year_txn_links,
             "year_stats": _year_stats(years, today),
-            "movers": movers,
-            "movers_txn_links": movers_txn_links,
+            "top_categories": top_categories,
+            "top_categories_pct": top_categories_pct,
+            "top_categories_txn_links": top_categories_txn_links,
             "expense_config": expense_config,
             "ytd_stats": ytd_stats,
             "current_year": today.year,

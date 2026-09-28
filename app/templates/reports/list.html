@@ -57,30 +57,27 @@
     </div>
   </div>
 
-  {% if movers %}
-    <h2 style="margin-bottom: 0.15rem;">Biggest movers</h2>
+  {% if top_categories %}
+    <div class="dash-widget-head" style="margin-bottom: 0.15rem;">
+      <h2 style="margin: 0;">Top spending categories</h2>
+      <a class="table-link" href="/reports/categories{{ '?account_id=' + account_id if account_id }}">Full report &rsaquo;</a>
+    </div>
     <p class="muted" style="margin-top: 0;">
-      Expense categories with the largest year-to-date change vs. the same months last year, ranked by dollars.
+      This year's expense categories, ranked by year-to-date total.
     </p>
     <div class="table-scroll">
       <table>
-        <thead><tr><th>Category</th><th>This year</th><th>Last year</th><th>Change</th></tr></thead>
+        <thead><tr><th>Category</th><th>Total</th><th>% of expenses</th></tr></thead>
         <tbody>
-          {% for m in movers %}
+          {% for m in top_categories %}
             <tr>
               <td>
                 {% set icon = expense_config.get(m.name, {}).get('icon', '') %}
                 {% if icon %}<span class="cat-cell-icon cat-cell-icon-expense">{{ category_icon(icon) }}</span>{% endif %}
-                <a class="table-link" href="{{ movers_txn_links[m.name] }}">{{ m.name }}</a>
+                <a class="table-link" href="{{ top_categories_txn_links[m.name] }}">{{ m.name }}</a>
               </td>
               <td>{{ "%.2f"|format(m.ytd_total) }}</td>
-              <td class="muted">{{ "%.2f"|format(m.prior_total) }}</td>
-              <td class="{{ 'amount-negative' if m.delta >= 0 else 'amount-positive' }}">
-                {{ '+' if m.delta >= 0 else '' }}{{ "%.2f"|format(m.delta) }}
-                {% if m.pct_delta is not none %}
-                  <span class="muted">({{ '+' if m.pct_delta >= 0 else '' }}{{ "%.0f"|format(m.pct_delta) }}%)</span>
-                {% endif %}
-              </td>
+              <td class="muted">{{ "%.0f"|format(top_categories_pct[m.name]) }}%</td>
             </tr>
           {% endfor %}
         </tbody>
