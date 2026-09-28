@@ -76,12 +76,13 @@ TOP_CATEGORIES_LIMIT = 10
 RECENT_DAYS_LIMIT = 5
 SPARKLINE_MONTHS = 6
 # Trailing windows (in days) for the "Average monthly spend" widget —
-# the standard ~1/3/6-month rolling-average horizons, shortest first so
+# the standard ~1/3/12-month rolling-average horizons, shortest first so
 # the trend comparison below reads "recent pace vs. your longer-run
-# baseline". Each window's total is still walked in real calendar days
-# (see rolling_average_monthly_expense) and only the displayed figure is
-# a monthly-equivalent rate, not the window length itself.
-ROLLING_AVERAGE_WINDOWS = (30, 90, 180)
+# baseline" (now a full year, the steadiest baseline available). Each
+# window's total is still walked in real calendar days (see
+# rolling_average_monthly_expense) and only the displayed figure is a
+# monthly-equivalent rate, not the window length itself.
+ROLLING_AVERAGE_WINDOWS = (30, 90, 180, 365)
 
 
 def _pct_change(current: Decimal, previous: Decimal) -> Decimal | None:
