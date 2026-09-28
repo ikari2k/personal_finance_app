@@ -6,12 +6,16 @@
 {% block title %}{{ year }} — Reports — Finance Tracker{% endblock %}
 {% block content %}
   {{ breadcrumb(breadcrumbs) }}
+  {% set year_qs = [] %}
+  {% if account_id %}{% set _ = year_qs.append('account_id=' + account_id) %}{% endif %}
+  {% if sort != 'total' %}{% set _ = year_qs.append('sort=' + sort) %}{% endif %}
+  {% set year_qs_str = ('?' + year_qs|join('&')) if year_qs else '' %}
   <div class="period-nav">
-    <a href="/reports/{{ year - 1 }}{{ '?account_id=' + account_id if account_id }}" class="period-nav-prev">
+    <a href="/reports/{{ year - 1 }}{{ year_qs_str }}" class="period-nav-prev">
       &larr; {{ year - 1 }}
     </a>
     <h1>{{ year }}</h1>
-    <a href="/reports/{{ year + 1 }}{{ '?account_id=' + account_id if account_id }}" class="period-nav-next">
+    <a href="/reports/{{ year + 1 }}{{ year_qs_str }}" class="period-nav-next">
       {{ year + 1 }} &rarr;
     </a>
   </div>
@@ -109,6 +113,15 @@
   {% else %}
     <p>No transactions in {{ year }}.</p>
   {% endif %}
+
+  <form method="get" class="view-options">
+    <span class="view-options-label">Sort by</span>
+    <select name="sort" onchange="this.form.submit()">
+      <option value="total" {{ 'selected' if sort == 'total' }}>Total (high to low)</option>
+      <option value="change" {{ 'selected' if sort == 'change' }}>Biggest change vs last year</option>
+    </select>
+    <input type="hidden" name="account_id" value="{{ account_id }}">
+  </form>
 
   <div class="report-columns">
     <div>

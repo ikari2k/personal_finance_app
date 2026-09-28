@@ -1199,8 +1199,29 @@ def categories_index(
     )
 
 
+_CATEGORY_BREAKDOWN_SORTS = {"total", "change"}
+
+
+def _sort_by_change(breakdown: list[CategoryTotal]) -> list[CategoryTotal]:
+    """Re-sort a category breakdown by the size of its YoY change, biggest first.
+
+    Ranks by ``abs(yoy_delta)`` — a category that fell just as hard as
+    another rose is just as worth noticing — not signed, so growth and
+    shrinkage are ranked on the same scale rather than growth always
+    sorting above shrinkage. Categories with no prior-year data to
+    compare against (``yoy_delta`` is ``None``) sort last, same
+    "nothing to rank them by" convention as ``category_movers``.
+    """
+    return sorted(
+        breakdown,
+        key=lambda cat: (cat.yoy_delta is None, -abs(cat.yoy_delta or Decimal("0"))),
+    )
+
+
 @router.get("/{year:int}", response_class=HTMLResponse)
-def year_detail(request: Request, year: int, account_id: str = "") -> HTMLResponse:
+def year_detail(
+    request: Request, year: int, account_id: str = "", sort: str = "total"
+) -> HTMLResponse:
     """Render one year's monthly breakdown and income/expense category drill-down.
 
     The path uses an explicit ``{year:int}`` converter (not just a plain
@@ -1208,13 +1229,25 @@ def year_detail(request: Request, year: int, account_id: str = "") -> HTMLRespon
     segment before FastAPI's own ``year: int`` coercion ever runs) so a
     static sibling route like ``/reports/category`` can never be
     swallowed here and turned into a spurious 422.
+
+    ``sort`` ("total", the default, or "change") reorders both the
+    income/expense breakdown tables *and* the month-to-month matrix
+    tables below them, which deliberately reuse the breakdown's own
+    order (see ``_category_month_matrix``) so the two keep listing
+    categories the same way. An unrecognized value falls back to
+    "total" rather than 404ing, same "UI toggle state, not a hard
+    error" treatment as the categories index page's own ``sort``.
     """
+    resolved_sort = sort if sort in _CATEGORY_BREAKDOWN_SORTS else "total"
     accounts = read_accounts()
     transactions = _filter_by_account(read_ledger(), account_id)
     categories = read_categories()
     chart = _net_worth_chart(transactions, accounts, account_id, year=year)
     income_breakdown = category_breakdown(transactions, year, TransactionType.INCOME)
     expense_breakdown = category_breakdown(transactions, year, TransactionType.EXPENSE)
+    if resolved_sort == "change":
+        income_breakdown = _sort_by_change(income_breakdown)
+        expense_breakdown = _sort_by_change(expense_breakdown)
     months = [
         month
         for month in monthly_totals_with_mom(transactions)
@@ -1319,6 +1352,7 @@ def year_detail(request: Request, year: int, account_id: str = "") -> HTMLRespon
             "month_txn_links": month_txn_links,
             "year_txn_link": year_txn_link,
             "breadcrumbs": breadcrumbs.for_year(year, account_id),
+            "sort": resolved_sort,
             "income_breakdown": income_breakdown,
             "expense_breakdown": expense_breakdown,
             "income_config": income_config,
