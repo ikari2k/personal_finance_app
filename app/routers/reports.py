@@ -162,10 +162,13 @@ def _month_cells(
 
     ``extreme`` is ``"max"``/``"min"`` on the row's single highest/lowest
     month (the first chronological occurrence if there's a tie), or
-    ``None`` on every other cell — including every cell when the row
-    doesn't vary at all (a flat or all-zero row has no real "extreme" to
-    call out). Lets the month-matrix table highlight each category's
-    best/worst month without a reader having to scan every cell by eye.
+    ``None`` on every other cell. A month with no activity at all (a
+    zero amount) is never eligible for ``"min"`` — that's an absence of
+    data, not a genuinely low month, so it would otherwise dominate a
+    category that's only active a few months a year. ``"max"`` is
+    unaffected (a magnitude can only be zero if literally every month
+    is, which already skips marking anything at all, same as a flat
+    nonzero row — neither has a real extreme to call out).
     """
     cells = [
         {"key": key, "amount": month_amounts.get(key, Decimal("0")), "extreme": None}
@@ -173,8 +176,13 @@ def _month_cells(
     ]
     amounts = [cell["amount"] for cell in cells]
     if amounts and max(amounts) != min(amounts):
-        cells[amounts.index(max(amounts))]["extreme"] = "max"
-        cells[amounts.index(min(amounts))]["extreme"] = "min"
+        max_idx = amounts.index(max(amounts))
+        cells[max_idx]["extreme"] = "max"
+        nonzero_amounts = [a for a in amounts if a]
+        if len(nonzero_amounts) >= 2:
+            min_idx = amounts.index(min(nonzero_amounts))
+            if min_idx != max_idx:
+                cells[min_idx]["extreme"] = "min"
     for cell in cells:
         cell["ring"] = _ring_geometry(cell["amount"], budget)
     return cells
