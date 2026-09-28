@@ -32,8 +32,10 @@
               {% if delta_label %}
                 <td>
                   {% if cat.yoy_delta is not none %}
-                    <span class="{{ 'amount-negative' if cat.yoy_delta < 0 else 'amount-positive' }}">
-                      {{ '+' if cat.yoy_delta >= 0 else '' }}{{ "%.2f"|format(cat.yoy_delta) }}
+                    {% set rising = cat.yoy_delta >= 0 %}
+                    {% set good = (rising and txn_type == "income") or (not rising and txn_type == "expense") %}
+                    <span class="{{ 'amount-positive' if good else 'amount-negative' }}">
+                      {{ '+' if rising else '' }}{{ "%.2f"|format(cat.yoy_delta) }}
                     </span>
                   {% else %}
                     —
