@@ -1290,25 +1290,26 @@ fieldset legend {
   gap: 3rem;
 }
 
-/* Month drill-down's Previous/Next navigation, either side of the page's
- * own <h1> — wraps to a stacked layout at phone width rather than
- * squeezing three items onto one line, same reasoning as every other
- * flex-wrap row in this file. */
-.month-nav {
+/* Previous/Next period navigation, either side of the page's own <h1> —
+ * shared by the month drill-down (adjacent month) and the year
+ * drill-down (adjacent year), same layout either way. Wraps to a
+ * stacked layout at phone width rather than squeezing three items onto
+ * one line, same reasoning as every other flex-wrap row in this file. */
+.period-nav {
   display: flex;
   align-items: center;
   gap: 1rem;
   flex-wrap: wrap;
 }
 
-.month-nav h1 {
+.period-nav h1 {
   flex: 1 1 auto;
   margin: 0;
   text-align: center;
 }
 
-.month-nav-prev,
-.month-nav-next {
+.period-nav-prev,
+.period-nav-next {
   flex: 0 0 auto;
   white-space: nowrap;
 }

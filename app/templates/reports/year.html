@@ -6,7 +6,15 @@
 {% block title %}{{ year }} — Reports — Finance Tracker{% endblock %}
 {% block content %}
   {{ breadcrumb(breadcrumbs) }}
-  <h1>{{ year }}</h1>
+  <div class="period-nav">
+    <a href="/reports/{{ year - 1 }}{{ '?account_id=' + account_id if account_id }}" class="period-nav-prev">
+      &larr; {{ year - 1 }}
+    </a>
+    <h1>{{ year }}</h1>
+    <a href="/reports/{{ year + 1 }}{{ '?account_id=' + account_id if account_id }}" class="period-nav-next">
+      {{ year + 1 }} &rarr;
+    </a>
+  </div>
   {{ account_filter(accounts, account_id) }}
   <p><a class="cat-cta-link" href="{{ year_txn_link }}">All {{ year }} transactions &rsaquo;</a></p>
 
