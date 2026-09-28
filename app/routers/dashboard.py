@@ -35,7 +35,7 @@ from app.services.aggregation import (
     category_totals_for_month,
     monthly_totals_with_mom,
     net_worth_by_month,
-    rolling_average_daily_expense,
+    rolling_average_monthly_expense,
 )
 from app.services.balances import all_balances
 from app.services.transactions import (
@@ -75,9 +75,12 @@ TOP_CATEGORIES_LIMIT = 10
 # calendar month" convention.
 RECENT_DAYS_LIMIT = 5
 SPARKLINE_MONTHS = 6
-# Trailing windows for the "Average daily spend" widget — the standard
-# ~1/3/6-month rolling-average horizons, shortest first so the trend
-# comparison below reads "recent pace vs. your longer-run baseline".
+# Trailing windows (in days) for the "Average monthly spend" widget —
+# the standard ~1/3/6-month rolling-average horizons, shortest first so
+# the trend comparison below reads "recent pace vs. your longer-run
+# baseline". Each window's total is still walked in real calendar days
+# (see rolling_average_monthly_expense) and only the displayed figure is
+# a monthly-equivalent rate, not the window length itself.
 ROLLING_AVERAGE_WINDOWS = (30, 90, 180)
 
 
@@ -235,9 +238,12 @@ def dashboard(request: Request) -> HTMLResponse:
         else None
     )
 
-    # --- rolling average daily spend (30/90/180 days) ---
+    # --- rolling average monthly spend (30/90/180-day windows) ---
     rolling_averages = [
-        {"days": window, "value": rolling_average_daily_expense(ledger, today, window)}
+        {
+            "days": window,
+            "value": rolling_average_monthly_expense(ledger, today, window),
+        }
         for window in ROLLING_AVERAGE_WINDOWS
     ]
     # Recent pace (the shortest window) vs. the longer-run baseline (the

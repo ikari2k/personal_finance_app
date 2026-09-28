@@ -1150,3 +1150,26 @@ def rolling_average_daily_expense(
         Decimal("0"),
     )
     return total / effective_days
+
+
+# The standard average calendar month length (365.25 / 12) — used only to
+# convert a daily rate into a monthly-equivalent one, not to define any
+# actual date range (every date-range calculation in this module stays in
+# real calendar days).
+_AVG_DAYS_PER_MONTH = Decimal("30.44")
+
+
+def rolling_average_monthly_expense(
+    transactions: Iterable[Transaction], today: date_, days: int
+) -> Decimal | None:
+    """Return the trailing ``days``-day average expense, expressed per month.
+
+    A monthly-equivalent reading of ``rolling_average_daily_expense`` —
+    same window and "divide by tracked days, not always the full window"
+    handling, just scaled by the average month length instead of shown
+    as a raw $/day rate, since "how much am I spending a month" is the
+    more natural unit here given this app's budgets/reports are already
+    monthly, not daily.
+    """
+    daily = rolling_average_daily_expense(transactions, today, days)
+    return daily * _AVG_DAYS_PER_MONTH if daily is not None else None

@@ -23,6 +23,7 @@ from app.services.aggregation import (
     monthly_totals_with_mom,
     net_worth_by_month,
     rolling_average_daily_expense,
+    rolling_average_monthly_expense,
     subcategory_monthly_totals,
     top_uncategorized_descriptions,
     yearly_totals_with_yoy,
@@ -1546,3 +1547,31 @@ def test_rolling_average_daily_expense_ledger_starts_after_window_is_none():
     ]
 
     assert rolling_average_daily_expense(txns, date(2026, 9, 10), 5) is None
+
+
+def test_rolling_average_monthly_expense_scales_the_daily_rate():
+    txns = [
+        _txn(
+            id="old",
+            date=date(2026, 1, 1),
+            type=TransactionType.EXPENSE,
+            amount=Decimal("-1"),
+        )
+    ] + [
+        _txn(
+            id=f"t{i}",
+            date=date(2026, 9, i),
+            type=TransactionType.EXPENSE,
+            amount=Decimal("-10"),
+        )
+        for i in range(1, 11)
+    ]
+
+    daily = rolling_average_daily_expense(txns, date(2026, 9, 15), 30)
+    monthly = rolling_average_monthly_expense(txns, date(2026, 9, 15), 30)
+
+    assert monthly == daily * Decimal("30.44")
+
+
+def test_rolling_average_monthly_expense_none_when_daily_is_none():
+    assert rolling_average_monthly_expense([], date(2026, 9, 15), 30) is None
