@@ -1374,6 +1374,20 @@ def test_category_mom_deltas_compares_to_immediately_preceding_month():
     deltas = category_mom_deltas(txns, 2026, 9, TransactionType.EXPENSE)
 
     assert deltas["Groceries"].delta == Decimal("50")
+    assert deltas["Groceries"].pct_delta == Decimal("50")
+
+
+def test_category_mom_deltas_pct_delta_none_when_previous_month_had_no_activity():
+    txns = [
+        _txn(
+            id="a", date=date(2026, 9, 1), category="Groceries", amount=Decimal("-100")
+        ),
+    ]
+
+    deltas = category_mom_deltas(txns, 2026, 9, TransactionType.EXPENSE)
+
+    assert deltas["Groceries"].delta == Decimal("100")
+    assert deltas["Groceries"].pct_delta is None
 
 
 def test_category_mom_deltas_handles_year_boundary():

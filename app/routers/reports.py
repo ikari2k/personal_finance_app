@@ -1524,7 +1524,11 @@ def month_detail(
     mom_deltas = category_mom_deltas(transactions, year, month, TransactionType.EXPENSE)
     movers = sorted(
         (
-            {"name": cat.name, "delta": mom_deltas[cat.name].delta}
+            {
+                "name": cat.name,
+                "delta": mom_deltas[cat.name].delta,
+                "pct_delta": mom_deltas[cat.name].pct_delta,
+            }
             for cat in expense_breakdown
             if cat.name in mom_deltas
         ),

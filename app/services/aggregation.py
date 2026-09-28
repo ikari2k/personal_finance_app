@@ -1043,8 +1043,13 @@ class CategoryMoM:
 
     ``delta`` is signed (a decrease is negative) — same "plain
     total-vs-prior-period" convention as ``CategoryTotal.yoy_delta``, one
-    rung down in timescale. ``subcategory_deltas`` maps subcategory name
-    to its own signed delta (a blank subcategory is excluded, same as
+    rung down in timescale. ``pct_delta`` is ``delta`` as a percentage of
+    the *previous* month's total, magnitude-based (against ``abs``, so a
+    swing on an expense category isn't sign-flipped by the category's
+    own sign convention) — ``None`` when the previous month had no
+    activity at all (a brand-new category, nothing to compute a percent
+    change against). ``subcategory_deltas`` maps subcategory name to its
+    own signed delta (a blank subcategory is excluded, same as
     ``CategoryTotal.subcategories``) — computing this alongside the
     category-level delta is effectively free (both months' transactions
     are already being walked), unlike the YoY case where subcategory-level
@@ -1053,6 +1058,7 @@ class CategoryMoM:
     """
 
     delta: Decimal
+    pct_delta: Decimal | None
     subcategory_deltas: dict[str, Decimal]
 
 
@@ -1106,9 +1112,11 @@ def category_mom_deltas(
             - prev_subs.get(sub, _CategoryAccumulator()).total
             for sub in sub_names
         }
+        prev_total = previous_totals.get(name, Decimal("0"))
+        delta = current_totals.get(name, Decimal("0")) - prev_total
         result[name] = CategoryMoM(
-            delta=current_totals.get(name, Decimal("0"))
-            - previous_totals.get(name, Decimal("0")),
+            delta=delta,
+            pct_delta=(delta / abs(prev_total) * 100) if prev_total else None,
             subcategory_deltas=subcategory_deltas,
         )
     return result

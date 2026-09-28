@@ -83,6 +83,9 @@
               </td>
               <td class="{{ 'amount-negative' if m.delta >= 0 else 'amount-positive' }}">
                 {{ '+' if m.delta >= 0 else '' }}{{ "%.2f"|format(m.delta) }}
+                {% if m.pct_delta is not none %}
+                  <span class="muted">({{ '+' if m.pct_delta >= 0 else '' }}{{ "%.0f"|format(m.pct_delta) }}%)</span>
+                {% endif %}
               </td>
             </tr>
           {% endfor %}
