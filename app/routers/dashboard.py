@@ -35,6 +35,7 @@ from app.services.aggregation import (
     category_totals_for_month,
     monthly_totals_with_mom,
     net_worth_by_month,
+    rolling_average_daily_expense,
 )
 from app.services.balances import all_balances
 from app.services.transactions import (
@@ -74,6 +75,10 @@ TOP_CATEGORIES_LIMIT = 10
 # calendar month" convention.
 RECENT_DAYS_LIMIT = 5
 SPARKLINE_MONTHS = 6
+# Trailing windows for the "Average daily spend" widget — the standard
+# ~1/3/6-month rolling-average horizons, shortest first so the trend
+# comparison below reads "recent pace vs. your longer-run baseline".
+ROLLING_AVERAGE_WINDOWS = (30, 90, 180)
 
 
 def _pct_change(current: Decimal, previous: Decimal) -> Decimal | None:
@@ -230,6 +235,23 @@ def dashboard(request: Request) -> HTMLResponse:
         else None
     )
 
+    # --- rolling average daily spend (30/90/180 days) ---
+    rolling_averages = [
+        {"days": window, "value": rolling_average_daily_expense(ledger, today, window)}
+        for window in ROLLING_AVERAGE_WINDOWS
+    ]
+    # Recent pace (the shortest window) vs. the longer-run baseline (the
+    # longest one) — above baseline reads as "spending faster lately",
+    # same sense as the reports pages' own movers lists, not a plain
+    # sign-based color.
+    shortest_avg = rolling_averages[0]["value"]
+    longest_avg = rolling_averages[-1]["value"]
+    rolling_average_trend_pct = (
+        _pct_change(shortest_avg, longest_avg)
+        if shortest_avg is not None and longest_avg is not None
+        else None
+    )
+
     # --- accounts ---
     active_accounts = [a for a in accounts if a.status.value == "active"]
 
@@ -325,6 +347,8 @@ def dashboard(request: Request) -> HTMLResponse:
             "net_total": net_total,
             "income_delta_pct": income_delta_pct,
             "expense_delta_pct": expense_delta_pct,
+            "rolling_averages": rolling_averages,
+            "rolling_average_trend_pct": rolling_average_trend_pct,
             "active_accounts": active_accounts,
             "balances": balances,
             "account_type_labels": ACCOUNT_TYPE_LABELS,

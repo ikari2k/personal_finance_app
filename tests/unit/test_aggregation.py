@@ -22,6 +22,7 @@ from app.services.aggregation import (
     merge_months,
     monthly_totals_with_mom,
     net_worth_by_month,
+    rolling_average_daily_expense,
     subcategory_monthly_totals,
     top_uncategorized_descriptions,
     yearly_totals_with_yoy,
@@ -1433,3 +1434,115 @@ def test_category_mom_deltas_missing_side_treated_as_zero():
     deltas = category_mom_deltas(txns, 2026, 9, TransactionType.EXPENSE)
 
     assert deltas["Groceries"].delta == Decimal("100")
+
+
+def test_rolling_average_daily_expense_empty_ledger_is_none():
+    assert rolling_average_daily_expense([], date(2026, 9, 15), 30) is None
+
+
+def test_rolling_average_daily_expense_divides_by_the_full_window():
+    # 10 days of $10/day spend inside a 30-day window still divides by
+    # 30 -- the ledger itself is old enough to cover the whole window.
+    txns = [
+        _txn(
+            id="old",
+            date=date(2026, 1, 1),
+            type=TransactionType.EXPENSE,
+            amount=Decimal("-1"),
+        )
+    ] + [
+        _txn(
+            id=f"t{i}",
+            date=date(2026, 9, i),
+            type=TransactionType.EXPENSE,
+            amount=Decimal("-10"),
+        )
+        for i in range(1, 11)
+    ]
+
+    avg = rolling_average_daily_expense(txns, date(2026, 9, 15), 30)
+
+    assert avg == Decimal("100") / 30
+
+
+def test_rolling_average_daily_expense_ignores_income_and_transfers():
+    txns = [
+        _txn(
+            id="e",
+            date=date(2026, 9, 10),
+            type=TransactionType.EXPENSE,
+            amount=Decimal("-30"),
+        ),
+        _txn(
+            id="i",
+            date=date(2026, 9, 10),
+            type=TransactionType.INCOME,
+            amount=Decimal("500"),
+        ),
+        _txn(
+            id="x1",
+            date=date(2026, 9, 10),
+            type=TransactionType.TRANSFER,
+            transfer_id="tr1",
+            account_id="chk",
+            amount=Decimal("-200"),
+        ),
+    ]
+
+    avg = rolling_average_daily_expense(txns, date(2026, 9, 10), 30)
+
+    # The ledger's only transaction is "today" itself, so the effective
+    # window is 1 tracked day, not the full 30 -- 30 of expense / 1 day.
+    assert avg == Decimal("30")
+
+
+def test_rolling_average_daily_expense_excludes_transactions_outside_the_window():
+    txns = [
+        _txn(
+            id="in",
+            date=date(2026, 9, 10),
+            type=TransactionType.EXPENSE,
+            amount=Decimal("-30"),
+        ),
+        _txn(
+            id="out",
+            date=date(2026, 8, 1),
+            type=TransactionType.EXPENSE,
+            amount=Decimal("-9999"),
+        ),
+    ]
+
+    avg = rolling_average_daily_expense(txns, date(2026, 9, 10), 30)
+
+    assert avg == Decimal("30") / 30
+
+
+def test_rolling_average_daily_expense_short_ledger_divides_by_tracked_days_only():
+    # The ledger only starts 5 days before "today", so a 90-day window
+    # should divide by 5 tracked days, not 90 -- otherwise a brand-new
+    # ledger reads as an artificially tiny average.
+    txns = [
+        _txn(
+            id="a",
+            date=date(2026, 9, 6),
+            type=TransactionType.EXPENSE,
+            amount=Decimal("-50"),
+        ),
+    ]
+
+    avg = rolling_average_daily_expense(txns, date(2026, 9, 10), 90)
+
+    assert avg == Decimal("50") / 5
+
+
+def test_rolling_average_daily_expense_ledger_starts_after_window_is_none():
+    txns = [
+        _txn(
+            id="a",
+            date=date(2026, 9, 20),
+            type=TransactionType.EXPENSE,
+            amount=Decimal("-50"),
+        ),
+    ]
+
+    assert rolling_average_daily_expense(txns, date(2026, 9, 10), 5) is None

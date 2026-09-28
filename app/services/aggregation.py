@@ -13,6 +13,7 @@ from collections import defaultdict
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field, replace
 from datetime import date as date_
+from datetime import timedelta
 from decimal import Decimal
 
 from app.models.account import Account
@@ -1111,3 +1112,41 @@ def category_mom_deltas(
             subcategory_deltas=subcategory_deltas,
         )
     return result
+
+
+def rolling_average_daily_expense(
+    transactions: Iterable[Transaction], today: date_, days: int
+) -> Decimal | None:
+    """Return the trailing ``days``-day average daily expense ending ``today``.
+
+    The window is ``[today - days + 1, today]`` (inclusive on both ends,
+    so a 30-day window really spans 30 calendar days). Divided by
+    however many of those days actually fall within the ledger's own
+    history — from its earliest transaction of any type, same "tracking
+    started here" convention ``_full_ledger_month_range`` uses — rather
+    than always by ``days``: a ledger only 10 days old would otherwise
+    have its 90-day average diluted by 80 days that were never tracked,
+    not 80 days of genuine zero spending. Returns ``None`` when the
+    ledger has no history at all within the window (an empty ledger, or
+    one that only starts after the window ends).
+    """
+    transactions = list(transactions)
+    if not transactions:
+        return None
+
+    first_date = min(t.date for t in transactions)
+    window_start = today - timedelta(days=days - 1)
+    effective_start = max(window_start, first_date)
+    if effective_start > today:
+        return None
+    effective_days = (today - effective_start).days + 1
+
+    total = sum(
+        (
+            abs(t.amount)
+            for t in transactions
+            if t.type is TransactionType.EXPENSE and window_start <= t.date <= today
+        ),
+        Decimal("0"),
+    )
+    return total / effective_days

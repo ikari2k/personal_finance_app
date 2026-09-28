@@ -138,6 +138,33 @@
       {% endif %}
     </div>
 
+    <div class="dash-widget dash-widget-bordered dash-span-12">
+      <div class="dash-widget-head">
+        <span class="dash-widget-title">Average daily spend</span>
+        <a class="dash-widget-link" href="/reports">Reports &rsaquo;</a>
+      </div>
+      <p class="dash-widget-caption">Rolling averages ending today, not calendar months.</p>
+      <div class="dash-rolling-avg-row">
+        {% for row in rolling_averages %}
+          <div class="dash-rolling-avg-tile">
+            <span class="dash-rolling-avg-label">{{ row.days }} days</span>
+            {% if row.value is not none %}
+              <span class="dash-rolling-avg-value">{{ "%.2f"|format(row.value) }}<span class="dash-rolling-avg-unit">/day</span></span>
+            {% else %}
+              <span class="dash-rolling-avg-value muted">—</span>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+      {% if rolling_average_trend_pct is not none %}
+        <div class="dash-rolling-avg-trend {{ 'down' if rolling_average_trend_pct >= 0 else 'up' }}">
+          {{ '▲' if rolling_average_trend_pct >= 0 else '▼' }}
+          Recent {{ rolling_averages[0].days }}-day pace is {{ "%.0f"|format(rolling_average_trend_pct|abs) }}%
+          {{ 'above' if rolling_average_trend_pct >= 0 else 'below' }} your {{ rolling_averages[-1].days }}-day average
+        </div>
+      {% endif %}
+    </div>
+
     <div class="dash-widget dash-widget-bordered dash-span-6">
       <div class="dash-widget-head">
         <span class="dash-widget-title">Budget status</span>

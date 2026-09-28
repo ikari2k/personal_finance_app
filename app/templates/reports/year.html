@@ -19,6 +19,32 @@
   <p><a class="cat-cta-link" href="{{ year_txn_link }}">All {{ year }} transactions &rsaquo;</a></p>
 
   <article>
+    <h2 style="margin-bottom: 0.15rem;">Average daily spend</h2>
+    <p class="muted" style="margin-top: 0;">
+      Rolling averages as of {{ rolling_average_as_of.strftime("%b %-d, %Y") }}{{ " (year in progress)" if year_in_progress else "" }}.
+    </p>
+    <div class="dash-rolling-avg-row">
+      {% for row in rolling_averages %}
+        <div class="dash-rolling-avg-tile">
+          <span class="dash-rolling-avg-label">{{ row.days }} days</span>
+          {% if row.value is not none %}
+            <span class="dash-rolling-avg-value">{{ "%.2f"|format(row.value) }}<span class="dash-rolling-avg-unit">/day</span></span>
+          {% else %}
+            <span class="dash-rolling-avg-value muted">—</span>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+    {% if rolling_average_trend_pct is not none %}
+      <div class="dash-rolling-avg-trend {{ 'down' if rolling_average_trend_pct >= 0 else 'up' }}">
+        {{ '▲' if rolling_average_trend_pct >= 0 else '▼' }}
+        Recent {{ rolling_averages[0].days }}-day pace is {{ "%.0f"|format(rolling_average_trend_pct|abs) }}%
+        {{ 'above' if rolling_average_trend_pct >= 0 else 'below' }} the {{ rolling_averages[-1].days }}-day average
+      </div>
+    {% endif %}
+  </article>
+
+  <article>
     <h2>Net worth over time</h2>
     {% include "reports/_net_worth_chart.html" %}
   </article>

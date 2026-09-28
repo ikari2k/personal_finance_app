@@ -1780,6 +1780,42 @@ fieldset legend {
 
 .dash-widget-link { font-size: 0.75rem; font-weight: 600; white-space: nowrap; }
 
+/* Average daily spend widget — three rolling-window tiles side by side
+ * (wraps to a stacked column at phone width, same instinct as every
+ * other flex-wrap row in this file), plus an optional one-line trend
+ * comparing the shortest window to the longest. */
+.dash-rolling-avg-row {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+.dash-rolling-avg-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.dash-rolling-avg-label {
+  font-size: 0.72rem;
+  color: var(--pico-muted-color);
+}
+.dash-rolling-avg-value {
+  font-size: 1.4rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.dash-rolling-avg-unit {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--pico-muted-color);
+}
+.dash-rolling-avg-trend {
+  margin-top: 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+.dash-rolling-avg-trend.up { color: var(--pico-ins-color); }
+.dash-rolling-avg-trend.down { color: var(--pico-del-color); }
+
 .dash-span-4 { grid-column: span 4; }
 .dash-span-6 { grid-column: span 6; }
 .dash-span-12 { grid-column: span 12; }

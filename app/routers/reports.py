@@ -44,6 +44,7 @@ from app.services.aggregation import (
     category_yearly_series,
     monthly_totals_with_mom,
     net_worth_by_month,
+    rolling_average_daily_expense,
     subcategory_monthly_totals,
     yearly_totals_with_yoy,
 )
@@ -53,6 +54,41 @@ from app.storage.ledger import read_ledger
 from app.templating import templates
 
 router = APIRouter(prefix="/reports", tags=["reports"])
+
+
+def _pct_change(current: Decimal, previous: Decimal) -> Decimal | None:
+    """Return the percent change from ``previous`` to ``current``, or ``None``.
+
+    ``None`` when ``previous`` is zero — a percent change against a zero
+    base is undefined, not zero. A near-duplicate of ``app.routers
+    .dashboard``'s own helper of the same name; not imported from there
+    since ``dashboard`` already imports from this module
+    (``_category_config``/``_ring_geometry``), and the reverse import
+    would be circular.
+    """
+    if not previous:
+        return None
+    return (current - previous) / abs(previous) * 100
+
+
+_ROLLING_AVERAGE_WINDOWS = (30, 90, 180)
+
+
+def _rolling_averages(transactions: list, as_of: date) -> list[dict]:
+    """Return ``{"days", "value"}`` rows for the standard rolling-average windows.
+
+    Shared by the year drill-down (``as_of`` the year's last day, or
+    today for a still-in-progress year) — same windows/shape as the
+    dashboard's own "Average daily spend" widget, just anchored to the
+    period being viewed instead of always today.
+    """
+    return [
+        {
+            "days": window,
+            "value": rolling_average_daily_expense(transactions, as_of, window),
+        }
+        for window in _ROLLING_AVERAGE_WINDOWS
+    ]
 
 
 def _savings_rate(net_total: Decimal, income_total: Decimal) -> Decimal | None:
@@ -1249,11 +1285,29 @@ def year_detail(request: Request, year: int, account_id: str = "") -> HTMLRespon
         date_to=f"{year:04d}-12-31",
         account_id=account_id,
     )
+
+    # Rolling averages anchored to the year's own last day — Dec 31 for
+    # a completed year, or today for one still in progress (Dec 31 of an
+    # in-progress year hasn't happened yet, and a window ending there
+    # would otherwise pull in future, nonexistent days).
+    rolling_as_of = min(date.today(), date(year, 12, 31))
+    rolling_averages = _rolling_averages(transactions, rolling_as_of)
+    rolling_average_trend_pct = (
+        _pct_change(rolling_averages[0]["value"], rolling_averages[-1]["value"])
+        if rolling_averages[0]["value"] is not None
+        and rolling_averages[-1]["value"] is not None
+        else None
+    )
+
     return templates.TemplateResponse(
         request,
         "reports/year.html",
         {
             "year": year,
+            "rolling_averages": rolling_averages,
+            "rolling_average_trend_pct": rolling_average_trend_pct,
+            "rolling_average_as_of": rolling_as_of,
+            "year_in_progress": rolling_as_of < date(year, 12, 31),
             "accounts": accounts,
             "account_id": account_id,
             "chart": chart,
