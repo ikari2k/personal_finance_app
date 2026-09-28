@@ -1443,28 +1443,41 @@ fieldset legend {
  * color/weight change on a single word elsewhere in the trail. */
 .breadcrumb {
   display: flex;
+  /* Pico's own bare `nav{justify-content:space-between}` (meant for its
+   * header's two `<ul>` groups) otherwise wins here too, since this is
+   * itself a `<nav>` with no competing `justify-content` rule — without
+   * this override every crumb spreads out to the far edges of the page
+   * instead of sitting together at the start. */
+  justify-content: flex-start;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.4rem;
-  font-size: 0.85rem;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+  line-height: 1.4;
   color: var(--pico-muted-color);
-  margin-bottom: 1rem;
+  margin-bottom: 1.1rem;
 }
 .breadcrumb a {
   color: var(--pico-muted-color);
   text-decoration: none;
+  border-radius: var(--pico-border-radius);
+  padding: 0.1rem 0.3rem;
+  margin: -0.1rem -0.3rem;
 }
 .breadcrumb a:hover,
 .breadcrumb a:focus {
   color: var(--pico-color);
-  text-decoration: underline;
+  background: var(--pico-muted-border-color);
+  text-decoration: none;
 }
 .breadcrumb span[aria-current] {
   color: var(--pico-color);
   font-weight: 600;
+  padding: 0.1rem 0.3rem;
 }
 .breadcrumb-sep {
   color: var(--pico-muted-border-color);
+  font-size: 0.75rem;
 }
 
 /* Per-row "view these transactions" affordance — a table with no other
