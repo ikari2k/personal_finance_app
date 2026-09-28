@@ -54,6 +54,10 @@ from app.templating import templates
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
+# Shared by the landing page's and the month drill-down's own "Biggest
+# movers" lists — how many ranked categories each shows.
+MOVERS_LIMIT = 10
+
 
 def _savings_rate(net_total: Decimal, income_total: Decimal) -> Decimal | None:
     """Return ``net_total`` as a % of ``income_total``, or ``None`` if unearned.
@@ -1002,7 +1006,7 @@ def reports_overview(request: Request, account_id: str = "") -> HTMLResponse:
         m
         for m in category_movers(transactions, TransactionType.EXPENSE, today)
         if m.delta is not None
-    ][:5]
+    ][:MOVERS_LIMIT]
     movers_txn_links = {
         m.name: breadcrumbs.transactions_link(
             category=m.name,
@@ -1447,7 +1451,7 @@ def month_detail(
         ),
         key=lambda m: abs(m["delta"]),
         reverse=True,
-    )[:5]
+    )[:MOVERS_LIMIT]
     movers_txn_links = {
         m["name"]: breadcrumbs.transactions_link(
             category=m["name"],
