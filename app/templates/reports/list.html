@@ -5,7 +5,6 @@
 {% block title %}Reports — Finance Tracker{% endblock %}
 {% block content %}
   <h1>Reports</h1>
-  <p><a class="cat-cta-link" href="/reports/categories{{ '?account_id=' + account_id if account_id }}">Browse all categories &rsaquo;</a></p>
   {{ account_filter(accounts, account_id) }}
 
   <div class="dash-grid" style="margin-bottom: 1.5rem;">
