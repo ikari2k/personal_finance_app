@@ -1098,6 +1098,57 @@ def test_category_subcategory_shares_scoped_to_one_year():
     assert shares[0].total == Decimal("40")
 
 
+def test_category_subcategory_shares_scoped_to_one_month():
+    txns = [
+        _txn(
+            id="t1",
+            date=date(2026, 1, 15),
+            category="Groceries",
+            subcategory="Supermarket",
+            amount=Decimal("-100"),
+        ),
+        _txn(
+            id="t2",
+            date=date(2026, 2, 1),
+            category="Groceries",
+            subcategory="Farmers Market",
+            amount=Decimal("-40"),
+        ),
+    ]
+
+    shares = category_subcategory_shares(
+        txns, "Groceries", TransactionType.EXPENSE, year=2026, month=1
+    )
+
+    assert [s.name for s in shares] == ["Supermarket"]
+    assert shares[0].total == Decimal("100")
+
+
+def test_category_subcategory_shares_month_ignored_without_year():
+    txns = [
+        _txn(
+            id="t1",
+            date=date(2025, 1, 15),
+            category="Groceries",
+            subcategory="Supermarket",
+            amount=Decimal("-100"),
+        ),
+        _txn(
+            id="t2",
+            date=date(2026, 1, 1),
+            category="Groceries",
+            subcategory="Farmers Market",
+            amount=Decimal("-40"),
+        ),
+    ]
+
+    shares = category_subcategory_shares(
+        txns, "Groceries", TransactionType.EXPENSE, month=1
+    )
+
+    assert {s.name for s in shares} == {"Supermarket", "Farmers Market"}
+
+
 def test_category_subcategory_monthly_series_raises_for_transfer_type():
     with pytest.raises(ValueError):
         category_subcategory_monthly_series([], "Groceries", TransactionType.TRANSFER)

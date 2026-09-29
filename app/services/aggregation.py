@@ -916,16 +916,20 @@ def category_subcategory_shares(
     txn_type: TransactionType,
     *,
     year: int | None = None,
+    month: int | None = None,
 ) -> list[SubcategoryShare]:
     """Return ``category``'s subcategory breakdown, sorted by total descending.
 
-    Scoped to one calendar year when ``year`` is given, else the
-    category's entire history. A blank subcategory (no subcategory set)
-    doesn't get its own row — same treatment as ``category_breakdown``'s
-    subcategory list — but its amount still counts toward the category
-    total each row's ``pct`` is a share of, so the rows shown are
-    honestly allowed to add up to less than 100%. Raises on ``TRANSFER``,
-    same as ``category_breakdown``.
+    Scoped to one calendar year when ``year`` is given (and further to
+    one calendar month within it when ``month`` is also given — ignored
+    on its own, same "nothing to anchor a bare month to" treatment as
+    ``category_detail``'s own year/month handling), else the category's
+    entire history. A blank subcategory (no subcategory set) doesn't get
+    its own row — same treatment as ``category_breakdown``'s subcategory
+    list — but its amount still counts toward the category total each
+    row's ``pct`` is a share of, so the rows shown are honestly allowed
+    to add up to less than 100%. Raises on ``TRANSFER``, same as
+    ``category_breakdown``.
     """
     if txn_type is TransactionType.TRANSFER:
         raise ValueError("transfers have no category breakdown")
@@ -937,6 +941,8 @@ def category_subcategory_shares(
         if transaction.type is not txn_type or transaction.category != category:
             continue
         if year is not None and transaction.date.year != year:
+            continue
+        if year is not None and month is not None and transaction.date.month != month:
             continue
         amount = abs(transaction.amount)
         category_total += amount

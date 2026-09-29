@@ -1,0 +1,67 @@
+{#
+  One month's trend broken into weekly chunks — the month drill-down's
+  own trend chart (app.routers.reports._svg_category_week_chart), shown
+  instead of reports/_category_chart.html's monthly bars when scoped to
+  a specific month (a single month has no monthly trend to show). No
+  scrolling/pinned-axis mechanic needed — a month only ever has 4-5
+  buckets, so it always fits at native size. Expects `chart` and
+  `txn_type` in scope.
+#}
+{% if chart.has_data %}
+  <svg viewBox="0 0 {{ chart.width }} {{ chart.height }}" class="cat-chart-svg cat-week-chart-svg"
+       role="img" aria-label="{{ category }} weekly {{ txn_type.value }} this month">
+    {% for tick in chart.y_ticks %}
+      <line x1="{{ chart.plot_left }}" y1="{{ tick.y }}" x2="{{ chart.plot_right }}" y2="{{ tick.y }}"
+            class="chart-gridline"/>
+    {% endfor %}
+    {% for bar in chart.bars %}
+      {% if bar.link %}
+        <a href="{{ bar.link }}" class="chart-bar-link"
+           aria-label="Days {{ bar.label }}: {{ bar.total_label }} ({{ bar.count }} txn{{ 's' if bar.count != 1 else '' }}) — view transactions"
+           data-tooltip-title="Days {{ bar.label }}" data-tooltip-kind="{{ category }}"
+           data-tooltip-amount="{{ bar.total_label }}" data-tooltip-count="{{ bar.count }}">
+          <rect x="{{ bar.x }}" y="{{ bar.y }}" width="{{ bar.bar_width }}" height="{{ bar.height }}"
+                class="cat-bar-{{ txn_type.value }}"/>
+        </a>
+      {% else %}
+        <rect x="{{ bar.x }}" y="{{ bar.y }}" width="{{ bar.bar_width }}" height="{{ bar.height }}"
+              class="cat-bar-{{ txn_type.value }}">
+          <title>Days {{ bar.label }}: {{ bar.total_label }} ({{ bar.count }} txn{{ "s" if bar.count != 1 else "" }})</title>
+        </rect>
+      {% endif %}
+      <text x="{{ bar.x + bar.bar_width / 2 }}" y="{{ chart.height - 12 }}" class="chart-x-label"
+            text-anchor="middle">{{ bar.label }}</text>
+    {% endfor %}
+    {% for tick in chart.y_ticks %}
+      <text x="{{ chart.plot_left - 8 }}" y="{{ tick.y }}" class="chart-axis-label"
+            text-anchor="end" dominant-baseline="middle">{{ tick.label }}</text>
+    {% endfor %}
+  </svg>
+  <div class="chart-tooltip" id="cat-week-chart-tooltip" hidden></div>
+  <script>
+    (function () {
+      var tooltip = document.getElementById("cat-week-chart-tooltip");
+      if (!tooltip) return;
+      document.querySelectorAll(".cat-week-chart-svg .chart-bar-link").forEach(function (link) {
+        link.addEventListener("mouseenter", function () {
+          var d = link.dataset;
+          tooltip.innerHTML =
+            '<div class="chart-tooltip-title">' + d.tooltipTitle + '</div>' +
+            '<div class="chart-tooltip-amount">' + d.tooltipKind + ': ' + d.tooltipAmount + '</div>' +
+            '<div class="chart-tooltip-hint">' + d.tooltipCount + ' txn' + (d.tooltipCount == 1 ? '' : 's') +
+            ' &middot; click to view</div>';
+          tooltip.hidden = false;
+        });
+        link.addEventListener("mousemove", function (event) {
+          tooltip.style.left = (event.clientX + 16) + "px";
+          tooltip.style.top = (event.clientY + 16) + "px";
+        });
+        link.addEventListener("mouseleave", function () {
+          tooltip.hidden = true;
+        });
+      });
+    })();
+  </script>
+{% else %}
+  <p>No transactions yet.</p>
+{% endif %}

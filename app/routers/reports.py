@@ -686,6 +686,148 @@ def _svg_category_chart(
     }
 
 
+def _weekly_points_for_month(
+    transactions: list,
+    category: str,
+    txn_type: TransactionType,
+    year: int,
+    month: int,
+) -> tuple[list[CategoryMonthPoint], list[tuple[str, str]]]:
+    """Return ``(points, date_ranges)`` — one entry per 7-day chunk of one month.
+
+    Backs the month drill-down's own trend chart: a single month has no
+    monthly trend to show, so it's broken into weekly chunks instead
+    (days 1-7, 8-14, ... — the last chunk shorter when the month doesn't
+    divide evenly by 7). Deliberately not aligned to real Mon-Sun
+    calendar weeks — a week spanning two months would pull in
+    transactions outside the month actually being viewed. ``date_ranges``
+    is each chunk's own ``(first day, last day)`` as ISO strings, parallel
+    to ``points``, for the chart's own per-bar click-through links.
+    """
+    last_day = monthrange(year, month)[1]
+    chunks = []
+    start = 1
+    while start <= last_day:
+        end = min(start + 6, last_day)
+        chunks.append((start, end))
+        start = end + 1
+
+    points = []
+    date_ranges = []
+    for start_day, end_day in chunks:
+        matching = [
+            t
+            for t in transactions
+            if t.type is txn_type
+            and t.category == category
+            and t.date.year == year
+            and t.date.month == month
+            and start_day <= t.date.day <= end_day
+        ]
+        total = sum((abs(t.amount) for t in matching), Decimal("0"))
+        label = f"{start_day}–{end_day}" if end_day != start_day else f"{start_day}"
+        points.append(
+            CategoryMonthPoint(
+                key=f"{year:04d}-{month:02d}-{start_day:02d}",
+                label=label,
+                total=total,
+                count=len(matching),
+            )
+        )
+        date_ranges.append(
+            (
+                f"{year:04d}-{month:02d}-{start_day:02d}",
+                f"{year:04d}-{month:02d}-{end_day:02d}",
+            )
+        )
+    return points, date_ranges
+
+
+def _svg_category_week_chart(
+    points: list[CategoryMonthPoint],
+    date_ranges: list[tuple[str, str]],
+    *,
+    txn_type: TransactionType,
+    category: str,
+    account_id: str = "",
+    width: int = 640,
+    height: int = 260,
+    pad_left: int = 76,
+    pad_right: int = 16,
+    pad_top: int = 16,
+    pad_bottom: int = 36,
+    tick_step: float | None = None,
+) -> dict:
+    """Build one month's weekly-bucketed trend chart geometry.
+
+    Unlike ``_svg_category_chart``'s fixed-per-month-width/scrolling
+    mechanic (built for many months), a single month only ever has 4-5
+    weekly buckets (see ``_weekly_points_for_month``), so this always
+    fits one fixed-size chart with no scrolling needed — same "stretch
+    to fill the container" treatment ``_svg_net_worth_chart`` uses for a
+    short history. No budget-overflow segment split either: a monthly
+    budget has no single-week equivalent to compare one bucket against.
+    """
+    if not points:
+        return {"has_data": False}
+
+    totals = [float(p.total) for p in points]
+    step = tick_step if tick_step is not None else _nice_step(max(totals, default=0))
+    y_min, y_max = _tick_bounds(totals, step)
+
+    count = len(points)
+    plot_left = pad_left
+    plot_right = width - pad_right
+    plot_bottom = height - pad_bottom
+    plot_height = plot_bottom - pad_top
+    group_width = (plot_right - plot_left) / count
+    bar_width = group_width * 0.5
+
+    def y_at(value: float) -> float:
+        return pad_top + plot_height * (1 - (value - y_min) / (y_max - y_min))
+
+    zero_y = y_at(0)
+    bars = []
+    for index, point in enumerate(points):
+        center = plot_left + group_width * (index + 0.5)
+        total_y = y_at(float(point.total))
+        date_from, date_to = date_ranges[index]
+        bars.append(
+            {
+                "x": center - bar_width / 2,
+                "bar_width": bar_width,
+                "y": total_y,
+                "height": zero_y - total_y,
+                "label": point.label,
+                "total_label": f"{point.total:,.2f}",
+                "count": point.count,
+                "link": breadcrumbs.transactions_link(
+                    date_from=date_from,
+                    date_to=date_to,
+                    category=category,
+                    txn_type=txn_type.value,
+                    account_id=account_id,
+                ),
+            }
+        )
+
+    step_count = round((y_max - y_min) / step)
+    y_ticks = [
+        {"y": y_at(y_min + i * step), "label": f"{y_min + i * step:,.0f}"}
+        for i in range(step_count + 1)
+    ]
+
+    return {
+        "has_data": True,
+        "width": width,
+        "height": height,
+        "plot_left": plot_left,
+        "plot_right": plot_right,
+        "bars": bars,
+        "y_ticks": y_ticks,
+    }
+
+
 # Fixed-order categorical colors for the spending pie chart's top slices —
 # same "assign identity by fixed order, never cycle" convention as any
 # other categorical series in the app. "Other" (the collapsed tail past
@@ -1955,6 +2097,67 @@ def _category_detail_response(
             ),
         }
 
+    # A dedicated "this month" tile set — individual-transaction avg/
+    # median/min/max and a pass/fail budget check, not monthly totals
+    # the way year_stats works, since a single month has no "months" of
+    # its own to summarize across. Also swaps the trend chart for a
+    # weekly-bucketed one (a single month has no monthly trend to show)
+    # and narrows the by-subcategory shares to just this month.
+    month_stats = None
+    week_chart = None
+    month_shares = None
+    if month is not None:
+        month_txns = [
+            t
+            for t in transactions
+            if t.type is txn_type
+            and t.category == category
+            and t.date.year == year
+            and t.date.month == month
+        ]
+        month_amounts = [abs(t.amount) for t in month_txns]
+        month_total = sum(month_amounts, Decimal("0"))
+        month_count = len(month_txns)
+        top_month_txns = sorted(month_txns, key=lambda t: abs(t.amount), reverse=True)[
+            :5
+        ]
+        month_stats = {
+            "total": month_total,
+            "count": month_count,
+            "avg_txn": month_total / month_count if month_count else None,
+            "median_txn": (statistics.median(month_amounts) if month_amounts else None),
+            "min_txn": min(month_amounts) if month_amounts else None,
+            "max_txn": max(month_amounts) if month_amounts else None,
+            "budget_met": (
+                month_total <= config["budget"] if config["budget"] else None
+            ),
+            "top_transactions": [
+                {
+                    "txn": t,
+                    "account_name": next(
+                        (a.name for a in accounts if a.id == t.account_id),
+                        t.account_id,
+                    ),
+                }
+                for t in top_month_txns
+            ],
+        }
+
+        week_points, week_ranges = _weekly_points_for_month(
+            transactions, category, txn_type, year, month
+        )
+        week_chart = _svg_category_week_chart(
+            week_points,
+            week_ranges,
+            txn_type=txn_type,
+            category=category,
+            account_id=account_id,
+        )
+
+        month_shares = category_subcategory_shares(
+            transactions, category, txn_type, year=year, month=month
+        )
+
     # A subcategory with zero activity in the shown (possibly trimmed)
     # window shouldn't get a legend checkbox for a series that's always
     # flat at zero.
@@ -1988,15 +2191,27 @@ def _category_detail_response(
 
     context.update(
         {
-            "chart": _svg_category_chart(
-                chart_monthly,
-                budget=config["budget"],
-                txn_type=txn_type,
-                category=category,
-                account_id=account_id,
+            "chart": (
+                week_chart
+                if week_chart is not None
+                else _svg_category_chart(
+                    chart_monthly,
+                    budget=config["budget"],
+                    txn_type=txn_type,
+                    category=category,
+                    account_id=account_id,
+                )
             ),
+            "chart_is_weekly": week_chart is not None,
             "chart_first_month_label": chart_monthly[0].label,
             "chart_last_month_label": chart_monthly[-1].label,
+            "month_stats": month_stats,
+            "month_shares": month_shares,
+            "month_date_bounds": (
+                _month_date_bounds(f"{year:04d}-{month:02d}")
+                if month is not None
+                else None
+            ),
             "subcategory_chart": subcategory_chart,
             "subcategory_filter_active": subcategory_filter_active,
             "monthly": list(reversed(chart_monthly)),

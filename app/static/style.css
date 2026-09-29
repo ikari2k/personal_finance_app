@@ -2211,6 +2211,11 @@ fieldset legend {
 .cat-chart-svg { display: block; }
 .cat-chart-fill .cat-chart-svg { width: 100%; height: auto; }
 
+/* Month drill-down's weekly trend chart (reports/_category_week_chart
+ * .html) — always fits at native size (4-5 bars, no scrolling), so it
+ * always fills its container width, same as .cat-chart-fill above. */
+.cat-week-chart-svg { width: 100%; height: auto; }
+
 .cat-bar-expense { fill: var(--pico-del-color); }
 .cat-bar-expense-over { fill: var(--pico-del-color); opacity: 0.55; }
 .cat-bar-income { fill: var(--pico-ins-color); }

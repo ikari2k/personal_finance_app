@@ -197,20 +197,96 @@
       </div>
     {% endif %}
 
+    {% if month_stats %}
+      <div class="dash-grid" style="margin-top: 0.75rem;">
+        <div class="dash-widget dash-widget-bordered dash-span-3">
+          <div class="dash-widget-head"><span class="dash-widget-title">{{ current_month_label }} total</span></div>
+          <div class="cat-stat-number">{{ "%.2f"|format(month_stats.total) }}</div>
+          <div class="cat-stat-sub">{{ month_stats.count }} transaction{{ "s" if month_stats.count != 1 else "" }}</div>
+        </div>
+        <div class="dash-widget dash-widget-bordered dash-span-3">
+          <div class="dash-widget-head"><span class="dash-widget-title">Transaction average</span></div>
+          <div class="cat-stat-number">{{ "%.2f"|format(month_stats.avg_txn) if month_stats.avg_txn is not none else "—" }}</div>
+          <div class="cat-stat-sub">Median {{ "%.2f"|format(month_stats.median_txn) if month_stats.median_txn is not none else "—" }}</div>
+        </div>
+        <div class="dash-widget dash-widget-bordered dash-span-3">
+          <div class="dash-widget-head"><span class="dash-widget-title">Transaction range</span></div>
+          {% if month_stats.min_txn is not none %}
+            <div class="cat-stat-number">{{ "%.2f"|format(month_stats.min_txn) }}&ndash;{{ "%.2f"|format(month_stats.max_txn) }}</div>
+            <div class="cat-stat-sub">Smallest to largest this month</div>
+          {% else %}
+            <div class="cat-stat-number">—</div>
+            <div class="cat-stat-sub">No transactions this month</div>
+          {% endif %}
+        </div>
+        <div class="dash-widget dash-widget-bordered dash-span-3">
+          <div class="dash-widget-head"><span class="dash-widget-title">Budget adherence</span></div>
+          {% if month_stats.budget_met is not none %}
+            <div class="cat-stat-number {{ 'amount-positive' if month_stats.budget_met else 'amount-negative' }}">
+              {{ '✓' if month_stats.budget_met else '✗' }}
+            </div>
+            <div class="cat-stat-sub">
+              {{ "%.2f"|format(month_stats.total) }} / {{ "%.2f"|format(config.budget) }} budget
+              &middot; {{ 'under budget' if month_stats.budget_met else 'over budget' }}
+            </div>
+          {% else %}
+            <div class="cat-stat-number">—</div>
+            <div class="cat-stat-sub">No budget set for this category</div>
+          {% endif %}
+        </div>
+      </div>
+
+      {% if month_stats.top_transactions %}
+        <article style="margin-top: 0.75rem;">
+          <h2 style="margin-bottom: 0.15rem;">Top {{ month_stats.top_transactions|length }} transaction{{ "s" if month_stats.top_transactions|length != 1 else "" }}</h2>
+          <p class="muted" style="margin-top: 0;">{{ category }}'s largest transactions in {{ current_month_label }}.</p>
+          <div class="table-scroll">
+            <table class="dash-txn-table">
+              <colgroup>
+                <col style="width: 14ch">
+                <col>
+                <col style="width: calc(10ch + 1rem)">
+              </colgroup>
+              <thead><tr><th>Date</th><th>Description</th><th style="text-align:right">Amount</th></tr></thead>
+              <tbody>
+                {% for row in month_stats.top_transactions %}
+                  {% set t = row.txn %}
+                  <tr>
+                    <td>{{ t.date.strftime("%b %-d, %Y") }}</td>
+                    <td class="dash-txn-desc"{% if t.notes %} title="Original description: {{ t.description }}"{% endif %}>{{ t.notes or t.description or row.account_name }}</td>
+                    <td class="dash-txn-amount {{ 'amount-negative' if t.amount < 0 else 'amount-positive' }}">{{ "%.2f"|format(t.amount) }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </article>
+      {% endif %}
+    {% endif %}
+
     <article style="margin-top: 1.5rem;">
       <h2 style="margin-bottom: 0.15rem;">{{ category }} over time</h2>
-      <p class="muted" style="margin-top: 0;">
-        Monthly {{ txn_type.value }}, {{ chart_first_month_label }} &ndash; {{ chart_last_month_label }}.
-        {% if chart.needs_scroll %}Scroll to see earlier months.{% endif %}
-      </p>
-      <p class="chart-legend">
-        <span class="chart-legend-swatch bar-{{ txn_type.value }}"></span> {{ category }}
-        {% if config.budget %}
-          <span class="chart-legend-line"></span> Budget ({{ "%.2f"|format(config.budget) }}/mo)
-        {% endif %}
-      </p>
-      {% include "reports/_category_chart.html" %}
+      {% if chart_is_weekly %}
+        <p class="muted" style="margin-top: 0;">Weekly {{ txn_type.value }} in {{ current_month_label }}.</p>
+        <p class="chart-legend">
+          <span class="chart-legend-swatch bar-{{ txn_type.value }}"></span> {{ category }}
+        </p>
+        {% include "reports/_category_week_chart.html" %}
+      {% else %}
+        <p class="muted" style="margin-top: 0;">
+          Monthly {{ txn_type.value }}, {{ chart_first_month_label }} &ndash; {{ chart_last_month_label }}.
+          {% if chart.needs_scroll %}Scroll to see earlier months.{% endif %}
+        </p>
+        <p class="chart-legend">
+          <span class="chart-legend-swatch bar-{{ txn_type.value }}"></span> {{ category }}
+          {% if config.budget %}
+            <span class="chart-legend-line"></span> Budget ({{ "%.2f"|format(config.budget) }}/mo)
+          {% endif %}
+        </p>
+        {% include "reports/_category_chart.html" %}
+      {% endif %}
 
+      {% if not chart_is_weekly %}
       <details style="margin-top: 0.75rem;">
         <summary>View as table</summary>
         <div class="table-scroll">
@@ -239,6 +315,7 @@
           </table>
         </div>
       </details>
+      {% endif %}
     </article>
 
     {% if subcategory_chart %}
@@ -288,14 +365,62 @@
 
       <div>
         <h2>By subcategory</h2>
+        {#
+          Three-way when month-scoped (This month/This year/All time,
+          "This month" the default), two-way otherwise (This year/All
+          time, unchanged) — one shared toggle function rather than a
+          near-duplicate onclick per button, since it's now 2-3 buttons
+          instead of always 2.
+        #}
         <div class="cat-scope-toggle" role="group" aria-label="Time range">
-          <button type="button" class="cat-scope-toggle-{{ txn_type.value }}" aria-pressed="true"
-                  onclick="document.getElementById('cat-shares-year').hidden=false; document.getElementById('cat-shares-all').hidden=true; this.setAttribute('aria-pressed','true'); this.nextElementSibling.setAttribute('aria-pressed','false');">This year</button>
+          {% if month_shares is not none %}
+            <button type="button" class="cat-scope-toggle-{{ txn_type.value }}" aria-pressed="true"
+                    onclick="catScopeToggle(this, 'cat-shares-month')">This month</button>
+          {% endif %}
+          <button type="button" class="cat-scope-toggle-{{ txn_type.value }}" aria-pressed="{{ 'false' if month_shares is not none else 'true' }}"
+                  onclick="catScopeToggle(this, 'cat-shares-year')">This year</button>
           <button type="button" class="cat-scope-toggle-{{ txn_type.value }}" aria-pressed="false"
-                  onclick="document.getElementById('cat-shares-year').hidden=true; document.getElementById('cat-shares-all').hidden=false; this.setAttribute('aria-pressed','true'); this.previousElementSibling.setAttribute('aria-pressed','false');">All time</button>
+                  onclick="catScopeToggle(this, 'cat-shares-all')">All time</button>
         </div>
+        <script>
+          function catScopeToggle(btn, showId) {
+            ['cat-shares-month', 'cat-shares-year', 'cat-shares-all'].forEach(function (id) {
+              var el = document.getElementById(id);
+              if (el) el.hidden = (id !== showId);
+            });
+            btn.parentNode.querySelectorAll('button').forEach(function (b) {
+              b.setAttribute('aria-pressed', b === btn ? 'true' : 'false');
+            });
+          }
+        </script>
 
-        <div id="cat-shares-year">
+        {% if month_shares is not none %}
+          <div id="cat-shares-month">
+            {% if month_shares %}
+              <div class="dash-cat-bars">
+                {% for s in month_shares %}
+                  {% set sub_icon = config.subcategories.get(s.name, {}).get('icon', '') %}
+                  <div class="dash-cat-bar-row">
+                    {% if sub_icon %}<span class="dash-cat-glyph">{{ category_icon(sub_icon) }}</span>{% endif %}
+                    <span class="dash-cat-bar-main">
+                      <span class="dash-cat-bar-top">
+                        <a class="table-link dash-cat-bar-name" href="{{ txn_link }}&subcategory={{ s.name | urlencode }}&date_from={{ month_date_bounds[0] }}&date_to={{ month_date_bounds[1] }}">{{ s.name }}</a>
+                        <span class="dash-cat-bar-amount">{{ "%.2f"|format(s.total) }} &middot; {{ "%.1f"|format(s.pct) }}% &middot; {{ s.count }} txns</span>
+                      </span>
+                      <span class="dash-cat-bar-track">
+                        <span class="dash-cat-bar-fill cat-subrow-fill-{{ txn_type.value }}" style="width: {{ s.pct }}%"></span>
+                      </span>
+                    </span>
+                  </div>
+                {% endfor %}
+              </div>
+            {% else %}
+              <p class="muted">No subcategorized activity in {{ current_month_label }}.</p>
+            {% endif %}
+          </div>
+        {% endif %}
+
+        <div id="cat-shares-year" {{ 'hidden' if month_shares is not none }}>
           {% if this_year_shares %}
             <div class="dash-cat-bars">
               {% for s in this_year_shares %}
