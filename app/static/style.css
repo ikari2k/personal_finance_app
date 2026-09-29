@@ -1230,6 +1230,38 @@ fieldset legend {
   opacity: 0.7;
 }
 
+/* Custom hover tooltip for the bars (reports/_net_worth_chart.html's
+ * own script fills/positions it), replacing the browser's unstyled SVG
+ * <title> tooltip with one that matches the app's own look — a plain
+ * bordered card, no shadow (this app never uses box-shadow), tracked to
+ * the cursor via a fixed position. pointer-events: none so it never
+ * itself becomes the hover target and flickers the underlying link's
+ * own :hover state. */
+.chart-tooltip {
+  position: fixed;
+  z-index: 50;
+  pointer-events: none;
+  background: var(--pico-background-color);
+  border: var(--pico-border-width) solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+  padding: 0.5rem 0.7rem;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  max-width: 14rem;
+}
+.chart-tooltip-title {
+  font-weight: 700;
+  margin-bottom: 0.15rem;
+}
+.chart-tooltip-amount {
+  font-variant-numeric: tabular-nums;
+}
+.chart-tooltip-hint {
+  color: var(--pico-muted-color);
+  font-size: 0.72rem;
+  margin-top: 0.3rem;
+}
+
 /* Categories index (/reports/categories) row sparkline — same
  * income/expense color convention as the bars above, applied as a
  * stroke instead of a fill since the line itself is the mark here (the

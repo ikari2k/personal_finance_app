@@ -35,13 +35,21 @@ def transactions_link(
     subcategory: str = "",
     txn_type: str = "",
     account_id: str = "",
+    search: str = "",
 ) -> str:
-    """Build a ``/transactions`` URL carrying only the filters actually set.
+    """Build a ``/transactions`` URL that fully specifies every sticky filter.
 
-    Every cross-page link into the transactions list in this app follows
-    this same "only non-empty filters appear in the querystring" shape,
-    centralized here so a future filter needs updating in one place, not
-    at every call site that links out to the ledger.
+    Always emits all seven of ``list_transactions``'s sticky-cookie
+    filters explicitly (``account_id``/``category``/``subcategory``/
+    ``txn_type``/``search``/``date_from``/``date_to``), even the ones
+    left at their default ``""`` — an *omitted* param there falls back
+    to whatever's in the visitor's sticky cookie (see
+    ``list_transactions``'s own docstring), so a link built to mean
+    "exactly this month, no category filter" has to say so explicitly
+    or a stale category/search cookie from an earlier visit silently
+    narrows what the link actually shows. Same "explicit empty
+    overrides the sticky cookie" convention as the transactions
+    toolbar's own Clear filters button.
     """
     params = {
         "date_from": date_from,
@@ -49,10 +57,11 @@ def transactions_link(
         "category": category,
         "subcategory": subcategory,
         "txn_type": txn_type,
+        "search": search,
         "account_id": account_id,
     }
-    query = "&".join(f"{key}={quote(value)}" for key, value in params.items() if value)
-    return f"/transactions?{query}" if query else "/transactions"
+    query = "&".join(f"{key}={quote(value)}" for key, value in params.items())
+    return f"/transactions?{query}"
 
 
 def _report_link(path: str, account_id: str) -> str:
