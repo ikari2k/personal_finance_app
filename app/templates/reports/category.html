@@ -355,7 +355,7 @@
               {% for y in years %}
                 <tr>
                   <td>
-                    {{ y.year }}
+                    <a class="table-link" href="/reports/category/{{ y.year }}?txn_type={{ txn_type.value }}&category={{ category | urlencode }}{{ '&account_id=' + account_id if account_id }}">{{ y.year }}</a>
                     {% if y.year == this_year %}<span class="muted">(in progress)</span>{% endif %}
                   </td>
                   <td>{{ "%.2f"|format(y.total) }}</td>
