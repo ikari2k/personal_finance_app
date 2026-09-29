@@ -1596,6 +1596,8 @@ def category_detail(
     txn_type: TransactionType,
     category: str,
     account_id: str = "",
+    year: int | None = None,
+    month: int | None = None,
     subcategories: list[str] = Query(default=[]),
 ) -> HTMLResponse:
     """Render one category's full-history trend, year rollup, and subcategory shares.
@@ -1609,6 +1611,18 @@ def category_detail(
     already rejects ``TRANSFER`` — transfers use a fixed category outside
     the managed tree, so there's nothing here to show a trend for.
 
+    ``year``/``month`` (both optional) scope the hero stats to a
+    specific period instead of always "today" — reached by clicking a
+    category's trend-link from ``/reports/{year}`` (``year`` only) or
+    ``/reports/{year}/{month}`` (both), vs. ``/reports/categories``'
+    own links, which omit both for the plain all-time view. ``month``
+    without ``year`` is treated as neither being set (there's no
+    "this month of an unspecified year" to anchor to). The full-history
+    trend chart, all-time total, by-year table, and highest-month tile
+    are unaffected either way — only the "This year"/"This month" tiles,
+    the avg-transaction-size comparison, and the budget streak's own
+    12-month window shift to the requested period.
+
     ``subcategories`` (repeated query param, e.g. ``?subcategories=A&
     subcategories=B``) filters the by-subcategory stacked chart to just
     those names — a plain GET-and-resubmit form, same convention as the
@@ -1621,6 +1635,8 @@ def category_detail(
     """
     if txn_type is TransactionType.TRANSFER:
         return HTMLResponse("Invalid transaction type", status_code=404)
+    if year is None:
+        month = None
 
     accounts = read_accounts()
     transactions = _filter_by_account(read_ledger(), account_id)
@@ -1630,6 +1646,10 @@ def category_detail(
     )
 
     monthly = category_monthly_series(transactions, category, txn_type)
+    all_time_link = (
+        f"/reports/category?txn_type={txn_type.value}&category={quote(category)}"
+        + (f"&account_id={quote(account_id)}" if account_id else "")
+    )
     context = {
         "category": category,
         "txn_type": txn_type,
@@ -1640,27 +1660,55 @@ def category_detail(
         "breadcrumbs": breadcrumbs.for_category(
             category, account_id, txn_type=txn_type.value
         ),
+        "scope_year": year,
+        "scope_month": month,
+        "all_time_link": all_time_link,
     }
     if not monthly:
         return templates.TemplateResponse(request, "reports/category.html", context)
 
     today = date.today()
+    if year is not None and month is not None:
+        ref_year, ref_month = year, month
+    elif year is not None:
+        # A fully past year has no "current month" of its own — anchor
+        # to December so the YTD-style comparison below naturally
+        # becomes a plain full-year-vs-full-year one (Jan-Dec vs
+        # Jan-Dec), rather than needing a separate code path for it.
+        ref_year, ref_month = year, (today.month if year == today.year else 12)
+    else:
+        ref_year, ref_month = today.year, today.month
+    is_current_period = (ref_year, ref_month) == (today.year, today.month)
+
     all_time_total = sum((p.total for p in monthly), Decimal("0"))
     all_time_count = sum(p.count for p in monthly)
 
-    this_year_points = [p for p in monthly if p.key.startswith(f"{today.year:04d}-")]
+    # Bounded to ref_month, not just ref_year — for the default (today)
+    # case this is a no-op, since category_monthly_series never has
+    # entries past today anyway, but a fully past ref_year has all 12
+    # months in ``monthly`` already, so without this bound a month-
+    # scoped view (year+month both given) would silently include months
+    # after the one actually being viewed.
+    this_year_points = [
+        p
+        for p in monthly
+        if p.key.startswith(f"{ref_year:04d}-")
+        and int(p.key.split("-")[1]) <= ref_month
+    ]
     this_year_total = sum((p.total for p in this_year_points), Decimal("0"))
     # A same-months-last-year comparison, not "this partial year vs the
     # prior full year" — the by-year table below uses that simpler
     # (if less honest for an in-progress year) plain-total convention
     # instead, same as yearly_totals_with_yoy elsewhere, so the two
-    # aren't trying to answer quite the same question.
+    # aren't trying to answer quite the same question. For a fully past
+    # ref_year (ref_month forced to 12 above), "same months" is every
+    # month, so this degrades into a plain full-year comparison anyway.
     last_year_same_span_total = sum(
         (
             p.total
             for p in monthly
-            if p.key.startswith(f"{today.year - 1:04d}-")
-            and int(p.key.split("-")[1]) <= today.month
+            if p.key.startswith(f"{ref_year - 1:04d}-")
+            and int(p.key.split("-")[1]) <= ref_month
         ),
         Decimal("0"),
     )
@@ -1670,7 +1718,7 @@ def category_detail(
         else None
     )
 
-    current_key = f"{today.year:04d}-{today.month:02d}"
+    current_key = f"{ref_year:04d}-{ref_month:02d}"
     current_month_point = next((p for p in monthly if p.key == current_key), None)
     current_month_ring = (
         _ring_geometry(current_month_point.total, config["budget"])
@@ -1686,8 +1734,8 @@ def category_detail(
     last_year_same_span_count = sum(
         p.count
         for p in monthly
-        if p.key.startswith(f"{today.year - 1:04d}-")
-        and int(p.key.split("-")[1]) <= today.month
+        if p.key.startswith(f"{ref_year - 1:04d}-")
+        and int(p.key.split("-")[1]) <= ref_month
     )
     this_year_avg_txn = this_year_total / this_year_count if this_year_count else None
     last_year_avg_txn = (
@@ -1703,9 +1751,17 @@ def category_detail(
 
     budget_streak = None
     if config["budget"]:
-        last_12 = monthly[-12:]
+        # 12 months ending at the scoped period (ref_year/ref_month),
+        # not always "ending today" — falls back to the trailing 12 if
+        # current_key somehow isn't in monthly (shouldn't happen, since
+        # ref_year/ref_month is never later than today and
+        # category_monthly_series always extends through today).
+        end_index = next(
+            (i for i, p in enumerate(monthly) if p.key == current_key), len(monthly) - 1
+        )
+        window = monthly[max(0, end_index - 11) : end_index + 1]
         dots = [
-            "under" if point.total <= config["budget"] else "over" for point in last_12
+            "under" if point.total <= config["budget"] else "over" for point in window
         ]
         budget_streak = {
             "dots": dots,
@@ -1753,7 +1809,15 @@ def category_detail(
             "current_month": today.month,
             "this_year_total": this_year_total,
             "ytd_delta": ytd_delta,
-            "current_month_label": f"{month_abbr[today.month]} {today.year}",
+            "current_month_label": f"{month_abbr[ref_month]} {ref_year}",
+            "year_tile_label": (
+                f"{ref_year} YTD" if ref_year == today.year else str(ref_year)
+            ),
+            "month_tile_heading": (
+                f"This month · {month_abbr[ref_month]} {ref_year}"
+                if is_current_period
+                else f"{month_abbr[ref_month]} {ref_year}"
+            ),
             "current_month_point": current_month_point,
             "current_month_ring": current_month_ring,
             "highest_month": highest_month,

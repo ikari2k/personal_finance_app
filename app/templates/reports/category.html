@@ -6,6 +6,17 @@
 {% block content %}
   {% set txn_link = "/transactions?txn_type=" + txn_type.value + "&category=" + (category | urlencode) + ("&account_id=" + account_id if account_id else "") %}
   {{ breadcrumb(breadcrumbs) }}
+  {% if has_data and scope_month %}
+    <p class="muted">
+      Showing {{ current_month_label }}.
+      <a class="table-link" href="{{ all_time_link }}">View all-time stats &rsaquo;</a>
+    </p>
+  {% elif has_data and scope_year %}
+    <p class="muted">
+      Showing {{ scope_year }}.
+      <a class="table-link" href="{{ all_time_link }}">View all-time stats &rsaquo;</a>
+    </p>
+  {% endif %}
 
   {% if not has_data %}
     <h1>{{ category }}</h1>
@@ -44,7 +55,7 @@
       </div>
 
       <div class="dash-widget dash-widget-bordered dash-span-3">
-        <div class="dash-widget-head"><span class="dash-widget-title">This year (YTD)</span></div>
+        <div class="dash-widget-head"><span class="dash-widget-title">{{ year_tile_label }}</span></div>
         <div class="cat-stat-number">{{ "%.2f"|format(this_year_total) }}</div>
         {% if ytd_delta is not none %}
           {% set rising = ytd_delta >= 0 %}
@@ -57,7 +68,7 @@
       </div>
 
       <div class="dash-widget dash-widget-bordered dash-span-3">
-        <div class="dash-widget-head"><span class="dash-widget-title">This month &middot; {{ current_month_label }}</span></div>
+        <div class="dash-widget-head"><span class="dash-widget-title">{{ month_tile_heading }}</span></div>
         {% if current_month_ring %}
           <div class="cat-month-row">
             <span class="utilization utilization-{{ current_month_ring.tier }}">

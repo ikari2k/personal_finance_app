@@ -8,7 +8,14 @@
   every other cross-page link in the app.
 #}
 {% macro _txn_link(txn_type, category, subcategory, date_from, date_to, account_id) %}/transactions?txn_type={{ txn_type }}&category={{ category | urlencode }}&subcategory={{ subcategory | urlencode }}&date_from={{ date_from }}&date_to={{ date_to }}{{ '&account_id=' + account_id if account_id }}{% endmacro %}
-{% macro breakdown_table(breakdown, config, txn_type, date_from, date_to, account_id="", delta_label=none) %}
+{#
+  ``year``/``month`` (both optional) additionally scope each row's
+  trend-link (the small trending-up icon) to that period instead of
+  the plain all-time view — set by year.html (year only) and month.html
+  (both), left unset by any other caller, which gets the all-time
+  category detail page (see app.routers.reports.category_detail).
+#}
+{% macro breakdown_table(breakdown, config, txn_type, date_from, date_to, account_id="", delta_label=none, year=none, month=none) %}
   {% if breakdown %}
     <div class="table-scroll">
       <table class="breakdown-table">
@@ -23,7 +30,7 @@
                 {% endif %}
                 <a class="table-link" href="{{ _txn_link(txn_type, cat.name, '', date_from, date_to, account_id) }}">{{ cat.name }}</a>
                 <a class="cat-trend-link" title="View {{ cat.name }} over time"
-                   href="/reports/category?txn_type={{ txn_type }}&category={{ cat.name | urlencode }}{{ '&account_id=' + account_id if account_id }}">
+                   href="/reports/category?txn_type={{ txn_type }}&category={{ cat.name | urlencode }}{{ '&account_id=' + account_id if account_id }}{{ '&year=' + year|string if year }}{{ '&month=' + month|string if month }}">
                   {{ category_icon('trending-up') }}
                 </a>
               </td>
@@ -106,7 +113,7 @@
   income, so the month page's income breakdown keeps using the plain
   ``breakdown_table`` above instead.
 #}
-{% macro expense_month_breakdown_table(rows, date_from, date_to, account_id="") %}
+{% macro expense_month_breakdown_table(rows, date_from, date_to, account_id="", year=none, month=none) %}
   {% if rows %}
     <div class="table-scroll">
       <table class="breakdown-table">
@@ -122,7 +129,7 @@
                 {% endif %}
                 <a class="table-link" href="{{ _txn_link('expense', cat.name, '', date_from, date_to, account_id) }}">{{ cat.name }}</a>
                 <a class="cat-trend-link" title="View {{ cat.name }} over time"
-                   href="/reports/category?txn_type=expense&category={{ cat.name | urlencode }}{{ '&account_id=' + account_id if account_id }}">
+                   href="/reports/category?txn_type=expense&category={{ cat.name | urlencode }}{{ '&account_id=' + account_id if account_id }}{{ '&year=' + year|string if year }}{{ '&month=' + month|string if month }}">
                   {{ category_icon('trending-up') }}
                 </a>
               </td>

@@ -126,7 +126,7 @@
   <div class="report-columns">
     <div>
       <h2>Income by category</h2>
-      {{ breakdown_table(income_breakdown, income_config, "income", date_from, date_to, account_id, "vs. prior year") }}
+      {{ breakdown_table(income_breakdown, income_config, "income", date_from, date_to, account_id, "vs. prior year", year=year) }}
     </div>
     <div>
       <h2>Expense by category</h2>
@@ -137,7 +137,7 @@
         </button>
       </div>
       <div id="expense-breakdown-wrap" class="hide-subcategories">
-        {{ breakdown_table(expense_breakdown, expense_config, "expense", date_from, date_to, account_id, "vs. prior year") }}
+        {{ breakdown_table(expense_breakdown, expense_config, "expense", date_from, date_to, account_id, "vs. prior year", year=year) }}
       </div>
     </div>
   </div>
