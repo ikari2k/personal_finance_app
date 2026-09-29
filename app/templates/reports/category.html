@@ -365,8 +365,10 @@
                     {% if y.year == this_year %}
                       <span class="muted">&mdash;</span>
                     {% elif y.yoy_delta is not none %}
-                      <span class="{{ 'amount-negative' if y.yoy_delta >= 0 else 'amount-positive' }}">
-                        {{ '+' if y.yoy_delta >= 0 else '' }}{{ "%.2f"|format(y.yoy_delta) }}
+                      {% set rising = y.yoy_delta >= 0 %}
+                      {% set good = (rising and txn_type.value == "income") or (not rising and txn_type.value == "expense") %}
+                      <span class="{{ 'amount-positive' if good else 'amount-negative' }}">
+                        {{ '+' if rising else '' }}{{ "%.2f"|format(y.yoy_delta) }}
                       </span>
                     {% else %}
                       <span class="muted">&mdash;</span>
@@ -377,6 +379,37 @@
             </tbody>
           </table>
         </div>
+
+        {% if year_stats and year_stats.month_rows %}
+          <h2 style="margin-top: 1.5rem;">By month</h2>
+          <div class="table-scroll">
+            <table class="breakdown-table">
+              <thead><tr><th>Month</th><th>Total</th><th># Txns</th><th>vs prior month</th></tr></thead>
+              <tbody>
+                {% for m in year_stats.month_rows %}
+                  <tr>
+                    <td>
+                      <a class="table-link" href="/reports/category/{{ scope_year }}/{{ m.month }}?txn_type={{ txn_type.value }}&category={{ category | urlencode }}{{ '&account_id=' + account_id if account_id }}">{{ m.label }}</a>
+                    </td>
+                    <td>{{ "%.2f"|format(m.total) }}</td>
+                    <td>{{ m.count }}</td>
+                    <td>
+                      {% if m.delta is not none %}
+                        {% set rising = m.delta >= 0 %}
+                        {% set good = (rising and txn_type.value == "income") or (not rising and txn_type.value == "expense") %}
+                        <span class="{{ 'amount-positive' if good else 'amount-negative' }}">
+                          {{ '+' if rising else '' }}{{ "%.2f"|format(m.delta) }}
+                        </span>
+                      {% else %}
+                        <span class="muted">&mdash;</span>
+                      {% endif %}
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% endif %}
       </div>
 
       <div>

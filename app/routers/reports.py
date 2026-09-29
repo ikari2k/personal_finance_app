@@ -2324,6 +2324,31 @@ def _category_detail_response(
             ),
         }
 
+        # "By month" table rows — each month's own total/count plus a
+        # vs-prior-month delta, looked up against the *full* (untrimmed)
+        # ``monthly`` series rather than ``chart_monthly`` alone so
+        # January's delta still compares against the prior December even
+        # though that December falls outside this calendar year.
+        month_index_by_key = {p.key: i for i, p in enumerate(monthly)}
+        month_rows = []
+        for point in chart_monthly:
+            index = month_index_by_key[point.key]
+            previous_total = monthly[index - 1].total if index > 0 else None
+            month_rows.append(
+                {
+                    "month": int(point.key.split("-")[1]),
+                    "label": point.label,
+                    "total": point.total,
+                    "count": point.count,
+                    "delta": (
+                        point.total - previous_total
+                        if previous_total is not None
+                        else None
+                    ),
+                }
+            )
+        year_stats["month_rows"] = month_rows
+
     # A dedicated "this month" tile set — individual-transaction avg/
     # median/min/max and a pass/fail budget check, not monthly totals
     # the way year_stats works, since a single month has no "months" of
