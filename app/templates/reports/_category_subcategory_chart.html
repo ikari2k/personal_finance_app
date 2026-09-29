@@ -46,10 +46,20 @@
       {% endfor %}
       {% for bar in subcategory_chart.bars %}
         {% for segment in bar.segments %}
-          <rect x="{{ bar.x }}" y="{{ segment.y }}" width="{{ bar.bar_width }}" height="{{ segment.height }}"
-                class="{{ segment.css_class }}">
-            <title>{{ bar.label }} &middot; {{ segment.name }}: {{ segment.amount_label }}</title>
-          </rect>
+          {% if segment.link %}
+            <a href="{{ segment.link }}" class="chart-bar-link"
+               aria-label="{{ bar.label }} · {{ segment.name }}: {{ segment.amount_label }} — view transactions"
+               data-tooltip-title="{{ bar.label }}" data-tooltip-kind="{{ segment.name }}"
+               data-tooltip-amount="{{ segment.amount_label }}">
+              <rect x="{{ bar.x }}" y="{{ segment.y }}" width="{{ bar.bar_width }}" height="{{ segment.height }}"
+                    class="{{ segment.css_class }}"/>
+            </a>
+          {% else %}
+            <rect x="{{ bar.x }}" y="{{ segment.y }}" width="{{ bar.bar_width }}" height="{{ segment.height }}"
+                  class="{{ segment.css_class }}">
+              <title>{{ bar.label }} &middot; {{ segment.name }}: {{ segment.amount_label }}</title>
+            </rect>
+          {% endif %}
         {% endfor %}
       {% endfor %}
       {% for xl in subcategory_chart.x_labels %}
@@ -69,6 +79,7 @@
       </g>
     </svg>
   </div>
+  <div class="chart-tooltip" id="cat-subcat-chart-tooltip" hidden></div>
   <script>
     (function () {
       var wrap = document.getElementById("cat-subcat-chart-scroll");
@@ -78,6 +89,29 @@
       wrap.addEventListener("scroll", sync);
       wrap.scrollLeft = wrap.scrollWidth;
       sync();
+    })();
+    (function () {
+      // Custom hover tooltip for the stack segments, same treatment as
+      // reports/_net_worth_chart.html's own (see that partial for why).
+      var tooltip = document.getElementById("cat-subcat-chart-tooltip");
+      if (!tooltip) return;
+      document.querySelectorAll("#cat-subcat-chart-scroll .chart-bar-link").forEach(function (link) {
+        link.addEventListener("mouseenter", function () {
+          var d = link.dataset;
+          tooltip.innerHTML =
+            '<div class="chart-tooltip-title">' + d.tooltipTitle + '</div>' +
+            '<div class="chart-tooltip-amount">' + d.tooltipKind + ': ' + d.tooltipAmount + '</div>' +
+            '<div class="chart-tooltip-hint">Click to view transactions</div>';
+          tooltip.hidden = false;
+        });
+        link.addEventListener("mousemove", function (event) {
+          tooltip.style.left = (event.clientX + 16) + "px";
+          tooltip.style.top = (event.clientY + 16) + "px";
+        });
+        link.addEventListener("mouseleave", function () {
+          tooltip.hidden = true;
+        });
+      });
     })();
   </script>
 {% endif %}

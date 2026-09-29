@@ -22,12 +22,24 @@
               text-anchor="end">{{ chart.budget_label }}</text>
       {% endif %}
       {% for bar in chart.bars %}
-        {% for segment in bar.segments %}
-          <rect x="{{ bar.x }}" y="{{ segment.y }}" width="{{ bar.bar_width }}" height="{{ segment.height }}"
-                class="cat-bar-{{ txn_type.value }}{{ '-over' if segment.over else '' }}">
-            <title>{{ bar.label }}: {{ bar.total_label }} ({{ bar.count }} txn{{ "s" if bar.count != 1 else "" }})</title>
-          </rect>
-        {% endfor %}
+        {% if bar.link %}
+          <a href="{{ bar.link }}" class="chart-bar-link"
+             aria-label="{{ bar.label }}: {{ bar.total_label }} ({{ bar.count }} txn{{ 's' if bar.count != 1 else '' }}) — view transactions"
+             data-tooltip-title="{{ bar.label }}" data-tooltip-kind="{{ category }}"
+             data-tooltip-amount="{{ bar.total_label }}" data-tooltip-count="{{ bar.count }}">
+            {% for segment in bar.segments %}
+              <rect x="{{ bar.x }}" y="{{ segment.y }}" width="{{ bar.bar_width }}" height="{{ segment.height }}"
+                    class="cat-bar-{{ txn_type.value }}{{ '-over' if segment.over else '' }}"/>
+            {% endfor %}
+          </a>
+        {% else %}
+          {% for segment in bar.segments %}
+            <rect x="{{ bar.x }}" y="{{ segment.y }}" width="{{ bar.bar_width }}" height="{{ segment.height }}"
+                  class="cat-bar-{{ txn_type.value }}{{ '-over' if segment.over else '' }}">
+              <title>{{ bar.label }}: {{ bar.total_label }} ({{ bar.count }} txn{{ "s" if bar.count != 1 else "" }})</title>
+            </rect>
+          {% endfor %}
+        {% endif %}
       {% endfor %}
       {% for xl in chart.x_labels %}
         <text x="{{ xl.x }}" y="{{ chart.height - 26 }}" class="chart-x-label"
@@ -46,6 +58,7 @@
       </g>
     </svg>
   </div>
+  <div class="chart-tooltip" id="cat-chart-tooltip" hidden></div>
   <script>
     (function () {
       var wrap = document.getElementById("cat-chart-scroll");
@@ -55,6 +68,30 @@
       wrap.addEventListener("scroll", sync);
       wrap.scrollLeft = wrap.scrollWidth;
       sync();
+    })();
+    (function () {
+      // Custom hover tooltip for the bars, same treatment as
+      // reports/_net_worth_chart.html's own (see that partial for why).
+      var tooltip = document.getElementById("cat-chart-tooltip");
+      if (!tooltip) return;
+      document.querySelectorAll("#cat-chart-scroll .chart-bar-link").forEach(function (link) {
+        link.addEventListener("mouseenter", function () {
+          var d = link.dataset;
+          tooltip.innerHTML =
+            '<div class="chart-tooltip-title">' + d.tooltipTitle + '</div>' +
+            '<div class="chart-tooltip-amount">' + d.tooltipKind + ': ' + d.tooltipAmount + '</div>' +
+            '<div class="chart-tooltip-hint">' + d.tooltipCount + ' txn' + (d.tooltipCount == 1 ? '' : 's') +
+            ' &middot; click to view</div>';
+          tooltip.hidden = false;
+        });
+        link.addEventListener("mousemove", function (event) {
+          tooltip.style.left = (event.clientX + 16) + "px";
+          tooltip.style.top = (event.clientY + 16) + "px";
+        });
+        link.addEventListener("mouseleave", function () {
+          tooltip.hidden = true;
+        });
+      });
     })();
   </script>
 {% else %}

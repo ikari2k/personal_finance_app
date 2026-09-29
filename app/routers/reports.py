@@ -561,6 +561,9 @@ def _svg_category_chart(
     points: list[CategoryMonthPoint],
     *,
     budget: Decimal | None,
+    txn_type: TransactionType | None = None,
+    category: str = "",
+    account_id: str = "",
     per_month_width: int = PER_MONTH_W,
     height: int = 380,
     pad_left: int = 84,
@@ -581,7 +584,11 @@ def _svg_category_chart(
     rather than a different hue: the bar's color is the mark's identity
     (this category, this transaction type), so "over budget" is encoded
     as an emphasis on the overflow segment instead of a second, colliding
-    color meaning.
+    color meaning. When ``txn_type``/``category`` are given (the normal
+    case — left unset only by tests that don't care about the links),
+    each bar also gets its own click-through ``link`` into
+    ``/transactions``, scoped to that exact month — same "bars are
+    clickable" convention ``_svg_net_worth_chart`` already established.
     """
     if not points:
         return {"has_data": False}
@@ -622,6 +629,7 @@ def _svg_category_chart(
             ]
         else:
             segments = [{"y": total_y, "height": zero_y - total_y, "over": False}]
+        month_date_from, month_date_to = _month_date_bounds(point.key)
         bars.append(
             {
                 "x": center - bar_width / 2,
@@ -630,6 +638,17 @@ def _svg_category_chart(
                 "label": point.label,
                 "total_label": f"{point.total:,.2f}",
                 "count": point.count,
+                "link": (
+                    breadcrumbs.transactions_link(
+                        date_from=month_date_from,
+                        date_to=month_date_to,
+                        category=category,
+                        txn_type=txn_type.value,
+                        account_id=account_id,
+                    )
+                    if txn_type is not None and category
+                    else None
+                ),
             }
         )
         year, month = point.key.split("-")
@@ -806,6 +825,9 @@ def _svg_subcategory_stack_chart(
     series: list[SubcategoryMonthPoint],
     *,
     visible: set[str] | None = None,
+    txn_type: TransactionType | None = None,
+    category: str = "",
+    account_id: str = "",
     per_month_width: int = PER_MONTH_W,
     height: int = 380,
     pad_left: int = 84,
@@ -841,7 +863,12 @@ def _svg_subcategory_stack_chart(
     are drawn (see the dataviz "color follows the entity, never its
     rank" rule). Returns ``{"has_data": False, "legend": []}`` for no
     months/series (the caller — a category with no subcategorized
-    activity at all — already skips calling this).
+    activity at all — already skips calling this). When ``txn_type``/
+    ``category`` are given, each segment also gets its own click-through
+    ``link`` into ``/transactions``, scoped to that exact month and
+    subcategory — "Other" segments link to just the month (no single
+    subcategory to filter by, since "Other" is several collapsed
+    together) rather than nothing.
     """
     if not months or not series:
         return {"has_data": False, "legend": []}
@@ -876,6 +903,7 @@ def _svg_subcategory_stack_chart(
         center = plot_left + per_month_width * (index + 0.5)
         running = Decimal("0")
         segments = []
+        month_date_from, month_date_to = _month_date_bounds(month.key)
         for series_index, one_series in enumerate(series):
             if one_series.name not in visible_names:
                 continue
@@ -896,6 +924,18 @@ def _svg_subcategory_stack_chart(
                     ),
                     "name": one_series.name,
                     "amount_label": f"{amount:,.2f}",
+                    "link": (
+                        breadcrumbs.transactions_link(
+                            date_from=month_date_from,
+                            date_to=month_date_to,
+                            category=category,
+                            subcategory="" if is_other else one_series.name,
+                            txn_type=txn_type.value,
+                            account_id=account_id,
+                        )
+                        if txn_type is not None and category
+                        else None
+                    ),
                 }
             )
             running += amount
@@ -1927,7 +1967,12 @@ def _category_detail_response(
     visible_subcategories = set(selected_subcategories or available_subcategories)
     subcategory_chart = (
         _svg_subcategory_stack_chart(
-            chart_sub_months, chart_sub_series, visible=visible_subcategories
+            chart_sub_months,
+            chart_sub_series,
+            visible=visible_subcategories,
+            txn_type=txn_type,
+            category=category,
+            account_id=account_id,
         )
         if chart_sub_series
         else None
@@ -1943,7 +1988,13 @@ def _category_detail_response(
 
     context.update(
         {
-            "chart": _svg_category_chart(chart_monthly, budget=config["budget"]),
+            "chart": _svg_category_chart(
+                chart_monthly,
+                budget=config["budget"],
+                txn_type=txn_type,
+                category=category,
+                account_id=account_id,
+            ),
             "chart_first_month_label": chart_monthly[0].label,
             "chart_last_month_label": chart_monthly[-1].label,
             "subcategory_chart": subcategory_chart,
