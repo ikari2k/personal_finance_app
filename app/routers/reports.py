@@ -1860,6 +1860,61 @@ def _category_detail_response(
     else:
         chart_monthly = monthly
         chart_sub_months, chart_sub_series = sub_months, sub_series
+
+    # A dedicated "this year at a glance" tile set, shown only when
+    # scoped to a year (/category/{year} or /category/{year}/{month}) —
+    # always the *full* calendar year (chart_monthly), regardless of
+    # whether a specific month is also given, so it answers a different
+    # question than the YTD-style "{{ year_tile_label }}" tile above:
+    # not "how does this year compare to last year so far" but "what did
+    # this whole year actually look like".
+    year_stats = None
+    if year is not None:
+        year_total = sum((p.total for p in chart_monthly), Decimal("0"))
+        year_count = sum(p.count for p in chart_monthly)
+        year_month_totals = [p.total for p in chart_monthly]
+        # A no-activity month is excluded from "lowest" (same reasoning
+        # as _month_cells' own extreme-marking: an absence of data isn't
+        # a genuinely low month) but not from "highest" — a magnitude
+        # can only be the max while also being zero if literally every
+        # month is, which "any(...)" below already guards against.
+        year_nonzero_months = [p for p in chart_monthly if p.total]
+        year_stats = {
+            "total": year_total,
+            "count": year_count,
+            "avg_per_month": (
+                year_total / len(chart_monthly) if chart_monthly else None
+            ),
+            "median": (
+                statistics.median(year_month_totals) if year_month_totals else None
+            ),
+            "highest_month": (
+                max(chart_monthly, key=lambda p: p.total)
+                if any(p.total for p in chart_monthly)
+                else None
+            ),
+            "lowest_month": (
+                min(year_nonzero_months, key=lambda p: p.total)
+                if year_nonzero_months
+                else None
+            ),
+            "avg_txn": year_total / year_count if year_count else None,
+            "budget_streak": (
+                {
+                    "dots": [
+                        "under" if p.total <= config["budget"] else "over"
+                        for p in chart_monthly
+                    ],
+                    "under_count": sum(
+                        1 for p in chart_monthly if p.total <= config["budget"]
+                    ),
+                    "total_count": len(chart_monthly),
+                }
+                if config["budget"]
+                else None
+            ),
+        }
+
     # A subcategory with zero activity in the shown (possibly trimmed)
     # window shouldn't get a legend checkbox for a series that's always
     # flat at zero.
@@ -1936,6 +1991,7 @@ def _category_detail_response(
                 else 0
             ),
             "budget_streak": budget_streak,
+            "year_stats": year_stats,
         }
     )
     return templates.TemplateResponse(request, "reports/category.html", context)

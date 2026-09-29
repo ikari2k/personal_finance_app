@@ -43,98 +43,159 @@
       </div>
     </div>
 
-    <div class="dash-grid" style="margin-top: 1.25rem;">
-      <div class="dash-widget dash-widget-bordered dash-span-3">
-        <div class="dash-widget-head"><span class="dash-widget-title">All-time total</span></div>
-        <div class="cat-stat-number">{{ "%.2f"|format(all_time_total) }}</div>
-        <div class="cat-stat-sub">
-          {{ all_time_count }} transaction{{ "s" if all_time_count != 1 else "" }} &middot;
-          {{ "%.2f"|format(avg_per_month) }}/mo avg &middot;
-          {{ first_month_label }}&ndash;{{ last_month_label }}
+    {% if year_stats %}
+      <div class="dash-grid" style="margin-top: 1.25rem;">
+        <div class="dash-widget dash-widget-bordered dash-span-3">
+          <div class="dash-widget-head"><span class="dash-widget-title">{{ scope_year }} total</span></div>
+          <div class="cat-stat-number">{{ "%.2f"|format(year_stats.total) }}</div>
+          <div class="cat-stat-sub">{{ year_stats.count }} transaction{{ "s" if year_stats.count != 1 else "" }}</div>
+        </div>
+        <div class="dash-widget dash-widget-bordered dash-span-3">
+          <div class="dash-widget-head"><span class="dash-widget-title">Monthly average</span></div>
+          <div class="cat-stat-number">{{ "%.2f"|format(year_stats.avg_per_month) if year_stats.avg_per_month is not none else "—" }}</div>
+          <div class="cat-stat-sub">Median {{ "%.2f"|format(year_stats.median) if year_stats.median is not none else "—" }}</div>
+        </div>
+        <div class="dash-widget dash-widget-bordered dash-span-3">
+          <div class="dash-widget-head"><span class="dash-widget-title">Highest month</span></div>
+          {% if year_stats.highest_month and year_stats.highest_month.total %}
+            <div class="cat-stat-number">{{ "%.2f"|format(year_stats.highest_month.total) }}</div>
+            <div class="cat-stat-sub">{{ year_stats.highest_month.label }}</div>
+          {% else %}
+            <div class="cat-stat-number">0.00</div>
+            <div class="cat-stat-sub">No activity</div>
+          {% endif %}
+        </div>
+        <div class="dash-widget dash-widget-bordered dash-span-3">
+          <div class="dash-widget-head"><span class="dash-widget-title">Lowest month</span></div>
+          {% if year_stats.lowest_month %}
+            <div class="cat-stat-number">{{ "%.2f"|format(year_stats.lowest_month.total) }}</div>
+            <div class="cat-stat-sub">{{ year_stats.lowest_month.label }}</div>
+          {% else %}
+            <div class="cat-stat-number">—</div>
+            <div class="cat-stat-sub">No months with activity</div>
+          {% endif %}
         </div>
       </div>
 
-      <div class="dash-widget dash-widget-bordered dash-span-3">
-        <div class="dash-widget-head"><span class="dash-widget-title">{{ year_tile_label }}</span></div>
-        <div class="cat-stat-number">{{ "%.2f"|format(this_year_total) }}</div>
-        {% if ytd_delta is not none %}
-          {% set rising = ytd_delta >= 0 %}
-          {% set good = (rising and txn_type.value == "income") or (not rising and txn_type.value == "expense") %}
-          <div class="cat-stat-delta {{ 'up' if good else 'down' }}">
-            {{ '▲' if rising else '▼' }} {{ '+' if rising else '' }}{{ "%.2f"|format(ytd_delta) }}
-            <span class="muted">vs same months last year</span>
+      <div class="dash-grid" style="grid-template-columns: repeat(2, 1fr); margin-top: 0.75rem;">
+        <div class="dash-widget dash-widget-bordered">
+          <div class="dash-widget-head"><span class="dash-widget-title">Avg. transaction amount</span></div>
+          {% if year_stats.avg_txn is not none %}
+            <div class="cat-stat-number">{{ "%.2f"|format(year_stats.avg_txn) }}</div>
+            <div class="cat-stat-sub">Across {{ year_stats.count }} transaction{{ "s" if year_stats.count != 1 else "" }} in {{ scope_year }}</div>
+          {% else %}
+            <div class="cat-stat-number">—</div>
+            <div class="cat-stat-sub">No transactions in {{ scope_year }}</div>
+          {% endif %}
+        </div>
+        <div class="dash-widget dash-widget-bordered">
+          <div class="dash-widget-head"><span class="dash-widget-title">Budget adherence</span></div>
+          {% if year_stats.budget_streak %}
+            <div class="cat-stat-number">{{ year_stats.budget_streak.under_count }} <span class="cat-stat-sub" style="font-size: 0.95rem;">of {{ year_stats.budget_streak.total_count }} month{{ "s" if year_stats.budget_streak.total_count != 1 else "" }} under budget</span></div>
+            <div class="streak-strip" aria-hidden="true">
+              {% for dot in year_stats.budget_streak.dots %}<span class="streak-dot {{ dot }}"></span>{% endfor %}
+            </div>
+            <div class="cat-stat-sub">Jan &rarr; Dec {{ scope_year }}, left to right.</div>
+          {% else %}
+            <div class="cat-stat-number">—</div>
+            <div class="cat-stat-sub">No budget set for this category</div>
+          {% endif %}
+        </div>
+      </div>
+    {% else %}
+      <div class="dash-grid" style="margin-top: 1.25rem;">
+        <div class="dash-widget dash-widget-bordered dash-span-3">
+          <div class="dash-widget-head"><span class="dash-widget-title">All-time total</span></div>
+          <div class="cat-stat-number">{{ "%.2f"|format(all_time_total) }}</div>
+          <div class="cat-stat-sub">
+            {{ all_time_count }} transaction{{ "s" if all_time_count != 1 else "" }} &middot;
+            {{ "%.2f"|format(avg_per_month) }}/mo avg &middot;
+            {{ first_month_label }}&ndash;{{ last_month_label }}
           </div>
-        {% endif %}
-      </div>
+        </div>
 
-      <div class="dash-widget dash-widget-bordered dash-span-3">
-        <div class="dash-widget-head"><span class="dash-widget-title">{{ month_tile_heading }}</span></div>
-        {% if current_month_ring %}
-          <div class="cat-month-row">
-            <span class="utilization utilization-{{ current_month_ring.tier }}">
-              <svg width="52" height="52" viewBox="0 0 20 20" class="utilization-ring">
-                <circle cx="10" cy="10" r="7" class="ring-track"/>
-                <circle cx="10" cy="10" r="7" class="ring-fill"
-                        stroke-dasharray="{{ current_month_ring.dash }} {{ current_month_ring.gap }}"
-                        transform="rotate(-90 10 10)">
-                  <title>{{ category }}, {{ current_month_label }}: {{ current_month_ring.pct_label }} of budget</title>
-                </circle>
-              </svg>
-            </span>
-            <span>
-              <span class="cat-month-pct utilization-{{ current_month_ring.tier }}">{{ current_month_ring.pct_label }}</span>
-              <span class="cat-month-figures">{{ "%.2f"|format(current_month_point.total) }} / {{ "%.2f"|format(config.budget) }} budget</span>
-            </span>
-          </div>
-        {% else %}
-          <div class="cat-stat-number">{{ "%.2f"|format(current_month_point.total) if current_month_point else "0.00" }}</div>
-          <div class="cat-stat-sub">No budget set for this category</div>
-        {% endif %}
-      </div>
-
-      <div class="dash-widget dash-widget-bordered dash-span-3">
-        <div class="dash-widget-head"><span class="dash-widget-title">Highest month</span></div>
-        {% if highest_month and highest_month.total %}
-          <div class="cat-stat-number">{{ "%.2f"|format(highest_month.total) }}</div>
-          <div class="cat-stat-sub">{{ highest_month.label }}</div>
-        {% else %}
-          <div class="cat-stat-number">0.00</div>
-          <div class="cat-stat-sub">No activity yet</div>
-        {% endif %}
-      </div>
-    </div>
-
-    <div class="dash-grid" style="grid-template-columns: repeat(2, 1fr); margin-top: 0.75rem;">
-      <div class="dash-widget dash-widget-bordered">
-        <div class="dash-widget-head"><span class="dash-widget-title">Avg. transaction size</span></div>
-        {% if avg_transaction_size is not none %}
-          <div class="cat-stat-number">{{ "%.2f"|format(avg_transaction_size) }}</div>
-          {% if avg_txn_delta is not none %}
-            {% set rising = avg_txn_delta >= 0 %}
+        <div class="dash-widget dash-widget-bordered dash-span-3">
+          <div class="dash-widget-head"><span class="dash-widget-title">{{ year_tile_label }}</span></div>
+          <div class="cat-stat-number">{{ "%.2f"|format(this_year_total) }}</div>
+          {% if ytd_delta is not none %}
+            {% set rising = ytd_delta >= 0 %}
             {% set good = (rising and txn_type.value == "income") or (not rising and txn_type.value == "expense") %}
             <div class="cat-stat-delta {{ 'up' if good else 'down' }}">
-              {{ '▲' if rising else '▼' }} {{ '+' if rising else '' }}{{ "%.2f"|format(avg_txn_delta) }} vs last year
-              <span class="muted">&middot; {{ "%.1f"|format(this_year_txns_per_month) }} txns/mo, vs {{ "%.1f"|format(last_year_txns_per_month) }} last year</span>
+              {{ '▲' if rising else '▼' }} {{ '+' if rising else '' }}{{ "%.2f"|format(ytd_delta) }}
+              <span class="muted">vs same months last year</span>
             </div>
           {% endif %}
-        {% else %}
-          <div class="cat-stat-number">—</div>
-          <div class="cat-stat-sub">No transactions this year</div>
-        {% endif %}
+        </div>
+
+        <div class="dash-widget dash-widget-bordered dash-span-3">
+          <div class="dash-widget-head"><span class="dash-widget-title">{{ month_tile_heading }}</span></div>
+          {% if current_month_ring %}
+            <div class="cat-month-row">
+              <span class="utilization utilization-{{ current_month_ring.tier }}">
+                <svg width="52" height="52" viewBox="0 0 20 20" class="utilization-ring">
+                  <circle cx="10" cy="10" r="7" class="ring-track"/>
+                  <circle cx="10" cy="10" r="7" class="ring-fill"
+                          stroke-dasharray="{{ current_month_ring.dash }} {{ current_month_ring.gap }}"
+                          transform="rotate(-90 10 10)">
+                    <title>{{ category }}, {{ current_month_label }}: {{ current_month_ring.pct_label }} of budget</title>
+                  </circle>
+                </svg>
+              </span>
+              <span>
+                <span class="cat-month-pct utilization-{{ current_month_ring.tier }}">{{ current_month_ring.pct_label }}</span>
+                <span class="cat-month-figures">{{ "%.2f"|format(current_month_point.total) }} / {{ "%.2f"|format(config.budget) }} budget</span>
+              </span>
+            </div>
+          {% else %}
+            <div class="cat-stat-number">{{ "%.2f"|format(current_month_point.total) if current_month_point else "0.00" }}</div>
+            <div class="cat-stat-sub">No budget set for this category</div>
+          {% endif %}
+        </div>
+
+        <div class="dash-widget dash-widget-bordered dash-span-3">
+          <div class="dash-widget-head"><span class="dash-widget-title">Highest month</span></div>
+          {% if highest_month and highest_month.total %}
+            <div class="cat-stat-number">{{ "%.2f"|format(highest_month.total) }}</div>
+            <div class="cat-stat-sub">{{ highest_month.label }}</div>
+          {% else %}
+            <div class="cat-stat-number">0.00</div>
+            <div class="cat-stat-sub">No activity yet</div>
+          {% endif %}
+        </div>
       </div>
-      <div class="dash-widget dash-widget-bordered">
-        <div class="dash-widget-head"><span class="dash-widget-title">Budget adherence</span></div>
-        {% if budget_streak %}
-          <div class="cat-stat-number">{{ budget_streak.under_count }} <span class="cat-stat-sub" style="font-size: 0.95rem;">of last {{ budget_streak.total_count }} month{{ "s" if budget_streak.total_count != 1 else "" }} under budget</span></div>
-          <div class="streak-strip" aria-hidden="true">
-            {% for dot in budget_streak.dots %}<span class="streak-dot {{ dot }}"></span>{% endfor %}
-          </div>
-        {% else %}
-          <div class="cat-stat-number">—</div>
-          <div class="cat-stat-sub">No budget set for this category</div>
-        {% endif %}
+
+      <div class="dash-grid" style="grid-template-columns: repeat(2, 1fr); margin-top: 0.75rem;">
+        <div class="dash-widget dash-widget-bordered">
+          <div class="dash-widget-head"><span class="dash-widget-title">Avg. transaction size</span></div>
+          {% if avg_transaction_size is not none %}
+            <div class="cat-stat-number">{{ "%.2f"|format(avg_transaction_size) }}</div>
+            {% if avg_txn_delta is not none %}
+              {% set rising = avg_txn_delta >= 0 %}
+              {% set good = (rising and txn_type.value == "income") or (not rising and txn_type.value == "expense") %}
+              <div class="cat-stat-delta {{ 'up' if good else 'down' }}">
+                {{ '▲' if rising else '▼' }} {{ '+' if rising else '' }}{{ "%.2f"|format(avg_txn_delta) }} vs last year
+                <span class="muted">&middot; {{ "%.1f"|format(this_year_txns_per_month) }} txns/mo, vs {{ "%.1f"|format(last_year_txns_per_month) }} last year</span>
+              </div>
+            {% endif %}
+          {% else %}
+            <div class="cat-stat-number">—</div>
+            <div class="cat-stat-sub">No transactions this year</div>
+          {% endif %}
+        </div>
+        <div class="dash-widget dash-widget-bordered">
+          <div class="dash-widget-head"><span class="dash-widget-title">Budget adherence</span></div>
+          {% if budget_streak %}
+            <div class="cat-stat-number">{{ budget_streak.under_count }} <span class="cat-stat-sub" style="font-size: 0.95rem;">of last {{ budget_streak.total_count }} month{{ "s" if budget_streak.total_count != 1 else "" }} under budget</span></div>
+            <div class="streak-strip" aria-hidden="true">
+              {% for dot in budget_streak.dots %}<span class="streak-dot {{ dot }}"></span>{% endfor %}
+            </div>
+          {% else %}
+            <div class="cat-stat-number">—</div>
+            <div class="cat-stat-sub">No budget set for this category</div>
+          {% endif %}
+        </div>
       </div>
-    </div>
+    {% endif %}
 
     <article style="margin-top: 1.5rem;">
       <h2 style="margin-bottom: 0.15rem;">{{ category }} over time</h2>
