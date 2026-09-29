@@ -74,7 +74,7 @@ TOP_CATEGORIES_LIMIT = 10
 # the transactions list's own "group by months with activity, not every
 # calendar month" convention.
 RECENT_DAYS_LIMIT = 5
-SPARKLINE_MONTHS = 6
+SPARKLINE_MONTHS = 12
 # Trailing windows (in days) for the "Average monthly spend" widget —
 # the standard ~1/3/12-month rolling-average horizons, shortest first so
 # the trend comparison below reads "recent pace vs. your longer-run
