@@ -1596,11 +1596,9 @@ def category_detail(
     txn_type: TransactionType,
     category: str,
     account_id: str = "",
-    year: int | None = None,
-    month: int | None = None,
     subcategories: list[str] = Query(default=[]),
 ) -> HTMLResponse:
-    """Render one category's full-history trend, year rollup, and subcategory shares.
+    """Render one category's full, all-time trend, year rollup, and subcategory shares.
 
     ``category`` is a query param, not a path segment — same convention
     every other category-scoped link in the app already uses
@@ -1611,32 +1609,94 @@ def category_detail(
     already rejects ``TRANSFER`` — transfers use a fixed category outside
     the managed tree, so there's nothing here to show a trend for.
 
-    ``year``/``month`` (both optional) scope the hero stats to a
-    specific period instead of always "today" — reached by clicking a
-    category's trend-link from ``/reports/{year}`` (``year`` only) or
-    ``/reports/{year}/{month}`` (both), vs. ``/reports/categories``'
-    own links, which omit both for the plain all-time view. ``month``
-    without ``year`` is treated as neither being set (there's no
-    "this month of an unspecified year" to anchor to). The full-history
-    trend chart, all-time total, by-year table, and highest-month tile
-    are unaffected either way — only the "This year"/"This month" tiles,
-    the avg-transaction-size comparison, and the budget streak's own
-    12-month window shift to the requested period.
+    Always all-time — the same view ``/reports/categories``' own links
+    point at. ``/category/{year}`` and ``/category/{year}/{month}``
+    (below) are the scoped counterparts, reached instead from
+    ``/reports/{year}``'s and ``/reports/{year}/{month}``'s own
+    trend-links.
+    """
+    return _category_detail_response(
+        request, txn_type, category, account_id, None, None, subcategories
+    )
 
-    ``subcategories`` (repeated query param, e.g. ``?subcategories=A&
-    subcategories=B``) filters the by-subcategory stacked chart to just
-    those names — a plain GET-and-resubmit form, same convention as the
-    account filter on this same page, rather than an htmx fragment swap,
-    since a stacked chart's y-axis has to rescale to whatever's actually
-    visible and that's simplest to get right as one full render. An
-    absent or entirely-invalid selection (a stale link after a
-    category's subcategories changed, say) falls back to showing every
-    subcategory rather than a confusing empty chart.
+
+@router.get("/category/{year:int}", response_class=HTMLResponse)
+def category_detail_year(
+    request: Request,
+    year: int,
+    txn_type: TransactionType,
+    category: str,
+    account_id: str = "",
+    subcategories: list[str] = Query(default=[]),
+) -> HTMLResponse:
+    """Render one category's stats scoped to one year — see ``category_detail``.
+
+    The trend chart (and, when there is one, the by-subcategory stacked
+    chart) trim to just ``year``'s own months instead of the whole
+    ledger history; the "This year"/"This month" hero tiles, the avg-
+    transaction-size comparison, and the budget streak's 12-month window
+    anchor to it too (December, since a fully past year has no "current
+    month" of its own — see ``_category_detail_response``). The all-time
+    total, by-year table, and highest-month tile are still genuinely
+    all-time regardless — a "View all-time stats" link is always one
+    click away.
+    """
+    return _category_detail_response(
+        request, txn_type, category, account_id, year, None, subcategories
+    )
+
+
+@router.get("/category/{year:int}/{month:int}", response_class=HTMLResponse)
+def category_detail_month(
+    request: Request,
+    year: int,
+    month: int,
+    txn_type: TransactionType,
+    category: str,
+    account_id: str = "",
+    subcategories: list[str] = Query(default=[]),
+) -> HTMLResponse:
+    """Render one category's stats scoped to one month — see ``category_detail``.
+
+    Same trimming as ``category_detail_year`` (the trend/subcategory
+    charts still show ``year``'s full 12 months for context — a
+    single-month trend chart would just be one bar), with the hero
+    tiles anchored to this exact month instead of December.
+    """
+    if not 1 <= month <= 12:
+        raise HTTPException(status_code=404, detail="Invalid month")
+    return _category_detail_response(
+        request, txn_type, category, account_id, year, month, subcategories
+    )
+
+
+def _category_detail_response(
+    request: Request,
+    txn_type: TransactionType,
+    category: str,
+    account_id: str,
+    year: int | None,
+    month: int | None,
+    subcategories: list[str],
+) -> HTMLResponse:
+    """Shared implementation behind ``category_detail``/``_year``/``_month``.
+
+    ``year``/``month`` (both optional, ``month`` never set without
+    ``year``) scope the hero stats and trim the charts to a specific
+    period instead of always "today" — see each route's own docstring
+    for exactly what does and doesn't move. ``subcategories`` (repeated
+    query param, e.g. ``?subcategories=A&subcategories=B``) filters the
+    by-subcategory stacked chart to just those names — a plain
+    GET-and-resubmit form, same convention as the account filter on
+    this same page, rather than an htmx fragment swap, since a stacked
+    chart's y-axis has to rescale to whatever's actually visible and
+    that's simplest to get right as one full render. An absent or
+    entirely-invalid selection (a stale link after a category's
+    subcategories changed, say) falls back to showing every subcategory
+    rather than a confusing empty chart.
     """
     if txn_type is TransactionType.TRANSFER:
         return HTMLResponse("Invalid transaction type", status_code=404)
-    if year is None:
-        month = None
 
     accounts = read_accounts()
     transactions = _filter_by_account(read_ledger(), account_id)
@@ -1772,16 +1832,49 @@ def category_detail(
     sub_months, sub_series = category_subcategory_monthly_series(
         transactions, category, txn_type, today=today
     )
-    available_subcategories = [s.name for s in sub_series]
+
+    # Trim the trend chart (and, when there's one, the by-subcategory
+    # stacked chart) to just the scoped year's months when reached via
+    # /category/{year} or /category/{year}/{month} — a single-month
+    # trend chart would be one bar, so month-scoping still shows the
+    # whole year for context, same as year-scoping. Falls back to the
+    # untrimmed series if the scoped year somehow isn't present
+    # (shouldn't happen: ref_year is never later than today, and
+    # category_monthly_series always extends through today).
+    if year is not None:
+        year_prefix = f"{year:04d}-"
+        trimmed = [p for p in monthly if p.key.startswith(year_prefix)]
+        chart_monthly = trimmed or monthly
+        sub_indices = [
+            i for i, m in enumerate(sub_months) if m.key.startswith(year_prefix)
+        ]
+        if sub_indices:
+            start, end = sub_indices[0], sub_indices[-1] + 1
+            chart_sub_months = sub_months[start:end]
+            chart_sub_series = [
+                SubcategoryMonthPoint(name=s.name, totals=s.totals[start:end])
+                for s in sub_series
+            ]
+        else:
+            chart_sub_months, chart_sub_series = sub_months, sub_series
+    else:
+        chart_monthly = monthly
+        chart_sub_months, chart_sub_series = sub_months, sub_series
+    # A subcategory with zero activity in the shown (possibly trimmed)
+    # window shouldn't get a legend checkbox for a series that's always
+    # flat at zero.
+    chart_sub_series = [s for s in chart_sub_series if any(s.totals)]
+
+    available_subcategories = [s.name for s in chart_sub_series]
     selected_subcategories = [
         name for name in subcategories if name in available_subcategories
     ]
     visible_subcategories = set(selected_subcategories or available_subcategories)
     subcategory_chart = (
         _svg_subcategory_stack_chart(
-            sub_months, sub_series, visible=visible_subcategories
+            chart_sub_months, chart_sub_series, visible=visible_subcategories
         )
-        if sub_series
+        if chart_sub_series
         else None
     )
     # True once the user has actually narrowed the selection (as opposed
@@ -1795,10 +1888,12 @@ def category_detail(
 
     context.update(
         {
-            "chart": _svg_category_chart(monthly, budget=config["budget"]),
+            "chart": _svg_category_chart(chart_monthly, budget=config["budget"]),
+            "chart_first_month_label": chart_monthly[0].label,
+            "chart_last_month_label": chart_monthly[-1].label,
             "subcategory_chart": subcategory_chart,
             "subcategory_filter_active": subcategory_filter_active,
-            "monthly": list(reversed(monthly)),
+            "monthly": list(reversed(chart_monthly)),
             "all_time_total": all_time_total,
             "all_time_count": all_time_count,
             "avg_per_month": all_time_total / len(monthly),

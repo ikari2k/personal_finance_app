@@ -707,7 +707,7 @@ def test_year_detail_breakdown_table_links_to_category_detail(client):
 
     assert response.status_code == 200
     assert "cat-trend-link" in response.text
-    assert "/reports/category?txn_type=expense&category=Groceries" in response.text
+    assert "/reports/category/2026?txn_type=expense&category=Groceries" in response.text
 
 
 def test_category_detail_shows_subcategory_stack_chart_when_any_exist(client):
