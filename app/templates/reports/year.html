@@ -130,7 +130,15 @@
     </div>
     <div>
       <h2>Expense by category</h2>
-      {{ breakdown_table(expense_breakdown, expense_config, "expense", date_from, date_to, account_id, "vs. prior year") }}
+      <div class="view-options">
+        <button type="button" class="secondary" id="toggle-expense-subcategories"
+                onclick="var wrap = document.getElementById('expense-breakdown-wrap'); var showing = !wrap.classList.toggle('hide-subcategories'); this.textContent = showing ? 'Hide subcategories' : 'Show subcategories';">
+          Show subcategories
+        </button>
+      </div>
+      <div id="expense-breakdown-wrap" class="hide-subcategories">
+        {{ breakdown_table(expense_breakdown, expense_config, "expense", date_from, date_to, account_id, "vs. prior year") }}
+      </div>
     </div>
   </div>
 

@@ -350,6 +350,15 @@
   display: none;
 }
 
+/* /reports/{year}'s "Expense by category" breakdown table — subcategory
+ * rows hidden by default (see year.html's toggle button), same pure
+ * client-side "display toggle, not a data filter" precedent as the
+ * closed-accounts toggle above: no cookie, resets to hidden on every
+ * render. */
+#expense-breakdown-wrap.hide-subcategories .subcategory-row {
+  display: none;
+}
+
 .row-actions {
   position: absolute;
   left: -4.25rem;
