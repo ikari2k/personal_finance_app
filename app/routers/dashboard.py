@@ -97,7 +97,12 @@ def _pct_change(current: Decimal, previous: Decimal) -> Decimal | None:
     return (current - previous) / abs(previous) * 100
 
 
-_SPARK_W, _SPARK_H = 460, 96
+# _SPARK_W is 460 * 1.4 = 644 — widened 40% alongside .dash-hero-chart's
+# own max-width/flex-basis in style.css (also *1.4) so the two scale
+# together: the chart gets wider on screen without also getting taller,
+# since the SVG's rendered height follows its viewBox aspect ratio
+# (width:100%; height:auto), and _SPARK_H is deliberately left alone.
+_SPARK_W, _SPARK_H = 644, 96
 _SPARK_PAD_RIGHT, _SPARK_PAD_TOP, _SPARK_PAD_BOTTOM = 4, 8, 6
 # Reserved on the left for the max/min value labels — a plain sparkline
 # with no numbers on its scale can't actually be read, only glanced at

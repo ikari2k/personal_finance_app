@@ -1736,7 +1736,7 @@ fieldset legend {
 .dash-hero-delta.down { color: var(--pico-del-color); }
 .dash-hero-delta .muted { color: var(--pico-muted-color); font-weight: 500; }
 
-.dash-hero-chart { flex: 1 1 320px; max-width: 30rem; min-width: 0; }
+.dash-hero-chart { flex: 1 1 448px; max-width: 42rem; min-width: 0; }
 .spark-wrap svg { width: 100%; height: auto; display: block; overflow: visible; }
 .spark-grid { stroke: var(--pico-muted-border-color); stroke-width: 1; }
 .spark-line { stroke: var(--pico-ins-color); }
