@@ -67,6 +67,7 @@ BUDGET_ATTENTION_LIMIT = 5
 # just the dashboard widget's own "worth surfacing here" cutoff.
 BUDGET_ATTENTION_THRESHOLD_PCT = 60
 TOP_CATEGORIES_LIMIT = 10
+TOP_TRANSACTIONS_LIMIT = 5
 # The most recent transactions widget groups by calendar day rather than
 # capping at a flat row count — RECENT_DAYS_LIMIT is the number of most
 # recent *distinct dates with any activity* shown, not calendar days
@@ -315,9 +316,31 @@ def dashboard(request: Request) -> HTMLResponse:
         find_orphan_transfer_candidates(ledger, accounts)
     )
 
-    # --- recent transactions, grouped by day ---
     income_config = _category_config(categories, TransactionType.INCOME)
     expense_config = _category_config(categories, TransactionType.EXPENSE)
+
+    # --- top transactions this month (biggest single amounts spent) ---
+    month_expense_txns = [
+        t
+        for t in ledger
+        if t.type is TransactionType.EXPENSE
+        and t.date.year == today.year
+        and t.date.month == today.month
+    ]
+    top_transaction_rows = [
+        {
+            "txn": t,
+            "icon": expense_config.get(t.category, {}).get("icon", ""),
+            "account_name": next(
+                (a.name for a in accounts if a.id == t.account_id), t.account_id
+            ),
+        }
+        for t in sorted(month_expense_txns, key=lambda t: abs(t.amount), reverse=True)[
+            :TOP_TRANSACTIONS_LIMIT
+        ]
+    ]
+
+    # --- recent transactions, grouped by day ---
     sorted_desc = sorted(ledger, key=lambda t: (t.date, t.id), reverse=True)
     recent_days = []
     for txn_date, day_transactions in groupby(sorted_desc, key=lambda t: t.date):
@@ -372,5 +395,6 @@ def dashboard(request: Request) -> HTMLResponse:
             "uncategorized_count": uncategorized_count,
             "transfer_candidate_count": transfer_candidate_count,
             "recent_days": recent_days,
+            "top_transaction_rows": top_transaction_rows,
         },
     )

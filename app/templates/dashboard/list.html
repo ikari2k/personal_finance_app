@@ -226,6 +226,44 @@
 
     <div class="dash-widget dash-widget-bordered dash-span-12">
       <div class="dash-widget-head">
+        <span class="dash-widget-title">Top transactions this month</span>
+        <a class="dash-widget-link" href="/transactions?txn_type=expense">All transactions &rsaquo;</a>
+      </div>
+      {% if top_transaction_rows %}
+        <div class="table-scroll">
+          <table class="dash-txn-table">
+            <colgroup>
+              <col style="width: 28%">
+              <col>
+              <col style="width: calc(10ch + 1rem)">
+            </colgroup>
+            <thead>
+              <tr><th>Category</th><th>Description</th><th style="text-align:right">Amount</th></tr>
+            </thead>
+            <tbody>
+              {% for row in top_transaction_rows %}
+                {% set txn = row.txn %}
+                <tr>
+                  <td>
+                    <span class="dash-txn-cat">
+                      {% if row.icon %}<span class="dash-cat-glyph dash-cat-glyph-expense">{{ category_icon(row.icon) }}</span>{% endif %}
+                      {{ txn.category }}
+                    </span>
+                  </td>
+                  <td class="dash-txn-desc"{% if txn.notes %} title="Original description: {{ txn.description }}"{% endif %}>{{ txn.notes or txn.description or row.account_name }}</td>
+                  <td class="dash-txn-amount amount-negative">{{ "%.2f"|format(txn.amount) }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="dash-all-clear">No expenses recorded this month yet.</p>
+      {% endif %}
+    </div>
+
+    <div class="dash-widget dash-widget-bordered dash-span-12">
+      <div class="dash-widget-head">
         <span class="dash-widget-title">Recent transactions</span>
         <a class="dash-widget-link" href="/transactions">All transactions &rsaquo;</a>
       </div>
