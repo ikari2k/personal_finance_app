@@ -1900,7 +1900,7 @@ def _category_detail_response(
         "account_id": account_id,
         "has_data": bool(monthly),
         "breadcrumbs": breadcrumbs.for_category(
-            category, account_id, txn_type=txn_type.value
+            category, account_id, txn_type=txn_type.value, year=year, month=month
         ),
         "scope_year": year,
         "scope_month": month,

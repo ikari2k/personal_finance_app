@@ -94,19 +94,41 @@ def _categories_link(txn_type: str, account_id: str) -> str:
 
 
 def for_category(
-    category: str, account_id: str = "", txn_type: str = ""
+    category: str,
+    account_id: str = "",
+    txn_type: str = "",
+    year: int | None = None,
+    month: int | None = None,
 ) -> list[Crumb]:
-    """Breadcrumb trail for ``/reports/category``.
+    """Breadcrumb trail for ``/reports/category``[``/{year}``[``/{month}``]].
 
-    ``txn_type`` (when given) points the middle "Categories" crumb at
+    ``txn_type`` (when given) points the "Categories" crumb at
     ``/reports/categories`` already scoped to the right income/expense
-    toggle, rather than always landing on its own default.
+    toggle, rather than always landing on its own default. Once scoped
+    to a year (and/or month), the category's own crumb becomes a link
+    back to the plain all-time view and a year crumb appears linking to
+    the year view — the trail itself is then how you get back up a
+    level, not just the page's own "View all-time stats" link.
     """
-    return [
+    crumbs = [
         Crumb("Reports", _report_link("/reports", account_id)),
         Crumb("Categories", _categories_link(txn_type, account_id)),
-        Crumb(category, None),
     ]
+    if year is None:
+        crumbs.append(Crumb(category, None))
+        return crumbs
+
+    category_qs = f"txn_type={txn_type}&category={quote(category)}"
+    if account_id:
+        category_qs += f"&account_id={quote(account_id)}"
+    crumbs.append(Crumb(category, f"/reports/category?{category_qs}"))
+    if month is None:
+        crumbs.append(Crumb(str(year), None))
+        return crumbs
+
+    crumbs.append(Crumb(str(year), f"/reports/category/{year}?{category_qs}"))
+    crumbs.append(Crumb(calendar.month_name[month], None))
+    return crumbs
 
 
 def for_categories_index(account_id: str = "") -> list[Crumb]:
