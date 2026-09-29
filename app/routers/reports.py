@@ -41,6 +41,7 @@ from app.services.aggregation import (
     category_recent_monthly_totals,
     category_subcategory_monthly_series,
     category_subcategory_shares,
+    category_totals_all_time,
     category_totals_for_month,
     category_yearly_series,
     monthly_totals_with_mom,
@@ -991,29 +992,6 @@ def _net_worth_chart(
     )
 
 
-def _ytd_income_expense(
-    transactions: list, year: int, cutoff_month: int
-) -> tuple[Decimal, Decimal]:
-    """Return ``(income_total, expense_total)`` for Jan 1 through ``cutoff_month``.
-
-    Signed, same convention as ``YearlyTotal`` (income positive, expense
-    negative). Backs the landing page's YTD-vs-same-months-last-year hero
-    stats — same "compare like-for-like calendar span" convention as
-    ``category_detail``'s own YTD tile, generalized to the whole ledger
-    instead of one category.
-    """
-    income_total = Decimal("0")
-    expense_total = Decimal("0")
-    for transaction in transactions:
-        if transaction.date.year != year or transaction.date.month > cutoff_month:
-            continue
-        if transaction.type is TransactionType.INCOME:
-            income_total += transaction.amount
-        elif transaction.type is TransactionType.EXPENSE:
-            expense_total += transaction.amount
-    return income_total, expense_total
-
-
 def _year_stats(years: list, today: date) -> dict[int, dict]:
     """Return per-year ``{"avg_per_month", "savings_rate"}`` for the annual table.
 
@@ -1050,52 +1028,51 @@ def reports_overview(request: Request, account_id: str = "") -> HTMLResponse:
         )
         for y in years
     }
-    # "Top spending categories" preview — same YTD totals /reports
-    # /categories itself ranks by, just capped and sorted by total here
-    # rather than by growth, with a link to that full sortable index.
-    all_categories = category_movers(transactions, TransactionType.EXPENSE, today)
-    expense_ytd_total = sum((m.ytd_total for m in all_categories), Decimal("0"))
-    top_categories = sorted(all_categories, key=lambda m: m.ytd_total, reverse=True)[
-        :TOP_SPENDING_CATEGORIES_LIMIT
-    ]
+    # "Top spending categories" preview — whole-history totals (this page
+    # is all-time stats only; per-year/YTD figures live on /reports
+    # /{year} and the category detail page instead), capped and linked
+    # to the full sortable /reports/categories index.
+    all_time_expense_breakdown = category_totals_all_time(
+        transactions, TransactionType.EXPENSE
+    )
+    expense_all_time_total = sum(
+        (c.total for c in all_time_expense_breakdown), Decimal("0")
+    )
+    top_categories = all_time_expense_breakdown[:TOP_SPENDING_CATEGORIES_LIMIT]
     top_categories_pct = {
-        m.name: (
-            float(m.ytd_total / expense_ytd_total * 100) if expense_ytd_total else 0.0
+        c.name: (
+            float(c.total / expense_all_time_total * 100)
+            if expense_all_time_total
+            else 0.0
         )
-        for m in top_categories
+        for c in top_categories
     }
     top_categories_txn_links = {
-        m.name: breadcrumbs.transactions_link(
-            category=m.name,
+        c.name: breadcrumbs.transactions_link(
+            category=c.name,
             txn_type=TransactionType.EXPENSE.value,
             account_id=account_id,
         )
-        for m in top_categories
+        for c in top_categories
     }
 
-    this_income, this_expense = _ytd_income_expense(
-        transactions, today.year, today.month
+    # All-time hero stats — no delta alongside them, since there's no
+    # "previous all-time period" for an all-time total to be compared
+    # against (unlike the year/month pages' own YoY/MoM hero tiles).
+    all_time_income = sum(
+        (t.amount for t in transactions if t.type is TransactionType.INCOME),
+        Decimal("0"),
     )
-    last_income, last_expense = _ytd_income_expense(
-        transactions, today.year - 1, today.month
+    all_time_expense = sum(
+        (t.amount for t in transactions if t.type is TransactionType.EXPENSE),
+        Decimal("0"),
     )
-    this_net = this_income + this_expense
-    last_net = last_income + last_expense
-    this_savings_rate = _savings_rate(this_net, this_income)
-    last_savings_rate = _savings_rate(last_net, last_income)
-    ytd_stats = {
-        "income_total": this_income,
-        "expense_total": this_expense,
-        "net_total": this_net,
-        "savings_rate": this_savings_rate,
-        "income_delta": this_income - last_income if last_income else None,
-        "expense_delta": this_expense - last_expense if last_expense else None,
-        "net_delta": this_net - last_net if last_income or last_expense else None,
-        "savings_rate_delta": (
-            this_savings_rate - last_savings_rate
-            if this_savings_rate is not None and last_savings_rate is not None
-            else None
-        ),
+    all_time_net = all_time_income + all_time_expense
+    all_time_stats = {
+        "income_total": all_time_income,
+        "expense_total": all_time_expense,
+        "net_total": all_time_net,
+        "savings_rate": _savings_rate(all_time_net, all_time_income),
     }
 
     return templates.TemplateResponse(
@@ -1112,7 +1089,7 @@ def reports_overview(request: Request, account_id: str = "") -> HTMLResponse:
             "top_categories_pct": top_categories_pct,
             "top_categories_txn_links": top_categories_txn_links,
             "expense_config": expense_config,
-            "ytd_stats": ytd_stats,
+            "all_time_stats": all_time_stats,
             "current_year": today.year,
         },
     )

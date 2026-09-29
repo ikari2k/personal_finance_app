@@ -9,49 +9,24 @@
 
   <div class="dash-grid" style="margin-bottom: 1.5rem;">
     <div class="dash-widget dash-widget-bordered dash-span-3">
-      <div class="dash-widget-head"><span class="dash-widget-title">Income &middot; {{ current_year }} YTD</span></div>
-      <div class="cat-stat-number">{{ "%.2f"|format(ytd_stats.income_total) }}</div>
-      {% if ytd_stats.income_delta is not none %}
-        <div class="cat-stat-delta {{ 'up' if ytd_stats.income_delta >= 0 else 'down' }}">
-          {{ '▲' if ytd_stats.income_delta >= 0 else '▼' }} {{ '+' if ytd_stats.income_delta >= 0 else '' }}{{ "%.2f"|format(ytd_stats.income_delta) }}
-          <span class="muted">vs same months last year</span>
-        </div>
-      {% endif %}
+      <div class="dash-widget-head"><span class="dash-widget-title">Income &middot; All time</span></div>
+      <div class="cat-stat-number">{{ "%.2f"|format(all_time_stats.income_total) }}</div>
     </div>
     <div class="dash-widget dash-widget-bordered dash-span-3">
-      <div class="dash-widget-head"><span class="dash-widget-title">Expenses &middot; {{ current_year }} YTD</span></div>
-      <div class="cat-stat-number">{{ "%.2f"|format(ytd_stats.expense_total|abs) }}</div>
-      {% if ytd_stats.expense_delta is not none %}
-        {% set expense_rising = ytd_stats.expense_delta < 0 %}
-        <div class="cat-stat-delta {{ 'down' if expense_rising else 'up' }}">
-          {{ '▲' if expense_rising else '▼' }} {{ "%.2f"|format(ytd_stats.expense_delta|abs) }}
-          <span class="muted">vs same months last year</span>
-        </div>
-      {% endif %}
+      <div class="dash-widget-head"><span class="dash-widget-title">Expenses &middot; All time</span></div>
+      <div class="cat-stat-number">{{ "%.2f"|format(all_time_stats.expense_total|abs) }}</div>
     </div>
     <div class="dash-widget dash-widget-bordered dash-span-3">
-      <div class="dash-widget-head"><span class="dash-widget-title">Net &middot; {{ current_year }} YTD</span></div>
-      <div class="cat-stat-number {{ 'amount-negative' if ytd_stats.net_total < 0 else 'amount-positive' }}">{{ "%.2f"|format(ytd_stats.net_total) }}</div>
-      {% if ytd_stats.net_delta is not none %}
-        <div class="cat-stat-delta {{ 'up' if ytd_stats.net_delta >= 0 else 'down' }}">
-          {{ '▲' if ytd_stats.net_delta >= 0 else '▼' }} {{ '+' if ytd_stats.net_delta >= 0 else '' }}{{ "%.2f"|format(ytd_stats.net_delta) }}
-          <span class="muted">vs same months last year</span>
-        </div>
-      {% endif %}
+      <div class="dash-widget-head"><span class="dash-widget-title">Net &middot; All time</span></div>
+      <div class="cat-stat-number {{ 'amount-negative' if all_time_stats.net_total < 0 else 'amount-positive' }}">{{ "%.2f"|format(all_time_stats.net_total) }}</div>
     </div>
     <div class="dash-widget dash-widget-bordered dash-span-3">
-      <div class="dash-widget-head"><span class="dash-widget-title">Savings rate &middot; {{ current_year }} YTD</span></div>
-      {% if ytd_stats.savings_rate is not none %}
-        <div class="cat-stat-number">{{ "%.1f"|format(ytd_stats.savings_rate) }}%</div>
-        {% if ytd_stats.savings_rate_delta is not none %}
-          <div class="cat-stat-delta {{ 'up' if ytd_stats.savings_rate_delta >= 0 else 'down' }}">
-            {{ '▲' if ytd_stats.savings_rate_delta >= 0 else '▼' }} {{ '+' if ytd_stats.savings_rate_delta >= 0 else '' }}{{ "%.1f"|format(ytd_stats.savings_rate_delta) }}pp
-            <span class="muted">vs same months last year</span>
-          </div>
-        {% endif %}
+      <div class="dash-widget-head"><span class="dash-widget-title">Savings rate &middot; All time</span></div>
+      {% if all_time_stats.savings_rate is not none %}
+        <div class="cat-stat-number">{{ "%.1f"|format(all_time_stats.savings_rate) }}%</div>
       {% else %}
         <div class="cat-stat-number">—</div>
-        <div class="cat-stat-sub">No income recorded yet this year</div>
+        <div class="cat-stat-sub">No income recorded yet</div>
       {% endif %}
     </div>
   </div>
@@ -62,21 +37,21 @@
       <a class="table-link" href="/reports/categories{{ '?account_id=' + account_id if account_id }}">Full report &rsaquo;</a>
     </div>
     <p class="muted" style="margin-top: 0;">
-      This year's expense categories, ranked by year-to-date total.
+      All-time expense categories, ranked by total.
     </p>
     <div class="table-scroll">
       <table>
         <thead><tr><th>Category</th><th>Total</th><th>% of expenses</th></tr></thead>
         <tbody>
-          {% for m in top_categories %}
+          {% for c in top_categories %}
             <tr>
               <td>
-                {% set icon = expense_config.get(m.name, {}).get('icon', '') %}
+                {% set icon = expense_config.get(c.name, {}).get('icon', '') %}
                 {% if icon %}<span class="cat-cell-icon cat-cell-icon-expense">{{ category_icon(icon) }}</span>{% endif %}
-                <a class="table-link" href="{{ top_categories_txn_links[m.name] }}">{{ m.name }}</a>
+                <a class="table-link" href="{{ top_categories_txn_links[c.name] }}">{{ c.name }}</a>
               </td>
-              <td>{{ "%.2f"|format(m.ytd_total) }}</td>
-              <td class="muted">{{ "%.0f"|format(top_categories_pct[m.name]) }}%</td>
+              <td>{{ "%.2f"|format(c.total) }}</td>
+              <td class="muted">{{ "%.0f"|format(top_categories_pct[c.name]) }}%</td>
             </tr>
           {% endfor %}
         </tbody>

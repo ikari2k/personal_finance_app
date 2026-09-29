@@ -16,6 +16,7 @@ from app.services.aggregation import (
     category_recent_monthly_totals,
     category_subcategory_monthly_series,
     category_subcategory_shares,
+    category_totals_all_time,
     category_yearly_series,
     group_by_month_and_type,
     grouped_transaction_view,
@@ -633,6 +634,30 @@ def test_category_breakdown_yoy_delta_is_none_for_a_new_category():
     [groceries] = category_breakdown(txns, 2026, TransactionType.EXPENSE)
 
     assert groceries.yoy_delta is None
+
+
+def test_category_totals_all_time_raises_for_transfer_type():
+    with pytest.raises(ValueError):
+        category_totals_all_time([], TransactionType.TRANSFER)
+
+
+def test_category_totals_all_time_spans_every_year_sorted_by_total():
+    txns = [
+        _txn(
+            id="t1", date=date(2024, 1, 1), category="Groceries", amount=Decimal("-50")
+        ),
+        _txn(
+            id="t2", date=date(2026, 1, 1), category="Groceries", amount=Decimal("-80")
+        ),
+        _txn(id="t3", date=date(2025, 1, 1), category="Dining", amount=Decimal("-10")),
+    ]
+
+    breakdown = category_totals_all_time(txns, TransactionType.EXPENSE)
+
+    assert [c.name for c in breakdown] == ["Groceries", "Dining"]
+    assert breakdown[0].total == Decimal("130")
+    assert breakdown[0].count == 2
+    assert breakdown[0].yoy_delta is None
 
 
 def test_category_monthly_totals_raises_for_transfer_type():

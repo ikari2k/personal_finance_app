@@ -425,6 +425,46 @@ def category_breakdown(
     return sorted(result, key=lambda c: c.total, reverse=True)
 
 
+def category_totals_all_time(
+    transactions: Iterable[Transaction], txn_type: TransactionType
+) -> list[CategoryTotal]:
+    """Return every category's whole-history total, sorted by total descending.
+
+    The unbounded counterpart to ``category_breakdown`` (one calendar
+    year) and ``category_totals_for_month`` (one month) — same shape,
+    but with no time bound at all. ``yoy_delta`` is always ``None``:
+    there's no "previous all-time period" to compare an all-time total
+    against. Raises on ``TRANSFER``, same as ``category_breakdown``.
+    """
+    if txn_type is TransactionType.TRANSFER:
+        raise ValueError("transfers have no category breakdown")
+
+    totals = _category_totals(transactions, txn_type, lambda _d: True)
+    result = []
+    for category, subs in totals.items():
+        total = sum((bucket.total for bucket in subs.values()), Decimal("0"))
+        count = sum(bucket.count for bucket in subs.values())
+        subcategories = sorted(
+            (
+                SubcategoryTotal(name=name, total=bucket.total, count=bucket.count)
+                for name, bucket in subs.items()
+                if name
+            ),
+            key=lambda s: s.total,
+            reverse=True,
+        )
+        result.append(
+            CategoryTotal(
+                name=category,
+                total=total,
+                count=count,
+                yoy_delta=None,
+                subcategories=subcategories,
+            )
+        )
+    return sorted(result, key=lambda c: c.total, reverse=True)
+
+
 def category_totals_for_month(
     transactions: Iterable[Transaction],
     year: int,
