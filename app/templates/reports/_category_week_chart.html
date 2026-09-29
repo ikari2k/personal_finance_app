@@ -8,7 +8,7 @@
   `txn_type` in scope.
 #}
 {% if chart.has_data %}
-  <svg viewBox="0 0 {{ chart.width }} {{ chart.height }}" class="cat-chart-svg cat-week-chart-svg"
+  <svg viewBox="0 0 {{ chart.width }} {{ chart.height }}" id="cat-week-chart-svg" class="cat-chart-svg cat-week-chart-svg"
        role="img" aria-label="{{ category }} weekly {{ txn_type.value }} this month">
     {% for tick in chart.y_ticks %}
       <line x1="{{ chart.plot_left }}" y1="{{ tick.y }}" x2="{{ chart.plot_right }}" y2="{{ tick.y }}"
@@ -42,7 +42,7 @@
     (function () {
       var tooltip = document.getElementById("cat-week-chart-tooltip");
       if (!tooltip) return;
-      document.querySelectorAll(".cat-week-chart-svg .chart-bar-link").forEach(function (link) {
+      document.querySelectorAll("#cat-week-chart-svg .chart-bar-link").forEach(function (link) {
         link.addEventListener("mouseenter", function () {
           var d = link.dataset;
           tooltip.innerHTML =

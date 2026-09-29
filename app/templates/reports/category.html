@@ -102,7 +102,7 @@
           {% endif %}
         </div>
       </div>
-    {% else %}
+    {% elif not month_stats %}
       <div class="dash-grid" style="margin-top: 1.25rem;">
         <div class="dash-widget dash-widget-bordered dash-span-3">
           <div class="dash-widget-head"><span class="dash-widget-title">All-time total</span></div>
@@ -221,13 +221,22 @@
         </div>
         <div class="dash-widget dash-widget-bordered dash-span-3">
           <div class="dash-widget-head"><span class="dash-widget-title">Budget adherence</span></div>
-          {% if month_stats.budget_met is not none %}
-            <div class="cat-stat-number {{ 'amount-positive' if month_stats.budget_met else 'amount-negative' }}">
-              {{ '✓' if month_stats.budget_met else '✗' }}
-            </div>
-            <div class="cat-stat-sub">
-              {{ "%.2f"|format(month_stats.total) }} / {{ "%.2f"|format(config.budget) }} budget
-              &middot; {{ 'under budget' if month_stats.budget_met else 'over budget' }}
+          {% if month_stats.budget_ring %}
+            <div class="cat-month-row">
+              <span class="utilization utilization-{{ month_stats.budget_ring.tier }}">
+                <svg width="52" height="52" viewBox="0 0 20 20" class="utilization-ring">
+                  <circle cx="10" cy="10" r="7" class="ring-track"/>
+                  <circle cx="10" cy="10" r="7" class="ring-fill"
+                          stroke-dasharray="{{ month_stats.budget_ring.dash }} {{ month_stats.budget_ring.gap }}"
+                          transform="rotate(-90 10 10)">
+                    <title>{{ category }}, {{ current_month_label }}: {{ month_stats.budget_ring.pct_label }} of budget</title>
+                  </circle>
+                </svg>
+              </span>
+              <span>
+                <span class="cat-month-pct utilization-{{ month_stats.budget_ring.tier }}">{{ month_stats.budget_ring.pct_label }}</span>
+                <span class="cat-month-figures">{{ "%.2f"|format(month_stats.total) }} / {{ "%.2f"|format(config.budget) }} budget</span>
+              </span>
             </div>
           {% else %}
             <div class="cat-stat-number">—</div>
@@ -245,15 +254,17 @@
               <colgroup>
                 <col style="width: 14ch">
                 <col>
+                <col style="width: 16ch">
                 <col style="width: calc(10ch + 1rem)">
               </colgroup>
-              <thead><tr><th>Date</th><th>Description</th><th style="text-align:right">Amount</th></tr></thead>
+              <thead><tr><th>Date</th><th>Description</th><th>Subcategory</th><th style="text-align:right">Amount</th></tr></thead>
               <tbody>
                 {% for row in month_stats.top_transactions %}
                   {% set t = row.txn %}
                   <tr>
                     <td>{{ t.date.strftime("%b %-d, %Y") }}</td>
                     <td class="dash-txn-desc"{% if t.notes %} title="Original description: {{ t.description }}"{% endif %}>{{ t.notes or t.description or row.account_name }}</td>
+                    <td class="muted">{{ t.subcategory or "—" }}</td>
                     <td class="dash-txn-amount {{ 'amount-negative' if t.amount < 0 else 'amount-positive' }}">{{ "%.2f"|format(t.amount) }}</td>
                   </tr>
                 {% endfor %}
@@ -321,11 +332,16 @@
     {% if subcategory_chart %}
       <article style="margin-top: 1.5rem;">
         <h2 style="margin-bottom: 0.15rem;">{{ category }} by subcategory</h2>
-        <p class="muted" style="margin-top: 0;">
-          Same monthly {{ txn_type.value }}, split by subcategory.
-          {% if chart.needs_scroll %}Scroll to see earlier months.{% endif %}
-        </p>
-        {% include "reports/_category_subcategory_chart.html" %}
+        {% if subcategory_chart_is_weekly %}
+          <p class="muted" style="margin-top: 0;">Weekly {{ txn_type.value }} in {{ current_month_label }}, split by subcategory.</p>
+          {% include "reports/_category_subcategory_week_chart.html" %}
+        {% else %}
+          <p class="muted" style="margin-top: 0;">
+            Same monthly {{ txn_type.value }}, split by subcategory.
+            {% if chart.needs_scroll %}Scroll to see earlier months.{% endif %}
+          </p>
+          {% include "reports/_category_subcategory_chart.html" %}
+        {% endif %}
       </article>
     {% endif %}
 

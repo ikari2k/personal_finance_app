@@ -828,6 +828,234 @@ def _svg_category_week_chart(
     }
 
 
+_WEEKLY_SUBCATEGORY_LIMIT = 9
+
+
+def _weekly_subcategory_points_for_month(
+    transactions: list,
+    category: str,
+    txn_type: TransactionType,
+    year: int,
+    month: int,
+) -> tuple[
+    list[CategoryMonthPoint], list[SubcategoryMonthPoint], list[tuple[str, str]]
+]:
+    """Return ``(points, series, date_ranges)`` — one month's subcategory stack, weekly.
+
+    The weekly counterpart to ``category_subcategory_monthly_series``,
+    scoped to a single month (same 7-day chunking as
+    ``_weekly_points_for_month``) — ranked by each subcategory's whole-
+    month total (not re-ranked per week) and collapsed past
+    ``_WEEKLY_SUBCATEGORY_LIMIT`` into one "Other" entry, same top-N-
+    plus-"Other" convention (a blank subcategory folds into "Other" too)
+    so a subcategory's color still means the same thing whether it's
+    looked up here or on the year-long stacked chart.
+    """
+    last_day = monthrange(year, month)[1]
+    chunks = []
+    start = 1
+    while start <= last_day:
+        end = min(start + 6, last_day)
+        chunks.append((start, end))
+        start = end + 1
+
+    month_txns = [
+        t
+        for t in transactions
+        if t.type is txn_type
+        and t.category == category
+        and t.date.year == year
+        and t.date.month == month
+    ]
+
+    sub_totals: dict[str, Decimal] = {}
+    for t in month_txns:
+        name = t.subcategory or ""
+        sub_totals[name] = sub_totals.get(name, Decimal("0")) + abs(t.amount)
+    ranked_names = [
+        name
+        for name, _ in sorted(sub_totals.items(), key=lambda kv: kv[1], reverse=True)
+        if name
+    ]
+    top_names = ranked_names[:_WEEKLY_SUBCATEGORY_LIMIT]
+    other_names = set(ranked_names[_WEEKLY_SUBCATEGORY_LIMIT:]) | (
+        {""} if "" in sub_totals else set()
+    )
+
+    points: list[CategoryMonthPoint] = []
+    date_ranges: list[tuple[str, str]] = []
+    top_totals: dict[str, list[Decimal]] = {name: [] for name in top_names}
+    other_totals: list[Decimal] = []
+    for start_day, end_day in chunks:
+        chunk_txns = [t for t in month_txns if start_day <= t.date.day <= end_day]
+        total = sum((abs(t.amount) for t in chunk_txns), Decimal("0"))
+        label = f"{start_day}–{end_day}" if end_day != start_day else f"{start_day}"
+        points.append(
+            CategoryMonthPoint(
+                key=f"{year:04d}-{month:02d}-{start_day:02d}",
+                label=label,
+                total=total,
+                count=len(chunk_txns),
+            )
+        )
+        date_ranges.append(
+            (
+                f"{year:04d}-{month:02d}-{start_day:02d}",
+                f"{year:04d}-{month:02d}-{end_day:02d}",
+            )
+        )
+        for name in top_names:
+            top_totals[name].append(
+                sum(
+                    (abs(t.amount) for t in chunk_txns if t.subcategory == name),
+                    Decimal("0"),
+                )
+            )
+        other_totals.append(
+            sum(
+                (
+                    abs(t.amount)
+                    for t in chunk_txns
+                    if (t.subcategory or "") in other_names
+                ),
+                Decimal("0"),
+            )
+        )
+
+    series = [
+        SubcategoryMonthPoint(name=name, totals=top_totals[name]) for name in top_names
+    ]
+    if any(other_totals):
+        series.append(SubcategoryMonthPoint(name="Other", totals=other_totals))
+    return points, series, date_ranges
+
+
+def _svg_subcategory_week_stack_chart(
+    points: list[CategoryMonthPoint],
+    series: list[SubcategoryMonthPoint],
+    date_ranges: list[tuple[str, str]],
+    *,
+    txn_type: TransactionType,
+    category: str,
+    account_id: str = "",
+    width: int = 640,
+    height: int = 260,
+    pad_left: int = 76,
+    pad_right: int = 16,
+    pad_top: int = 16,
+    pad_bottom: int = 36,
+    tick_step: float | None = None,
+) -> dict:
+    """Build one month's subcategory stack, broken into weekly chunks.
+
+    Same simple fixed-size (no scrolling) geometry as
+    ``_svg_category_week_chart``, but each bar is a stack of segments
+    like ``_svg_subcategory_stack_chart`` — the weekly counterpart to
+    that chart, for the same reason ``_svg_category_week_chart`` exists
+    instead of reusing the monthly one: a single month has no monthly
+    trend to show. No legend filter checkboxes here (unlike the
+    year-long chart) — a month only ever has a handful of weeks, so
+    there's little need to narrow what's shown.
+    """
+    if not points or not series:
+        return {"has_data": False, "legend": []}
+
+    count = len(points)
+    stack_totals = [
+        sum((s.totals[i] for s in series), Decimal("0")) for i in range(count)
+    ]
+    step = (
+        tick_step
+        if tick_step is not None
+        else _nice_step(max((float(v) for v in stack_totals), default=0))
+    )
+    y_min, y_max = _tick_bounds([float(v) for v in stack_totals], step)
+
+    plot_left = pad_left
+    plot_right = width - pad_right
+    plot_bottom = height - pad_bottom
+    plot_height = plot_bottom - pad_top
+    group_width = (plot_right - plot_left) / count
+    bar_width = group_width * 0.5
+
+    def y_at(value: float) -> float:
+        return pad_top + plot_height * (1 - (value - y_min) / (y_max - y_min))
+
+    bars = []
+    for index, point in enumerate(points):
+        center = plot_left + group_width * (index + 0.5)
+        running = Decimal("0")
+        segments = []
+        date_from, date_to = date_ranges[index]
+        for series_index, one_series in enumerate(series):
+            amount = one_series.totals[index]
+            if amount <= 0:
+                continue
+            top_y = y_at(float(running + amount))
+            bottom_y = y_at(float(running))
+            is_other = one_series.name == "Other"
+            segments.append(
+                {
+                    "y": top_y,
+                    "height": bottom_y - top_y,
+                    "css_class": (
+                        "pie-slice-other"
+                        if is_other
+                        else f"pie-slice-{series_index % 10}"
+                    ),
+                    "name": one_series.name,
+                    "amount_label": f"{amount:,.2f}",
+                    "link": breadcrumbs.transactions_link(
+                        date_from=date_from,
+                        date_to=date_to,
+                        category=category,
+                        subcategory="" if is_other else one_series.name,
+                        txn_type=txn_type.value,
+                        account_id=account_id,
+                    ),
+                }
+            )
+            running += amount
+        bars.append(
+            {
+                "x": center - bar_width / 2,
+                "bar_width": bar_width,
+                "segments": segments,
+                "label": point.label,
+            }
+        )
+
+    step_count = round((y_max - y_min) / step)
+    y_ticks = [
+        {"y": y_at(y_min + i * step), "label": f"{y_min + i * step:,.0f}"}
+        for i in range(step_count + 1)
+    ]
+
+    legend = [
+        {
+            "name": one_series.name,
+            "css_class": (
+                "pie-slice-other"
+                if one_series.name == "Other"
+                else f"pie-slice-{series_index % 10}"
+            ),
+            "total": sum(one_series.totals, Decimal("0")),
+        }
+        for series_index, one_series in enumerate(series)
+    ]
+
+    return {
+        "has_data": True,
+        "width": width,
+        "height": height,
+        "plot_left": plot_left,
+        "plot_right": plot_right,
+        "bars": bars,
+        "y_ticks": y_ticks,
+        "legend": legend,
+    }
+
+
 # Fixed-order categorical colors for the spending pie chart's top slices —
 # same "assign identity by fixed order, never cycle" convention as any
 # other categorical series in the app. "Other" (the collapsed tail past
@@ -2044,14 +2272,13 @@ def _category_detail_response(
         chart_sub_months, chart_sub_series = sub_months, sub_series
 
     # A dedicated "this year at a glance" tile set, shown only when
-    # scoped to a year (/category/{year} or /category/{year}/{month}) —
-    # always the *full* calendar year (chart_monthly), regardless of
-    # whether a specific month is also given, so it answers a different
-    # question than the YTD-style "{{ year_tile_label }}" tile above:
-    # not "how does this year compare to last year so far" but "what did
-    # this whole year actually look like".
+    # scoped to a year *and no more specific month* (/category/{year}
+    # only) — once a month is also given, month_stats below is the
+    # page's own tile set instead; showing both at once just duplicated
+    # "the year" and "the month" side by side on what's meant to be a
+    # single-month page.
     year_stats = None
-    if year is not None:
+    if year is not None and month is None:
         year_total = sum((p.total for p in chart_monthly), Decimal("0"))
         year_count = sum(p.count for p in chart_monthly)
         year_month_totals = [p.total for p in chart_monthly]
@@ -2105,6 +2332,7 @@ def _category_detail_response(
     # and narrows the by-subcategory shares to just this month.
     month_stats = None
     week_chart = None
+    week_subcategory_chart = None
     month_shares = None
     if month is not None:
         month_txns = [
@@ -2128,9 +2356,7 @@ def _category_detail_response(
             "median_txn": (statistics.median(month_amounts) if month_amounts else None),
             "min_txn": min(month_amounts) if month_amounts else None,
             "max_txn": max(month_amounts) if month_amounts else None,
-            "budget_met": (
-                month_total <= config["budget"] if config["budget"] else None
-            ),
+            "budget_ring": _ring_geometry(month_total, config["budget"]),
             "top_transactions": [
                 {
                     "txn": t,
@@ -2158,6 +2384,21 @@ def _category_detail_response(
             transactions, category, txn_type, year=year, month=month
         )
 
+        week_sub_points, week_sub_series, week_sub_ranges = (
+            _weekly_subcategory_points_for_month(
+                transactions, category, txn_type, year, month
+            )
+        )
+        if week_sub_series:
+            week_subcategory_chart = _svg_subcategory_week_stack_chart(
+                week_sub_points,
+                week_sub_series,
+                week_sub_ranges,
+                txn_type=txn_type,
+                category=category,
+                account_id=account_id,
+            )
+
     # A subcategory with zero activity in the shown (possibly trimmed)
     # window shouldn't get a legend checkbox for a series that's always
     # flat at zero.
@@ -2169,16 +2410,20 @@ def _category_detail_response(
     ]
     visible_subcategories = set(selected_subcategories or available_subcategories)
     subcategory_chart = (
-        _svg_subcategory_stack_chart(
-            chart_sub_months,
-            chart_sub_series,
-            visible=visible_subcategories,
-            txn_type=txn_type,
-            category=category,
-            account_id=account_id,
+        week_subcategory_chart
+        if week_subcategory_chart is not None
+        else (
+            _svg_subcategory_stack_chart(
+                chart_sub_months,
+                chart_sub_series,
+                visible=visible_subcategories,
+                txn_type=txn_type,
+                category=category,
+                account_id=account_id,
+            )
+            if chart_sub_series
+            else None
         )
-        if chart_sub_series
-        else None
     )
     # True once the user has actually narrowed the selection (as opposed
     # to nothing being selected yet, which falls back to "everything") —
@@ -2213,6 +2458,7 @@ def _category_detail_response(
                 else None
             ),
             "subcategory_chart": subcategory_chart,
+            "subcategory_chart_is_weekly": week_subcategory_chart is not None,
             "subcategory_filter_active": subcategory_filter_active,
             "monthly": list(reversed(chart_monthly)),
             "all_time_total": all_time_total,

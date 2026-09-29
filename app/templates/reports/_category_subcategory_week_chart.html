@@ -1,0 +1,78 @@
+{#
+  One month's subcategory stack, broken into weekly chunks — shown
+  instead of reports/_category_subcategory_chart.html's year-long
+  monthly stack when scoped to a specific month (a single month has no
+  monthly trend to show). Same no-scroll, fixed-size treatment as
+  reports/_category_week_chart.html, just with stacked segments per
+  bar. No filter checkboxes (unlike the year-long chart) — a month only
+  ever has a handful of weeks, so there's little need to narrow what's
+  shown. Expects `subcategory_chart` and `txn_type` in scope.
+#}
+{% if subcategory_chart.has_data %}
+  <ul class="pie-legend pie-legend-inline">
+    {% for item in subcategory_chart.legend %}
+      <li class="pie-legend-item">
+        <span class="pie-legend-swatch {{ item.css_class }}"></span>
+        <span class="pie-legend-label">{{ item.name }}</span>
+        <span class="pie-legend-value">{{ "%.2f"|format(item.total) }}</span>
+      </li>
+    {% endfor %}
+  </ul>
+
+  <svg viewBox="0 0 {{ subcategory_chart.width }} {{ subcategory_chart.height }}"
+       id="cat-subcat-week-chart-svg" class="cat-chart-svg cat-week-chart-svg" role="img"
+       aria-label="{{ category }} weekly {{ txn_type.value }} by subcategory this month">
+    {% for tick in subcategory_chart.y_ticks %}
+      <line x1="{{ subcategory_chart.plot_left }}" y1="{{ tick.y }}" x2="{{ subcategory_chart.plot_right }}" y2="{{ tick.y }}"
+            class="chart-gridline"/>
+    {% endfor %}
+    {% for bar in subcategory_chart.bars %}
+      {% for segment in bar.segments %}
+        {% if segment.link %}
+          <a href="{{ segment.link }}" class="chart-bar-link"
+             aria-label="Days {{ bar.label }} · {{ segment.name }}: {{ segment.amount_label }} — view transactions"
+             data-tooltip-title="Days {{ bar.label }}" data-tooltip-kind="{{ segment.name }}"
+             data-tooltip-amount="{{ segment.amount_label }}">
+            <rect x="{{ bar.x }}" y="{{ segment.y }}" width="{{ bar.bar_width }}" height="{{ segment.height }}"
+                  class="{{ segment.css_class }}"/>
+          </a>
+        {% else %}
+          <rect x="{{ bar.x }}" y="{{ segment.y }}" width="{{ bar.bar_width }}" height="{{ segment.height }}"
+                class="{{ segment.css_class }}">
+            <title>Days {{ bar.label }} &middot; {{ segment.name }}: {{ segment.amount_label }}</title>
+          </rect>
+        {% endif %}
+      {% endfor %}
+      <text x="{{ bar.x + bar.bar_width / 2 }}" y="{{ subcategory_chart.height - 12 }}" class="chart-x-label"
+            text-anchor="middle">{{ bar.label }}</text>
+    {% endfor %}
+    {% for tick in subcategory_chart.y_ticks %}
+      <text x="{{ subcategory_chart.plot_left - 8 }}" y="{{ tick.y }}" class="chart-axis-label"
+            text-anchor="end" dominant-baseline="middle">{{ tick.label }}</text>
+    {% endfor %}
+  </svg>
+  <div class="chart-tooltip" id="cat-subcat-week-chart-tooltip" hidden></div>
+  <script>
+    (function () {
+      var tooltip = document.getElementById("cat-subcat-week-chart-tooltip");
+      if (!tooltip) return;
+      document.querySelectorAll("#cat-subcat-week-chart-svg .chart-bar-link").forEach(function (link) {
+        link.addEventListener("mouseenter", function () {
+          var d = link.dataset;
+          tooltip.innerHTML =
+            '<div class="chart-tooltip-title">' + d.tooltipTitle + '</div>' +
+            '<div class="chart-tooltip-amount">' + d.tooltipKind + ': ' + d.tooltipAmount + '</div>' +
+            '<div class="chart-tooltip-hint">Click to view transactions</div>';
+          tooltip.hidden = false;
+        });
+        link.addEventListener("mousemove", function (event) {
+          tooltip.style.left = (event.clientX + 16) + "px";
+          tooltip.style.top = (event.clientY + 16) + "px";
+        });
+        link.addEventListener("mouseleave", function () {
+          tooltip.hidden = true;
+        });
+      });
+    })();
+  </script>
+{% endif %}
