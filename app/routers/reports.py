@@ -400,6 +400,7 @@ VISIBLE_MONTHS = 15
 def _svg_net_worth_chart(
     rows: list[tuple[str, str, Decimal, Decimal, Decimal]],
     *,
+    account_id: str = "",
     per_month_width: int = PER_MONTH_W,
     height: int = 380,
     pad_left: int = 84,
@@ -413,15 +414,20 @@ def _svg_net_worth_chart(
     ``rows`` is ``(key, label, net_worth, income_total, expense_total)``
     quintuples, oldest first, all for the same set of months — ``key``
     is the "YYYY-MM" form (see ``services.aggregation.NetWorthPoint``),
-    used only to build the x-axis month/year labels below. Returns
-    ``{"has_data": False}`` for no rows. Income/expense plot as
-    magnitudes (``abs``) rising from the shared zero baseline — mixing a
-    signed expense total with an unsigned bar height would read wrong —
-    while the net worth line plots its actual (signed) value against
-    the same baseline. Y-axis ticks start from 0 (see ``_tick_bounds``)
-    at a step ``_nice_step`` picks to fit the data (``tick_step``
-    overrides that, mainly for tests that want an exact, predictable
-    step rather than whatever the sample data happens to produce).
+    used both to build the x-axis month/year labels below and each bar's
+    own click-through link into ``/transactions`` (``income_link``/
+    ``expense_link``, scoped to that exact month and type — ``account_id``
+    propagates whichever account filter the page itself is currently
+    scoped to, same convention as every other cross-page link in the
+    app). Returns ``{"has_data": False}`` for no rows. Income/expense
+    plot as magnitudes (``abs``) rising from the shared zero baseline —
+    mixing a signed expense total with an unsigned bar height would read
+    wrong — while the net worth line plots its actual (signed) value
+    against the same baseline. Y-axis ticks start from 0 (see
+    ``_tick_bounds``) at a step ``_nice_step`` picks to fit the data
+    (``tick_step`` overrides that, mainly for tests that want an exact,
+    predictable step rather than whatever the sample data happens to
+    produce).
 
     Each month gets a fixed ``per_month_width`` rather than however many
     months squeezed into one flat total width — the whole chart widens
@@ -468,16 +474,29 @@ def _svg_net_worth_chart(
         center = plot_left + group_width * (index + 0.5)
         income_y = y_at(abs(float(income)))
         expense_y = y_at(abs(float(expense)))
+        month_date_from, month_date_to = _month_date_bounds(key)
         bars.append(
             {
                 "income_x": center - gap / 2 - bar_width,
                 "income_y": income_y,
                 "income_h": zero_y - income_y,
                 "income_label": f"{abs(income):,.2f}",
+                "income_link": breadcrumbs.transactions_link(
+                    date_from=month_date_from,
+                    date_to=month_date_to,
+                    txn_type=TransactionType.INCOME.value,
+                    account_id=account_id,
+                ),
                 "expense_x": center + gap / 2,
                 "expense_y": expense_y,
                 "expense_h": zero_y - expense_y,
                 "expense_label": f"{abs(expense):,.2f}",
+                "expense_link": breadcrumbs.transactions_link(
+                    date_from=month_date_from,
+                    date_to=month_date_to,
+                    txn_type=TransactionType.EXPENSE.value,
+                    account_id=account_id,
+                ),
                 "bar_width": bar_width,
                 "label": label,
             }
@@ -988,7 +1007,8 @@ def _net_worth_chart(
                 monthly_totals[point.key].expense_total,
             )
             for point in net_worth_points
-        ]
+        ],
+        account_id=account_id,
     )
 
 

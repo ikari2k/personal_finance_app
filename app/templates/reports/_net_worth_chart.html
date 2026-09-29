@@ -42,14 +42,18 @@
       <line x1="{{ chart.plot_left }}" y1="{{ chart.zero_y }}" x2="{{ chart.plot_right }}" y2="{{ chart.zero_y }}"
             class="chart-zero-line"/>
       {% for bar in chart.bars %}
-        <rect x="{{ bar.income_x }}" y="{{ bar.income_y }}" width="{{ bar.bar_width }}"
-              height="{{ bar.income_h }}" class="bar-income">
-          <title>{{ bar.label }} income: {{ bar.income_label }}</title>
-        </rect>
-        <rect x="{{ bar.expense_x }}" y="{{ bar.expense_y }}" width="{{ bar.bar_width }}"
-              height="{{ bar.expense_h }}" class="bar-expense">
-          <title>{{ bar.label }} expense: {{ bar.expense_label }}</title>
-        </rect>
+        <a href="{{ bar.income_link }}" class="chart-bar-link">
+          <rect x="{{ bar.income_x }}" y="{{ bar.income_y }}" width="{{ bar.bar_width }}"
+                height="{{ bar.income_h }}" class="bar-income">
+            <title>{{ bar.label }} income: {{ bar.income_label }} — view transactions</title>
+          </rect>
+        </a>
+        <a href="{{ bar.expense_link }}" class="chart-bar-link">
+          <rect x="{{ bar.expense_x }}" y="{{ bar.expense_y }}" width="{{ bar.bar_width }}"
+                height="{{ bar.expense_h }}" class="bar-expense">
+            <title>{{ bar.label }} expense: {{ bar.expense_label }} — view transactions</title>
+          </rect>
+        </a>
       {% endfor %}
       <path d="{{ chart.path_d }}" class="chart-line"/>
       {% for x, y in chart.coords %}

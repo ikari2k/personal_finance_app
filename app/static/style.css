@@ -1216,6 +1216,20 @@ fieldset legend {
   fill: var(--pico-del-color);
 }
 
+/* Net worth chart's income/expense bars click through to /transactions
+ * for that exact month + type (app.routers.reports._svg_net_worth_chart's
+ * income_link/expense_link) — each bar's own <rect> sits inside an SVG
+ * <a>, so this just adds the pointer cursor and a hover fade rather than
+ * relying on the browser's own unstyled link affordance (an SVG <a> has
+ * none by default). */
+.chart-bar-link {
+  cursor: pointer;
+}
+.chart-bar-link:hover rect,
+.chart-bar-link:focus rect {
+  opacity: 0.7;
+}
+
 /* Categories index (/reports/categories) row sparkline — same
  * income/expense color convention as the bars above, applied as a
  * stroke instead of a fill since the line itself is the mark here (the
