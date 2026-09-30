@@ -1,0 +1,79 @@
+{#
+  Expense-category treemap — shared by reports/list.html (all-time,
+  every category) and reports/year.html (one year's slice, same
+  markup/script, different scope). Expects `expense_treemap`
+  (app.routers.reports._category_treemap's return value) and
+  `treemap_caption` (the descriptive sentence under the heading, since
+  that's the one thing that differs between an all-time and a
+  year-scoped call) in scope. Box size is a category's share of the
+  period's transaction count; box color is an independent green-to-red
+  gradient of its share of the period's total expense — see
+  _category_treemap's own docstring for the full reasoning.
+#}
+{% from "_category_icons.html" import category_icon %}
+{% if expense_treemap %}
+  <h3 style="margin-top: 1.25rem; margin-bottom: 0.15rem;">Spending breakdown</h3>
+  <p class="muted" style="margin-top: 0;">
+    {{ treemap_caption }}
+    Box size is that category's share of your transaction count;
+    color is its share of total expense — click a box to view those transactions.
+  </p>
+  <svg viewBox="0 0 {{ expense_treemap.width }} {{ expense_treemap.height }}"
+       class="treemap-svg" id="expense-treemap-svg" role="img" aria-label="Expense categories by transaction count and share of spend">
+    {% for box in expense_treemap.boxes %}
+      <a class="treemap-box-link" href="{{ box.link }}"
+         aria-label="{{ box.name }}: {{ '%.2f'|format(box.total) }}, {{ '%.1f'|format(box.pct) }}% of expenses, {{ box.count }} transaction{{ 's' if box.count != 1 else '' }} ({{ '%.1f'|format(box.txn_pct) }}% of all transactions) — view transactions"
+         data-tooltip-title="{{ box.name }}"
+         data-tooltip-amount="{{ '%.2f'|format(box.total) }} &middot; {{ '%.1f'|format(box.pct) }}% of expenses"
+         data-tooltip-count="{{ box.count }} transaction{{ 's' if box.count != 1 else '' }} &middot; {{ '%.1f'|format(box.txn_pct) }}% of all transactions">
+        <g class="{{ 'treemap-text-light' if box.light_text }}">
+          <rect x="{{ box.x }}" y="{{ box.y }}" width="{{ box.w }}" height="{{ box.h }}"
+                class="treemap-box" style="fill: {{ box.color }};"/>
+          {% if box.show_name %}
+            {% if box.icon %}
+              <g transform="translate({{ box.icon_x }}, {{ box.icon_y }}) scale({{ box.icon_scale }})">
+                {{ category_icon(box.icon) }}
+              </g>
+            {% endif %}
+            <text x="{{ box.name_x }}" y="{{ box.y + 20 }}" class="treemap-label-name">{{ box.name }}</text>
+          {% elif box.show_icon_only %}
+            <g transform="translate({{ box.icon_only_x }}, {{ box.icon_only_y }}) scale({{ box.icon_scale }})">
+              {{ category_icon(box.icon) }}
+            </g>
+          {% endif %}
+        </g>
+      </a>
+    {% endfor %}
+  </svg>
+  <div class="treemap-legend">
+    <span>Color = % of total expense</span>
+    <span class="treemap-legend-bar" style="background: linear-gradient(to right, {{ expense_treemap.legend_stops[0] }}, {{ expense_treemap.legend_stops[1] }}, {{ expense_treemap.legend_stops[2] }});"></span>
+    <span>0%</span>
+    <span class="muted">&rarr;</span>
+    <span>{{ expense_treemap.legend_cap_pct|int }}%+</span>
+  </div>
+  <div class="chart-tooltip" id="expense-treemap-tooltip" hidden></div>
+  <script>
+    (function () {
+      var tooltip = document.getElementById("expense-treemap-tooltip");
+      if (!tooltip) return;
+      document.querySelectorAll("#expense-treemap-svg .treemap-box-link").forEach(function (link) {
+        link.addEventListener("mouseenter", function () {
+          var d = link.dataset;
+          tooltip.innerHTML =
+            '<div class="chart-tooltip-title">' + d.tooltipTitle + '</div>' +
+            '<div class="chart-tooltip-amount">' + d.tooltipAmount + '</div>' +
+            '<div class="chart-tooltip-hint">' + d.tooltipCount + ' &middot; click to view</div>';
+          tooltip.hidden = false;
+        });
+        link.addEventListener("mousemove", function (event) {
+          tooltip.style.left = (event.clientX + 16) + "px";
+          tooltip.style.top = (event.clientY + 16) + "px";
+        });
+        link.addEventListener("mouseleave", function () {
+          tooltip.hidden = true;
+        });
+      });
+    })();
+  </script>
+{% endif %}

@@ -1622,17 +1622,23 @@ def _category_treemap(
     expense_config: dict,
     account_id: str,
     grand_total: Decimal,
+    *,
+    date_from: str = "",
+    date_to: str = "",
 ) -> dict | None:
-    """Build the all-time expense-category treemap's geometry (``/reports``).
+    """Build an expense-category treemap's geometry (``/reports``, ``/reports/{year}``).
 
-    One box per expense category with any all-time activity — every
-    category, not just the "Top spending categories" table's own
-    capped preview above it, since a treemap can legibly show far more
-    entries than a ranked table. Deliberately category-level only,
-    never drilling into subcategories: this page is explicitly all-time/
-    whole-portfolio context (the per-category drill-down with its own
-    subcategory breakdown already lives one click away, at
-    ``/reports/category``).
+    One box per expense category with any activity in the period
+    ``categories`` was computed for — every category, not just the
+    "Top spending categories" table's own preview above it on the
+    landing page, since a treemap can legibly show far more entries
+    than a ranked table. Deliberately category-level only, never
+    drilling into subcategories: the per-category drill-down with its
+    own subcategory breakdown already lives one click away, at
+    ``/reports/category``. ``date_from``/``date_to`` (both empty for
+    the landing page's own all-time treemap) scope every box's
+    click-through link to that same period — the caller is responsible
+    for also having scoped ``categories``/``grand_total`` to it.
 
     A box's *area* is proportional to that category's own share of the
     whole period's *transaction count* (many small transactions read as
@@ -1709,6 +1715,8 @@ def _category_treemap(
                     category=category.name,
                     txn_type=TransactionType.EXPENSE.value,
                     account_id=account_id,
+                    date_from=date_from,
+                    date_to=date_to,
                 ),
             }
         )
@@ -2171,6 +2179,16 @@ def year_detail(
         ),
     }
 
+    expense_year_total = sum((c.total for c in expense_breakdown), Decimal("0"))
+    expense_treemap = _category_treemap(
+        expense_breakdown,
+        expense_config,
+        account_id,
+        expense_year_total,
+        date_from=f"{year:04d}-01-01",
+        date_to=f"{year:04d}-12-31",
+    )
+
     return templates.TemplateResponse(
         request,
         "reports/year.html",
@@ -2207,6 +2225,7 @@ def year_detail(
                 expense_config,
                 month_keys,
             ),
+            "expense_treemap": expense_treemap,
         },
     )
 

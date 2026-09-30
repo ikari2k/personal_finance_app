@@ -1433,3 +1433,43 @@ def test_reports_overview_spending_categories_invalid_sort_falls_back_to_default
 
     assert response.status_code == 200
     assert "Groceries" in response.text
+
+
+def test_year_detail_shows_spending_treemap_scoped_to_that_year(client):
+    _create_account(client)
+    _create_transaction(
+        client, date="2025-06-01", type="expense", category="Groceries", amount="50"
+    )
+    _create_transaction(
+        client, date="2026-01-10", type="expense", category="Groceries", amount="80"
+    )
+    _create_transaction(
+        client, date="2026-02-10", type="expense", category="Rent", amount="900"
+    )
+
+    response = client.get("/reports/2026")
+
+    assert response.status_code == 200
+    assert "Spending breakdown" in response.text
+    assert "Every expense category in 2026." in response.text
+    treemap_start = response.text.index("expense-treemap-svg")
+    treemap_end = response.text.index("</svg>", treemap_start)
+    treemap = response.text[treemap_start:treemap_end]
+    # Only 2026's totals count -- Groceries here is 80, not 130 (which
+    # would include the 2025 transaction).
+    assert 'data-tooltip-amount="80.00' in treemap
+    assert 'data-tooltip-amount="900.00' in treemap
+    # Box links must stay scoped to 2026, not the whole ledger history.
+    assert "date_from=2026-01-01&amp;date_to=2026-12-31" in treemap
+
+
+def test_year_detail_omits_treemap_when_year_has_no_expenses(client):
+    _create_account(client)
+    _create_transaction(
+        client, date="2026-01-10", type="income", category="Salary", amount="1000"
+    )
+
+    response = client.get("/reports/2026")
+
+    assert response.status_code == 200
+    assert "Spending breakdown" not in response.text

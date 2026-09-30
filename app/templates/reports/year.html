@@ -150,4 +150,7 @@
     <span class="utilization-legend-ring"></span> % of category/subcategory budget used that month
   </p>
   {{ month_matrix_table(expense_month_rows, month_labels, "expense", date_from, date_to, month_bounds, account_id) }}
+
+  {% set treemap_caption = "Every expense category in " ~ year ~ "." %}
+  {% include "reports/_treemap.html" %}
 {% endblock %}
