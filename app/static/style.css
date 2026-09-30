@@ -1597,6 +1597,61 @@ fieldset legend {
   white-space: nowrap;
 }
 
+/* /reports' "Top spending categories" heatmap — same pinned-first-
+ * column treatment as .month-matrix-table, since it's the same "a
+ * category name column plus many month columns" shape. Each cell is a
+ * two-layer square: a neutral .heatmap-fill base (so a genuinely
+ * zero-spend month still reads as a visible, if empty, cell rather
+ * than vanishing) with a var(--pico-del-color) overlay whose opacity
+ * (set inline per cell, server-side) encodes that month's spend
+ * relative to the row's own highest month. */
+.heatmap-table th:first-child,
+.heatmap-table td:first-child {
+  position: sticky;
+  left: 0;
+  background: var(--pico-background-color);
+  z-index: 1;
+  white-space: nowrap;
+}
+.heatmap-month-th {
+  text-align: center;
+  font-weight: 400;
+  color: var(--pico-muted-color);
+  font-size: 0.78rem;
+}
+.heatmap-month-th-year {
+  display: block;
+  font-size: 0.68rem;
+}
+.heatmap-row-label {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.heatmap-td {
+  padding: 0.15rem !important;
+}
+.heatmap-cell {
+  position: relative;
+  display: block;
+  width: 2.1rem;
+  height: 2.1rem;
+  margin: 0 auto;
+  border-radius: var(--pico-border-radius);
+  background: var(--pico-muted-border-color);
+  overflow: hidden;
+}
+.heatmap-cell:hover,
+.heatmap-cell:focus {
+  outline: 2px solid var(--pico-del-color);
+  outline-offset: 1px;
+}
+.heatmap-fill {
+  position: absolute;
+  inset: 0;
+  background: var(--pico-del-color);
+}
+
 /* Month drill-down: spending pie chart, plain inline SVG (see
  * app/routers/reports.py's _svg_pie_chart — same "no vendored JS
  * charting library" reasoning as the net worth chart above). Fixed

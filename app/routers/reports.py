@@ -1450,6 +1450,82 @@ def _year_stats(years: list, today: date) -> dict[int, dict]:
     return stats
 
 
+# The landing page's "Top spending categories" heatmap — how many
+# trailing calendar months it plots per row.
+HEATMAP_MONTHS = 12
+
+
+def _category_heatmap(
+    transactions: list,
+    categories: list[CategoryTotal],
+    expense_config: dict,
+    account_id: str,
+    today: date,
+) -> dict:
+    """Build the "Top spending categories" heatmap's geometry (``/reports``).
+
+    One row per category in ``categories`` — already ranked and capped
+    by the caller, the same set the table above it shows, so the chart
+    reads as a visualization of that same data rather than a second,
+    differently-scoped metric. One column per of the trailing
+    ``HEATMAP_MONTHS`` calendar months (``category_recent_monthly_totals``,
+    already used for the categories-index sparklines — reused here
+    rather than a second monthly-totals implementation), oldest first.
+
+    Each cell's fill intensity is relative to that *row's own* highest
+    month, not the whole grid's highest cell — a high-volume category
+    (Housing) and a low-volume one (Entertainment) both read as
+    light/dark within their own range instead of the smaller category
+    washing out to nothing next to the larger one. Every cell is a
+    click-through into ``/transactions`` scoped to exactly that
+    category and month, same convention as every other chart mark in
+    this app.
+    """
+    keys, totals_by_category = category_recent_monthly_totals(
+        transactions, TransactionType.EXPENSE, today, months=HEATMAP_MONTHS
+    )
+    month_headers = []
+    previous_year = None
+    for key in keys:
+        year, month = (int(part) for part in key.split("-"))
+        month_headers.append(
+            {"month": _MONTH_ABBR[month], "year": year if year != previous_year else ""}
+        )
+        previous_year = year
+
+    rows = []
+    for category in categories:
+        values = totals_by_category.get(category.name, [Decimal("0")] * len(keys))
+        row_max = max(values, default=Decimal("0"))
+        cells = []
+        for key, value in zip(keys, values, strict=True):
+            year, month = (int(part) for part in key.split("-"))
+            date_from, date_to = _month_date_bounds(key)
+            cells.append(
+                {
+                    "amount": value,
+                    "pct": float(value / row_max * 100) if row_max else 0.0,
+                    "label": f"{_MONTH_ABBR[month]} {year}",
+                    "link": breadcrumbs.transactions_link(
+                        date_from=date_from,
+                        date_to=date_to,
+                        category=category.name,
+                        txn_type=TransactionType.EXPENSE.value,
+                        account_id=account_id,
+                    ),
+                }
+            )
+        rows.append(
+            {
+                "name": category.name,
+                "icon": expense_config.get(category.name, {}).get("icon", ""),
+                "cells": cells,
+            }
+        )
+
+    return {"months": month_headers, "rows": rows}
+
+
 @router.get("", response_class=HTMLResponse)
 def reports_overview(request: Request, account_id: str = "") -> HTMLResponse:
     """Render the reports landing page: net worth chart + annual summary."""
@@ -1495,6 +1571,13 @@ def reports_overview(request: Request, account_id: str = "") -> HTMLResponse:
         )
         for c in top_categories
     }
+    top_categories_heatmap = (
+        _category_heatmap(
+            transactions, top_categories, expense_config, account_id, today
+        )
+        if top_categories
+        else None
+    )
 
     # All-time hero stats — no delta alongside them, since there's no
     # "previous all-time period" for an all-time total to be compared
@@ -1528,6 +1611,7 @@ def reports_overview(request: Request, account_id: str = "") -> HTMLResponse:
             "top_categories": top_categories,
             "top_categories_pct": top_categories_pct,
             "top_categories_txn_links": top_categories_txn_links,
+            "top_categories_heatmap": top_categories_heatmap,
             "expense_config": expense_config,
             "all_time_stats": all_time_stats,
             "current_year": today.year,

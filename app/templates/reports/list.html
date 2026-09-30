@@ -57,6 +57,73 @@
         </tbody>
       </table>
     </div>
+
+    {% if top_categories_heatmap %}
+      <h3 style="margin-top: 1.25rem; margin-bottom: 0.15rem;">Spending heatmap</h3>
+      <p class="muted" style="margin-top: 0;">
+        Monthly spend per category, last {{ top_categories_heatmap.months|length }} months.
+        Shading is relative to each category's own highest month — click a cell to view those transactions.
+      </p>
+      <div class="table-scroll">
+        <table class="heatmap-table" id="top-cat-heatmap">
+          <thead>
+            <tr>
+              <th></th>
+              {% for m in top_categories_heatmap.months %}
+                <th class="heatmap-month-th">
+                  {{ m.month }}{% if m.year %}<span class="heatmap-month-th-year">{{ m.year }}</span>{% endif %}
+                </th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in top_categories_heatmap.rows %}
+              <tr>
+                <td class="heatmap-row-label">
+                  {% if row.icon %}<span class="cat-cell-icon cat-cell-icon-expense">{{ category_icon(row.icon) }}</span>{% endif %}
+                  {{ row.name }}
+                </td>
+                {% for cell in row.cells %}
+                  <td class="heatmap-td">
+                    <a class="heatmap-cell" href="{{ cell.link }}"
+                       aria-label="{{ row.name }}, {{ cell.label }}: {{ '%.2f'|format(cell.amount) }} — view transactions"
+                       data-tooltip-title="{{ row.name }}"
+                       data-tooltip-kind="{{ cell.label }}"
+                       data-tooltip-amount="{{ '%.2f'|format(cell.amount) }}">
+                      <span class="heatmap-fill" style="opacity: {{ '%.3f'|format(cell.pct / 100) }};"></span>
+                    </a>
+                  </td>
+                {% endfor %}
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="chart-tooltip" id="top-cat-heatmap-tooltip" hidden></div>
+      <script>
+        (function () {
+          var tooltip = document.getElementById("top-cat-heatmap-tooltip");
+          if (!tooltip) return;
+          document.querySelectorAll("#top-cat-heatmap .heatmap-cell").forEach(function (link) {
+            link.addEventListener("mouseenter", function () {
+              var d = link.dataset;
+              tooltip.innerHTML =
+                '<div class="chart-tooltip-title">' + d.tooltipTitle + '</div>' +
+                '<div class="chart-tooltip-amount">' + d.tooltipKind + ': ' + d.tooltipAmount + '</div>' +
+                '<div class="chart-tooltip-hint">Click to view transactions</div>';
+              tooltip.hidden = false;
+            });
+            link.addEventListener("mousemove", function (event) {
+              tooltip.style.left = (event.clientX + 16) + "px";
+              tooltip.style.top = (event.clientY + 16) + "px";
+            });
+            link.addEventListener("mouseleave", function () {
+              tooltip.hidden = true;
+            });
+          });
+        })();
+      </script>
+    {% endif %}
   {% endif %}
 
   <article>

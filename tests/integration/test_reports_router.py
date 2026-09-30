@@ -1,5 +1,6 @@
 """Integration tests for the reports router."""
 
+from calendar import monthrange
 from datetime import date
 
 
@@ -1140,3 +1141,70 @@ def test_category_detail_shows_by_subcategory_section_when_any_exist(client):
     assert response.status_code == 200
     assert "By subcategory" in response.text
     assert "report-columns" in response.text
+
+
+def test_reports_overview_omits_heatmap_when_no_expenses(client):
+    response = client.get("/reports")
+
+    assert response.status_code == 200
+    assert "Spending heatmap" not in response.text
+
+
+def test_reports_overview_shows_spending_heatmap_for_top_categories(client):
+    _create_account(client)
+    today = date.today().isoformat()
+    _create_transaction(
+        client, date=today, type="expense", category="Groceries", amount="80"
+    )
+    _create_transaction(
+        client, date=today, type="expense", category="Rent", amount="1500"
+    )
+
+    response = client.get("/reports")
+
+    assert response.status_code == 200
+    assert "Spending heatmap" in response.text
+    assert "top-cat-heatmap" in response.text
+    assert "Groceries" in response.text
+    assert "Rent" in response.text
+    assert "heatmap-fill" in response.text
+
+
+def test_reports_overview_heatmap_cell_links_to_that_category_and_month(client):
+    _create_account(client)
+    today = date.today()
+    _create_transaction(
+        client,
+        date=today.isoformat(),
+        type="expense",
+        category="Groceries",
+        amount="80",
+    )
+
+    response = client.get("/reports")
+
+    assert response.status_code == 200
+    last_day = monthrange(today.year, today.month)[1]
+    month_from = f"{today.year:04d}-{today.month:02d}-01"
+    month_to = f"{today.year:04d}-{today.month:02d}-{last_day:02d}"
+    assert (
+        f"date_from={month_from}&amp;date_to={month_to}&amp;category=Groceries"
+        f"&amp;subcategory=&amp;txn_type=expense" in response.text
+    )
+
+
+def test_reports_overview_heatmap_round_trips_account_filter(client):
+    _create_account(client, "chk")
+    _create_transaction(
+        client,
+        account_id="chk",
+        date=date.today().isoformat(),
+        type="expense",
+        category="Groceries",
+        amount="80",
+    )
+
+    response = client.get("/reports", params={"account_id": "chk"})
+
+    assert response.status_code == 200
+    assert "account_id=chk" in response.text
