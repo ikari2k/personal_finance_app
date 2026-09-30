@@ -73,34 +73,6 @@
   {% endif %}
 {% endmacro %}
 
-{% macro pie_chart(chart) %}
-  {% if chart.has_data %}
-    <div class="pie-chart-wrap">
-      <svg viewBox="0 0 {{ chart.size }} {{ chart.size }}" class="pie-chart" role="img" aria-label="Category breakdown pie chart">
-        {% for slice in chart.slices %}
-          <path d="{{ slice.path_d }}" class="{{ slice.css_class }}">
-            <title>{{ slice.label }}: {{ "%.2f"|format(slice.amount) }} ({{ slice.pct_label }})</title>
-          </path>
-          {% if slice.show_label %}
-            <text x="{{ slice.label_x }}" y="{{ slice.label_y }}" class="pie-slice-label">{{ slice.pct_label }}</text>
-          {% endif %}
-        {% endfor %}
-      </svg>
-      <ul class="pie-legend">
-        {% for slice in chart.slices %}
-          <li class="pie-legend-item">
-            <span class="pie-legend-swatch {{ slice.css_class }}"></span>
-            <span class="pie-legend-label">{{ slice.label }}</span>
-            <span class="pie-legend-value">{{ "%.2f"|format(slice.amount) }} ({{ slice.pct_label }})</span>
-          </li>
-        {% endfor %}
-      </ul>
-    </div>
-  {% else %}
-    <p>No data.</p>
-  {% endif %}
-{% endmacro %}
-
 {#
   The month drill-down's expense-by-category table gets two columns the
   plain ``breakdown_table`` above doesn't: budget utilization (a ring,

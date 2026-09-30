@@ -18,7 +18,6 @@ this function and the template, not ``services.aggregation``'s data.
 import math
 import statistics
 from calendar import month_abbr, month_name, monthrange
-from collections.abc import Callable
 from datetime import date
 from decimal import Decimal
 from urllib.parse import quote
@@ -1063,140 +1062,6 @@ def _svg_subcategory_week_stack_chart(
     }
 
 
-# Fixed-order categorical colors for the spending pie chart's top slices —
-# same "assign identity by fixed order, never cycle" convention as any
-# other categorical series in the app. "Other" (the collapsed tail past
-# the top-N slices) always gets its own muted gray instead of the next
-# hue in line, since it isn't one category's identity. Every slice is
-# also named in the accompanying legend and via an SVG <title> tooltip,
-# so identity never depends on telling two similar hues apart by eye
-# alone.
-_PIE_SLICE_COLORS = [
-    "#2a78d6",  # blue
-    "#eb6834",  # orange
-    "#1baf7a",  # aqua
-    "#eda100",  # yellow
-    "#e87ba4",  # magenta
-    "#008300",  # green
-    "#4a3aa7",  # violet
-    "#e34948",  # red
-    "#0d366b",  # deep blue
-    "#7a4b1e",  # brown
-]
-
-
-def _pie_slice_path(
-    cx: float,
-    cy: float,
-    radius: float,
-    point: Callable[[float], tuple[float, float]],
-    angle: float,
-    end_angle: float,
-    *,
-    full_circle: bool,
-) -> str:
-    """Build one pie wedge's SVG path ``d=`` attribute, or a full circle.
-
-    A lone 100%-share slice (``full_circle=True``) needs two joined
-    semicircle arcs instead of the normal move-to-center/arc/close wedge
-    shape, since a single SVG arc command can't describe a full circle
-    (its start and end point would coincide).
-    """
-    if full_circle:
-        mid = angle + 180
-        x1, y1 = point(angle)
-        xm, ym = point(mid)
-        x2, y2 = point(end_angle)
-        return (
-            f"M {cx:.2f},{cy:.2f} L {x1:.2f},{y1:.2f} "
-            f"A {radius:.2f},{radius:.2f} 0 1 1 {xm:.2f},{ym:.2f} "
-            f"A {radius:.2f},{radius:.2f} 0 1 1 {x2:.2f},{y2:.2f} Z"
-        )
-    x1, y1 = point(angle)
-    x2, y2 = point(end_angle)
-    large_arc = 1 if (end_angle - angle) > 180 else 0
-    return (
-        f"M {cx:.2f},{cy:.2f} L {x1:.2f},{y1:.2f} "
-        f"A {radius:.2f},{radius:.2f} 0 {large_arc} 1 {x2:.2f},{y2:.2f} Z"
-    )
-
-
-def _svg_pie_chart(
-    items: list[tuple[str, Decimal]], *, limit: int = 10, size: int = 220
-) -> dict:
-    """Return template-ready SVG geometry for a top-``limit``-plus-"Other" pie chart.
-
-    ``items`` is ``(category_name, amount)`` pairs, already sorted by
-    amount descending (as ``category_totals_for_month`` returns them) —
-    magnitudes, not signed, same convention as the rest of the category
-    breakdown views. Categories past ``limit`` are collapsed into one
-    "Other" slice rather than growing the palette indefinitely (a 15th
-    distinct hue stops being reliably distinguishable at a glance either
-    way — see ``_PIE_SLICE_COLORS``). Returns ``{"has_data": False}`` for
-    no data or a zero total. A lone 100% slice is drawn as two joined
-    semicircle arcs, since a single SVG arc command can't describe a
-    full circle (its start and end point would coincide).
-    """
-    items = [(name, amount) for name, amount in items if amount > 0]
-    if not items:
-        return {"has_data": False}
-
-    top = items[:limit]
-    rest = items[limit:]
-    if rest:
-        top.append(("Other", sum((amount for _, amount in rest), Decimal("0"))))
-
-    total = sum((amount for _, amount in top), Decimal("0"))
-    if total <= 0:
-        return {"has_data": False}
-
-    cx = cy = size / 2
-    radius = size / 2 - 4
-
-    def point(angle_deg: float) -> tuple[float, float]:
-        angle = math.radians(angle_deg)
-        return cx + radius * math.cos(angle), cy + radius * math.sin(angle)
-
-    slices = []
-    angle = -90.0  # 12 o'clock, sweeping clockwise
-    for index, (name, amount) in enumerate(top):
-        fraction = float(amount / total)
-        end_angle = angle + fraction * 360
-        is_other = rest and name == "Other"
-        css_class = (
-            "pie-slice-other"
-            if is_other
-            else f"pie-slice-{index % len(_PIE_SLICE_COLORS)}"
-        )
-
-        path_d = _pie_slice_path(
-            cx, cy, radius, point, angle, end_angle, full_circle=len(top) == 1
-        )
-
-        pct = fraction * 100
-        label_x, label_y = point((angle + end_angle) / 2) if fraction < 1 else (cx, cy)
-        # Blend label point 65% of the way from center to the slice's own
-        # arc point, so the percentage sits inside the wedge, not on its edge.
-        label_x = cx + (label_x - cx) * 0.65
-        label_y = cy + (label_y - cy) * 0.65
-
-        slices.append(
-            {
-                "path_d": path_d,
-                "css_class": css_class,
-                "label": name,
-                "amount": amount,
-                "pct_label": f"{pct:.0f}%",
-                "show_label": pct >= 6,
-                "label_x": label_x,
-                "label_y": label_y,
-            }
-        )
-        angle = end_angle
-
-    return {"has_data": True, "size": size, "slices": slices, "total": total}
-
-
 def _svg_subcategory_stack_chart(
     months: list[CategoryMonthPoint],
     series: list[SubcategoryMonthPoint],
@@ -1217,14 +1082,15 @@ def _svg_subcategory_stack_chart(
 
     Same fixed-per-month-width, scrolling, pinned-axis mechanic as
     ``_svg_category_chart``, but each bar is a stack of one segment per
-    visible ``series`` entry instead of a single fill — colored via the
-    ``pie-slice-N``/``pie-slice-other`` CSS classes ``_svg_pie_chart``
-    already uses (fixed categorical order, "Other" always a muted gray),
-    so a subcategory's color means the same thing whether it's looked up
-    on the month drill-down's pie chart or here. No budget line: unlike
-    ``_svg_category_chart``, there's no single figure here to compare a
-    *stack* against — a category's own budget is checked against its
-    combined total, not any one subcategory's slice of it.
+    visible ``series`` entry instead of a single fill — colored via a
+    fixed ``pie-slice-N``/``pie-slice-other`` categorical palette
+    (fixed order, "Other" always a muted gray), the same one the
+    month drill-down's spending pie chart used before it was replaced
+    by the expense-category treemap, so a subcategory's color still
+    means the same thing wherever it's looked up. No budget line:
+    unlike ``_svg_category_chart``, there's no single figure here to
+    compare a *stack* against — a category's own budget is checked
+    against its combined total, not any one subcategory's slice of it.
 
     ``visible`` (a set of subcategory names) backs the legend's own
     filter checkboxes — ``None`` means "everything" (every subcategory in
@@ -2249,7 +2115,7 @@ def _adjacent_month(year: int, month: int, delta: int) -> tuple[int, int]:
 def month_detail(
     request: Request, year: int, month: int, account_id: str = ""
 ) -> HTMLResponse:
-    """Render one month's spending pie chart and income/expense category breakdown."""
+    """Render one month's spending breakdown and income/expense category breakdown."""
     if not 1 <= month <= 12:
         raise HTTPException(status_code=404, detail="Invalid month")
 
@@ -2262,7 +2128,6 @@ def month_detail(
     income_breakdown = category_totals_for_month(
         transactions, year, month, TransactionType.INCOME
     )
-    spending_pie = _svg_pie_chart([(cat.name, cat.total) for cat in expense_breakdown])
     income_config = _category_config(categories, TransactionType.INCOME)
     expense_config = _category_config(categories, TransactionType.EXPENSE)
     prev_year, prev_month = _adjacent_month(year, month, -1)
@@ -2270,6 +2135,15 @@ def month_detail(
     month_date_from, month_date_to = _month_date_bounds(f"{year:04d}-{month:02d}")
     month_txn_link = breadcrumbs.transactions_link(
         date_from=month_date_from, date_to=month_date_to, account_id=account_id
+    )
+    expense_month_total = sum((c.total for c in expense_breakdown), Decimal("0"))
+    expense_treemap = _category_treemap(
+        expense_breakdown,
+        expense_config,
+        account_id,
+        expense_month_total,
+        date_from=month_date_from,
+        date_to=month_date_to,
     )
 
     by_key = {m.key: m for m in monthly_totals_with_mom(transactions)}
@@ -2369,7 +2243,7 @@ def month_detail(
             "date_to": month_date_to,
             "month_txn_link": month_txn_link,
             "breadcrumbs": breadcrumbs.for_month(year, month, account_id),
-            "spending_pie": spending_pie,
+            "expense_treemap": expense_treemap,
             "income_breakdown": income_breakdown,
             "expense_breakdown": expense_breakdown,
             "income_config": income_config,

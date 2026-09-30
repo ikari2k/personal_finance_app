@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "reports/_category_breakdown.html" import breakdown_table, expense_month_breakdown_table, pie_chart %}
+{% from "reports/_category_breakdown.html" import breakdown_table, expense_month_breakdown_table %}
 {% from "reports/_account_filter.html" import account_filter %}
 {% from "_breadcrumb.html" import breadcrumb %}
 {% from "_category_icons.html" import category_icon %}
@@ -94,8 +94,8 @@
     </div>
   {% endif %}
 
-  <h2>Top spending categories</h2>
-  {{ pie_chart(spending_pie) }}
+  {% set treemap_caption = "Every expense category in " ~ label ~ "." %}
+  {% include "reports/_treemap.html" %}
 
   <div class="report-columns">
     <div>

@@ -1665,44 +1665,15 @@ fieldset legend {
   border-radius: var(--pico-border-radius);
 }
 
-/* Month drill-down: spending pie chart, plain inline SVG (see
- * app/routers/reports.py's _svg_pie_chart — same "no vendored JS
- * charting library" reasoning as the net worth chart above). Fixed
+/* .pie-legend/.pie-slice-N below were originally shared with the month
+ * drill-down's spending pie chart; that chart was later replaced by
+ * the expense-category treemap (see .treemap-* above), but the
+ * subcategory stack charts (reports/_category_subcategory_chart.html,
+ * _category_subcategory_week_chart.html) still use this same fixed
+ * categorical palette/legend for their own stacked segments — fixed
  * hex colors per slot (not Pico variables — Pico only exposes a
- * positive/negative pair, not ten-plus distinct categorical hues) in
- * a fixed order, same "assign identity by fixed order" convention as
- * any categorical series; "Other" gets its own muted gray. Every
- * slice is also named in the legend list and via its own <title>
- * tooltip, so identity never depends on telling two similar hues
- * apart by eye alone. */
-.pie-chart-wrap {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 2rem;
-}
-
-.pie-chart {
-  width: min(100%, 360px);
-  height: auto;
-  aspect-ratio: 1 / 1;
-  flex: 0 0 auto;
-}
-
-.pie-chart path {
-  stroke: var(--pico-background-color);
-  stroke-width: 2;
-}
-
-.pie-slice-label {
-  fill: #fff;
-  font-size: 11px;
-  font-weight: 600;
-  text-anchor: middle;
-  dominant-baseline: middle;
-  pointer-events: none;
-}
-
+ * positive/negative pair, not ten-plus distinct categorical hues), in
+ * a fixed order, "Other" always its own muted gray. */
 .pie-legend {
   list-style: none;
   margin: 0;
