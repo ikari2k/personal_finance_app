@@ -1483,6 +1483,18 @@ def _treemap_color(pct: float) -> tuple[str, bool]:
     return color, luminance < 0.55
 
 
+_TREEMAP_SIZE_BY_LABELS = {
+    "count": {
+        "toggle": "Size: transactions · Color: % of spend",
+        "color_label": "% of total expense",
+    },
+    "total": {
+        "toggle": "Size: % of spend · Color: transactions",
+        "color_label": "% of all transactions",
+    },
+}
+
+
 def _category_treemap(
     categories: list[CategoryTotal],
     expense_config: dict,
@@ -1491,6 +1503,7 @@ def _category_treemap(
     *,
     date_from: str = "",
     date_to: str = "",
+    size_by: str = "count",
 ) -> dict | None:
     """Build an expense-category treemap's geometry (``/reports``, ``/reports/{year}``).
 
@@ -1506,26 +1519,31 @@ def _category_treemap(
     click-through link to that same period — the caller is responsible
     for also having scoped ``categories``/``grand_total`` to it.
 
-    A box's *area* is proportional to that category's own share of the
-    whole period's *transaction count* (many small transactions read as
-    a big box), while its *color* is an independent green-to-red
-    gradient (``_treemap_color``) of that category's share of the whole
-    period's total *expense* (dominates your spending = deep red, a
-    small slice = dark green). The two are deliberately decoupled: a
-    rare, large expense (a mortgage payment — few transactions, high
-    dollar share) reads as "small and deep red," while a frequent,
-    cheap one (groceries) reads as "big and however red its own dollar
-    share earns" — a pattern a plain dollar-total ranking can't show on
-    its own.
+    A box's *area* and *color* are always driven by the two independent
+    metrics this treemap can show — a category's share of the whole
+    period's *transaction count*, and its share of the whole period's
+    total *expense* — with ``size_by`` picking which one drives area
+    (the other drives color, a green-to-red gradient via
+    ``_treemap_color``). Default ``"count"`` (area = transaction share,
+    color = spend share) reads a rare, large expense — a mortgage
+    payment, few transactions, high dollar share — as "small and deep
+    red," and a frequent, cheap one (groceries) as "big and however red
+    its own dollar share earns." ``"total"`` swaps the two, so area
+    instead reads as "how much of my money went here" and color as "how
+    often did I even buy this" — see ``_treemap_pair`` for the
+    page-level toggle between the two that reuses this same function.
     """
     active = [c for c in categories if c.count > 0]
     if not active:
         return None
 
-    active = sorted(active, key=lambda c: c.count, reverse=True)
+    size_key = (
+        (lambda c: float(c.total)) if size_by == "total" else (lambda c: float(c.count))
+    )
+    active = sorted(active, key=size_key, reverse=True)
     grand_count = sum(c.count for c in active)
     sizes = _normalize_treemap_sizes(
-        [float(c.count) for c in active], _TREEMAP_WIDTH, _TREEMAP_HEIGHT
+        [size_key(c) for c in active], _TREEMAP_WIDTH, _TREEMAP_HEIGHT
     )
     rects = _squarify(sizes, 0, 0, _TREEMAP_WIDTH, _TREEMAP_HEIGHT)
 
@@ -1533,7 +1551,7 @@ def _category_treemap(
     for category, (x, y, w, h) in zip(active, rects, strict=True):
         pct = float(category.total / grand_total * 100) if grand_total else 0.0
         txn_pct = float(category.count / grand_count * 100) if grand_count else 0.0
-        color, light_text = _treemap_color(pct)
+        color, light_text = _treemap_color(txn_pct if size_by == "total" else pct)
         icon = expense_config.get(category.name, {}).get("icon", "")
         icon_scale = _TREEMAP_ICON_SIZE / 24
 
@@ -1598,7 +1616,54 @@ def _category_treemap(
         "boxes": boxes,
         "legend_stops": legend_stops,
         "legend_cap_pct": _TREEMAP_COLOR_CAP_PCT,
+        "size_by": size_by,
+        "color_label": _TREEMAP_SIZE_BY_LABELS[size_by]["color_label"],
+        "toggle_label": _TREEMAP_SIZE_BY_LABELS[size_by]["toggle"],
     }
+
+
+def _treemap_pair(
+    categories: list[CategoryTotal],
+    expense_config: dict,
+    account_id: str,
+    grand_total: Decimal,
+    *,
+    date_from: str = "",
+    date_to: str = "",
+) -> dict | None:
+    """Build both treemap variants a page's toggle switches between.
+
+    ``by_count`` (area = transaction share, color = spend share, the
+    default shown on load) and ``by_total`` (the two swapped) — both
+    fully rendered server-side and swapped client-side via a plain
+    ``hidden``-attribute toggle, same "pre-rendered blocks, no round
+    trip" convention as the category-detail page's own This month/This
+    year/All time toggle. ``None`` when there's nothing to show (no
+    expense activity in the period), so the caller can skip the whole
+    section the same way a single ``_category_treemap`` call already
+    lets it.
+    """
+    by_count = _category_treemap(
+        categories,
+        expense_config,
+        account_id,
+        grand_total,
+        date_from=date_from,
+        date_to=date_to,
+        size_by="count",
+    )
+    if by_count is None:
+        return None
+    by_total = _category_treemap(
+        categories,
+        expense_config,
+        account_id,
+        grand_total,
+        date_from=date_from,
+        date_to=date_to,
+        size_by="total",
+    )
+    return {"by_count": by_count, "by_total": by_total}
 
 
 _SPENDING_CATEGORIES_COLUMNS = ["name", "total", "pct", "count"]
@@ -1727,7 +1792,7 @@ def reports_overview(
     spending_categories_headers = _spending_categories_headers(
         resolved_sort, resolved_dir, account_id
     )
-    expense_treemap = _category_treemap(
+    expense_treemap_pair = _treemap_pair(
         all_time_expense_breakdown, expense_config, account_id, expense_all_time_total
     )
 
@@ -1762,7 +1827,7 @@ def reports_overview(
             "year_stats": _year_stats(years, today),
             "spending_categories": spending_categories,
             "spending_categories_headers": spending_categories_headers,
-            "expense_treemap": expense_treemap,
+            "expense_treemap_pair": expense_treemap_pair,
             "expense_config": expense_config,
             "all_time_stats": all_time_stats,
             "current_year": today.year,
@@ -2046,7 +2111,7 @@ def year_detail(
     }
 
     expense_year_total = sum((c.total for c in expense_breakdown), Decimal("0"))
-    expense_treemap = _category_treemap(
+    expense_treemap_pair = _treemap_pair(
         expense_breakdown,
         expense_config,
         account_id,
@@ -2091,7 +2156,7 @@ def year_detail(
                 expense_config,
                 month_keys,
             ),
-            "expense_treemap": expense_treemap,
+            "expense_treemap_pair": expense_treemap_pair,
         },
     )
 
@@ -2137,7 +2202,7 @@ def month_detail(
         date_from=month_date_from, date_to=month_date_to, account_id=account_id
     )
     expense_month_total = sum((c.total for c in expense_breakdown), Decimal("0"))
-    expense_treemap = _category_treemap(
+    expense_treemap_pair = _treemap_pair(
         expense_breakdown,
         expense_config,
         account_id,
@@ -2243,7 +2308,7 @@ def month_detail(
             "date_to": month_date_to,
             "month_txn_link": month_txn_link,
             "breadcrumbs": breadcrumbs.for_month(year, month, account_id),
-            "expense_treemap": expense_treemap,
+            "expense_treemap_pair": expense_treemap_pair,
             "income_breakdown": income_breakdown,
             "expense_breakdown": expense_breakdown,
             "income_config": income_config,

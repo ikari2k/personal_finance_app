@@ -1515,3 +1515,70 @@ def test_month_detail_omits_treemap_when_month_has_no_expenses(client):
 
     assert response.status_code == 200
     assert "Spending breakdown" not in response.text
+
+
+def test_treemap_pair_swaps_size_and_color_metrics_between_variants():
+    from app.routers.reports import _treemap_pair
+    from app.services.aggregation import CategoryTotal
+
+    # Rent: 1 transaction, huge dollar share. Groceries: many
+    # transactions, small dollar share.
+    categories = [
+        CategoryTotal(
+            name="Rent", total=900, count=1, yoy_delta=None, subcategories=[]
+        ),
+        CategoryTotal(
+            name="Groceries", total=100, count=9, yoy_delta=None, subcategories=[]
+        ),
+    ]
+    pair = _treemap_pair(categories, {}, "", 1000)
+    by_count = {b["name"]: b for b in pair["by_count"]["boxes"]}
+    by_total = {b["name"]: b for b in pair["by_total"]["boxes"]}
+
+    # by_count: area = transaction share -> Groceries (9 txns) is bigger
+    # than Rent (1 txn); color = spend share -> Rent's color reflects
+    # its 90% dollar share, distinct from Groceries' 10%.
+    groceries_area_by_count = by_count["Groceries"]["w"] * by_count["Groceries"]["h"]
+    rent_area_by_count = by_count["Rent"]["w"] * by_count["Rent"]["h"]
+    assert groceries_area_by_count > rent_area_by_count
+    assert by_count["Rent"]["color"] != by_count["Groceries"]["color"]
+
+    # by_total: area = dollar share -> Rent (90%) is now bigger than
+    # Groceries (10%); color instead reflects transaction-count share,
+    # so Rent's and Groceries' colors are still distinct but for a
+    # different reason (1/10 vs 9/10 of all transactions).
+    rent_area_by_total = by_total["Rent"]["w"] * by_total["Rent"]["h"]
+    groceries_area_by_total = by_total["Groceries"]["w"] * by_total["Groceries"]["h"]
+    assert rent_area_by_total > groceries_area_by_total
+    assert by_total["Rent"]["color"] != by_total["Groceries"]["color"]
+
+    # The two variants must disagree about which category is bigger.
+    assert (groceries_area_by_count > rent_area_by_count) != (
+        groceries_area_by_total > rent_area_by_total
+    )
+
+    assert pair["by_count"]["color_label"] == "% of total expense"
+    assert pair["by_total"]["color_label"] == "% of all transactions"
+
+
+def test_reports_overview_treemap_has_toggle_for_both_metrics(client):
+    _create_account(client)
+    today = date.today().isoformat()
+    _create_transaction(
+        client, date=today, type="expense", category="Rent", amount="900"
+    )
+    for _ in range(5):
+        _create_transaction(
+            client, date=today, type="expense", category="Groceries", amount="20"
+        )
+
+    response = client.get("/reports")
+
+    assert response.status_code == 200
+    assert "treemapMetricToggle" in response.text
+    assert "Size: transactions" in response.text
+    assert "Size: % of spend" in response.text
+    assert 'id="expense-treemap-by-count"' in response.text
+    assert 'id="expense-treemap-by-total" hidden' in response.text
+    assert "Color = % of total expense" in response.text
+    assert "Color = % of all transactions" in response.text
