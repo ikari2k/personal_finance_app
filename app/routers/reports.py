@@ -1562,30 +1562,47 @@ def _squarify(
 _TREEMAP_WIDTH = 960
 _TREEMAP_HEIGHT = 440
 
-# Upper bound (exclusive) of each color tier, as a % of the whole
-# period's total expense — the last tier has no upper bound. Chosen for
-# a *category*-level distribution (a handful of categories can
-# realistically claim 20-40%+ of a whole budget, unlike an individual
-# transaction or subcategory), not the finer-grained bands a per-
-# subcategory or per-month view would want.
-_TREEMAP_TIER_BOUNDS = [10, 20, 30, 40, 50]
-_TREEMAP_TIER_COUNT = len(_TREEMAP_TIER_BOUNDS) + 1
+# A continuous 3-stop gradient (dark green -> amber -> dark red) for
+# a box's color, rather than a small set of discrete bands — far more
+# visually differentiated across a realistic spread of category shares
+# than a handful of fixed tiers could be. _TREEMAP_COLOR_CAP_PCT is the
+# % of whole-period total expense at/above which the scale is already
+# fully red: a category-level distribution can realistically have one
+# claim 20-40%+ of a whole budget (unlike an individual transaction or
+# subcategory), so a single category claiming even half of everything
+# is already a dominant one — there's no need for headroom past it.
+_TREEMAP_GREEN = (27, 94, 54)
+_TREEMAP_AMBER = (196, 141, 30)
+_TREEMAP_RED = (140, 34, 24)
+_TREEMAP_COLOR_CAP_PCT = 50.0
 
 
-def _treemap_tier(pct: float) -> int:
-    for index, bound in enumerate(_TREEMAP_TIER_BOUNDS):
-        if pct < bound:
-            return index
-    return _TREEMAP_TIER_COUNT - 1
+def _lerp_color(
+    c1: tuple[int, int, int], c2: tuple[int, int, int], t: float
+) -> tuple[str, tuple[int, int, int]]:
+    """Linearly interpolate two RGB triples at ``t`` (0-1) — hex string plus raw RGB."""
+    r, g, b = (round(c1[i] + (c2[i] - c1[i]) * t) for i in range(3))
+    return f"#{r:02x}{g:02x}{b:02x}", (r, g, b)
 
 
-def _treemap_tier_labels() -> list[str]:
-    """Return one legend label per tier, e.g. ``["<10%", "10–20%", ..., "50%+"]``."""
-    bounds = _TREEMAP_TIER_BOUNDS
-    labels = [f"<{bounds[0]}%"]
-    labels.extend(f"{lo}–{hi}%" for lo, hi in zip(bounds, bounds[1:]))
-    labels.append(f"{bounds[-1]}%+")
-    return labels
+def _treemap_color(pct: float) -> tuple[str, bool]:
+    """Return ``(hex color, needs light text)`` for a % of the period's total expense.
+
+    Green at 0%, amber at the midpoint, dark red at/above
+    ``_TREEMAP_COLOR_CAP_PCT`` — two linear segments rather than one,
+    since a plain green-to-red lerp passes through a muddy brown around
+    the middle instead of a clean amber. "Needs light text" is decided
+    from the interpolated color's own perceived luminance (ITU-R
+    BT.601), not a fixed threshold, since it has to stay correct across
+    a continuous range rather than a handful of known swatches.
+    """
+    t = max(0.0, min(pct, _TREEMAP_COLOR_CAP_PCT)) / _TREEMAP_COLOR_CAP_PCT
+    if t <= 0.5:
+        color, (r, g, b) = _lerp_color(_TREEMAP_GREEN, _TREEMAP_AMBER, t / 0.5)
+    else:
+        color, (r, g, b) = _lerp_color(_TREEMAP_AMBER, _TREEMAP_RED, (t - 0.5) / 0.5)
+    luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+    return color, luminance < 0.55
 
 
 def _category_treemap(
@@ -1607,14 +1624,15 @@ def _category_treemap(
 
     A box's *area* is proportional to that category's own share of the
     whole period's *transaction count* (many small transactions read as
-    a big box), while its *color* is an independent 6-tier scale of
-    that category's share of the whole period's total *expense*
-    (dominates your spending = deep red, a small slice = pale). The two
-    are deliberately decoupled: a rare, large expense (a mortgage
-    payment — few transactions, high dollar share) reads as "small and
-    deep red," while a frequent, cheap one (groceries) reads as "big
-    and however red its own dollar share earns" — a pattern a plain
-    dollar-total ranking can't show on its own.
+    a big box), while its *color* is an independent green-to-red
+    gradient (``_treemap_color``) of that category's share of the whole
+    period's total *expense* (dominates your spending = deep red, a
+    small slice = dark green). The two are deliberately decoupled: a
+    rare, large expense (a mortgage payment — few transactions, high
+    dollar share) reads as "small and deep red," while a frequent,
+    cheap one (groceries) reads as "big and however red its own dollar
+    share earns" — a pattern a plain dollar-total ranking can't show on
+    its own.
     """
     active = [c for c in categories if c.count > 0]
     if not active:
@@ -1629,7 +1647,7 @@ def _category_treemap(
     boxes = []
     for category, (x, y, w, h) in zip(active, rects, strict=True):
         pct = float(category.total / grand_total * 100) if grand_total else 0.0
-        tier = _treemap_tier(pct)
+        color, light_text = _treemap_color(pct)
         boxes.append(
             {
                 "name": category.name,
@@ -1641,11 +1659,12 @@ def _category_treemap(
                 "y": y,
                 "w": w,
                 "h": h,
-                "tier": tier,
-                # Tiers 3-5's fill is dark enough that dark text loses
-                # contrast — see .treemap-text-light in style.css.
-                "light_text": tier >= 3,
-                "show_label": w >= 68 and h >= 34,
+                "color": color,
+                "light_text": light_text,
+                # Just the category name renders on the box now (its
+                # %/count only show in the hover tooltip), so this only
+                # needs to fit one line, not two.
+                "show_label": w >= 50 and h >= 22,
                 "link": breadcrumbs.transactions_link(
                     category=category.name,
                     txn_type=TransactionType.EXPENSE.value,
@@ -1654,11 +1673,17 @@ def _category_treemap(
             }
         )
 
+    legend_stops = [
+        _treemap_color(0.0)[0],
+        _treemap_color(_TREEMAP_COLOR_CAP_PCT / 2)[0],
+        _treemap_color(_TREEMAP_COLOR_CAP_PCT)[0],
+    ]
     return {
         "width": _TREEMAP_WIDTH,
         "height": _TREEMAP_HEIGHT,
         "boxes": boxes,
-        "tier_labels": _treemap_tier_labels(),
+        "legend_stops": legend_stops,
+        "legend_cap_pct": _TREEMAP_COLOR_CAP_PCT,
     }
 
 

@@ -74,7 +74,7 @@
              data-tooltip-count="{{ box.count }} transaction{{ 's' if box.count != 1 else '' }}">
             <g class="{{ 'treemap-text-light' if box.light_text }}">
               <rect x="{{ box.x }}" y="{{ box.y }}" width="{{ box.w }}" height="{{ box.h }}"
-                    class="treemap-box treemap-tier-{{ box.tier }}"/>
+                    class="treemap-box" style="fill: {{ box.color }};"/>
               {% if box.show_label %}
                 {% if box.icon %}
                   <g transform="translate({{ box.x + 8 }}, {{ box.y + 8 }}) scale(0.62)">
@@ -82,17 +82,17 @@
                   </g>
                 {% endif %}
                 <text x="{{ box.x + (26 if box.icon else 8) }}" y="{{ box.y + 20 }}" class="treemap-label-name">{{ box.name }}</text>
-                <text x="{{ box.x + 8 }}" y="{{ box.y + 36 }}" class="treemap-label-sub">{{ '%.1f'|format(box.pct) }}% &middot; {{ box.count }} txn{{ 's' if box.count != 1 else '' }}</text>
               {% endif %}
             </g>
           </a>
         {% endfor %}
       </svg>
       <div class="treemap-legend">
-        <span>Color = % of total expense:</span>
-        {% for label in expense_treemap.tier_labels %}
-          <span><span class="treemap-legend-swatch treemap-tier-{{ loop.index0 }}"></span>{{ label }}</span>
-        {% endfor %}
+        <span>Color = % of total expense</span>
+        <span class="treemap-legend-bar" style="background: linear-gradient(to right, {{ expense_treemap.legend_stops[0] }}, {{ expense_treemap.legend_stops[1] }}, {{ expense_treemap.legend_stops[2] }});"></span>
+        <span>0%</span>
+        <span class="muted">&rarr;</span>
+        <span>{{ expense_treemap.legend_cap_pct|int }}%+</span>
       </div>
       <div class="chart-tooltip" id="expense-treemap-tooltip" hidden></div>
       <script>

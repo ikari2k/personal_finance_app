@@ -1166,7 +1166,8 @@ def test_reports_overview_shows_treemap_for_every_expense_category(client):
     assert "expense-treemap-svg" in response.text
     assert "Groceries" in response.text
     assert "Rent" in response.text
-    assert "treemap-tier-" in response.text
+    assert "treemap-box" in response.text
+    assert 'style="fill: #' in response.text
 
 
 def test_reports_overview_treemap_box_links_to_that_category(client):
@@ -1207,8 +1208,8 @@ def test_reports_overview_treemap_color_reflects_share_of_total_expense(client):
     today = date.today().isoformat()
     # Rent dominates the dollar total (90% of all expense) despite being
     # a single transaction, while Groceries is many small transactions
-    # (a bigger box) but a small dollar share (a paler tier) — size and
-    # color should read independently.
+    # (a bigger box) but a small dollar share (a much greener fill) —
+    # size and color should read independently.
     _create_transaction(
         client, date=today, type="expense", category="Rent", amount="900"
     )
@@ -1220,13 +1221,22 @@ def test_reports_overview_treemap_color_reflects_share_of_total_expense(client):
     response = client.get("/reports")
 
     assert response.status_code == 200
+
+    from app.routers.reports import _TREEMAP_COLOR_CAP_PCT, _treemap_color
+
+    # Rent's 90% share is past the cap, so it reads as fully red.
+    rent_color, _ = _treemap_color(_TREEMAP_COLOR_CAP_PCT)
+    # Groceries' 10% share sits early in the green-to-amber segment.
+    groceries_color, _ = _treemap_color(10.0)
+    assert rent_color != groceries_color
+
     rent_start = response.text.index('data-tooltip-title="Rent"')
     rent_block = response.text[rent_start : rent_start + 400]
-    assert "treemap-tier-5" in rent_block  # 90% -> top tier
+    assert f"fill: {rent_color};" in rent_block
 
     groceries_start = response.text.index('data-tooltip-title="Groceries"')
     groceries_block = response.text[groceries_start : groceries_start + 400]
-    assert "treemap-tier-1" in groceries_block  # 10% -> low tier
+    assert f"fill: {groceries_color};" in groceries_block
 
 
 def test_reports_overview_treemap_box_size_reflects_transaction_count(client):
@@ -1259,9 +1269,8 @@ def test_reports_overview_treemap_box_size_reflects_transaction_count(client):
     boxes = {b["name"]: b for b in treemap["boxes"]}
     groceries_area = boxes["Groceries"]["w"] * boxes["Groceries"]["h"]
     rent_area = boxes["Rent"]["w"] * boxes["Rent"]["h"]
-    assert groceries_area > rent_area
-    assert boxes["Rent"]["tier"] == 5
-    assert boxes["Groceries"]["tier"] == 1
+    assert groceries_area > rent_area  # 9 transactions vs. 1
+    assert boxes["Rent"]["color"] != boxes["Groceries"]["color"]  # 83% vs. 17% share
 
     # Sanity check the layout primitives directly too.
     sizes = _normalize_treemap_sizes([9.0, 1.0], 100, 50)

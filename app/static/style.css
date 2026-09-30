@@ -1598,12 +1598,16 @@ fieldset legend {
 }
 
 /* /reports' expense-category treemap (app.routers.reports
- * ._category_treemap/_squarify) — a box's area is that category's
- * share of the period's transaction *count*, its fill tier is an
- * independent 6-step scale of its share of the period's total
- * *expense* (deep red = dominates spending, pale = a small slice).
- * Always fills its container width (no scroll — a single fixed-aspect
- * canvas, same "stretch to fill" treatment as a short trend chart). */
+ * ._category_treemap/_squarify/_treemap_color) — a box's area is that
+ * category's share of the period's transaction *count*, its fill is
+ * an independent continuous green-to-red gradient (set inline per box,
+ * server-side, since it's computed per-box rather than snapped to a
+ * handful of classes) of its share of the period's total *expense*
+ * (deep red = dominates spending, dark green = a small slice). Always
+ * fills its container width (no scroll — a single fixed-aspect canvas,
+ * same "stretch to fill" treatment as a short trend chart). Only the
+ * category name renders on the box itself — its %/transaction-count
+ * only show in the hover tooltip, so a small box never clips text. */
 .treemap-svg {
   display: block;
   width: 100%;
@@ -1617,36 +1621,18 @@ fieldset legend {
 .treemap-box-link:focus .treemap-box {
   stroke: var(--pico-color);
 }
-.treemap-tier-0 { fill: #fbe4e1; }
-.treemap-tier-1 { fill: #f3b8b0; }
-.treemap-tier-2 { fill: #e88b7d; }
-.treemap-tier-3 { fill: #d85d49; }
-.treemap-tier-4 { fill: #b93b28; }
-.treemap-tier-5 { fill: #8f2416; }
 .treemap-label-name {
   font-size: 13px;
   font-weight: 700;
   fill: #241512;
   pointer-events: none;
 }
-.treemap-label-sub {
-  font-size: 11px;
-  fill: #241512;
-  opacity: 0.8;
-  pointer-events: none;
-}
-/* Tiers 3-5's fill is dark enough that dark text loses contrast — the
- * box's own group (app/templates/reports/_treemap.html wraps each
- * box's rect+text in one <g>) carries this class so the descendant
- * selector reaches both labels; a plain per-tier selector on the text
- * itself can't work since the text is a sibling of the rect, not its
- * descendant. */
+/* A box's own fill is set inline per-box (a continuous gradient has no
+ * fixed set of classes to hang light/dark text off), so light text is
+ * a class too, decided server-side from the same interpolated color's
+ * perceived luminance — see _treemap_color. */
 .treemap-text-light .treemap-label-name {
   fill: #fdf1ef;
-}
-.treemap-text-light .treemap-label-sub {
-  fill: #fdf1ef;
-  opacity: 0.85;
 }
 .treemap-box-link svg {
   color: #241512;
@@ -1656,20 +1642,16 @@ fieldset legend {
 }
 .treemap-legend {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 0.35rem 0.6rem;
+  gap: 0.5rem;
   font-size: 0.78rem;
   color: var(--pico-muted-color);
   margin-top: 0.5rem;
 }
-.treemap-legend-swatch {
-  display: inline-block;
-  width: 0.8rem;
-  height: 0.8rem;
-  border-radius: 2px;
-  vertical-align: middle;
-  margin-right: 0.2rem;
+.treemap-legend-bar {
+  width: 10rem;
+  height: 0.7rem;
+  border-radius: var(--pico-border-radius);
 }
 
 /* Month drill-down: spending pie chart, plain inline SVG (see
