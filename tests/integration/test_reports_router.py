@@ -1277,3 +1277,41 @@ def test_reports_overview_treemap_box_size_reflects_transaction_count(client):
     rects = _squarify(sizes, 0, 0, 100, 50)
     assert len(rects) == 2
     assert sum(w * h for _, _, w, h in rects) == 100 * 50
+
+
+def test_reports_overview_treemap_shows_icon_when_full_name_does_not_fit():
+    from app.routers.reports import _category_treemap
+    from app.services.aggregation import CategoryTotal
+
+    # "Big" leaves both "Medium" and "Entertainment" too narrow for
+    # their own full names — "Entertainment" has an icon and should
+    # fall back to showing just that; "Medium" has none and should show
+    # nothing but the bare colored box.
+    categories = [
+        CategoryTotal(
+            name="Big", total=900, count=940, yoy_delta=None, subcategories=[]
+        ),
+        CategoryTotal(
+            name="Medium", total=50, count=40, yoy_delta=None, subcategories=[]
+        ),
+        CategoryTotal(
+            name="Entertainment", total=50, count=20, yoy_delta=None, subcategories=[]
+        ),
+    ]
+    expense_config = {"Entertainment": {"icon": "popcorn"}}
+
+    treemap = _category_treemap(categories, expense_config, "", 1000)
+    boxes = {b["name"]: b for b in treemap["boxes"]}
+
+    assert boxes["Big"]["show_name"] is True
+
+    assert boxes["Medium"]["show_name"] is False
+    assert boxes["Medium"]["show_icon_only"] is False
+
+    assert boxes["Entertainment"]["show_name"] is False
+    assert boxes["Entertainment"]["show_icon_only"] is True
+    # The icon must actually be centered inside the box, not clipped
+    # past an edge.
+    box = boxes["Entertainment"]
+    assert box["x"] <= box["icon_only_x"] <= box["x"] + box["w"]
+    assert box["y"] <= box["icon_only_y"] <= box["y"] + box["h"]

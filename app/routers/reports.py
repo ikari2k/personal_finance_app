@@ -1562,6 +1562,21 @@ def _squarify(
 _TREEMAP_WIDTH = 960
 _TREEMAP_HEIGHT = 440
 
+# Rough average glyph width (viewBox px, at the label's own 13px bold
+# font) used to estimate whether a box is wide enough for its full
+# category name — there's no real text-measurement available
+# server-side without a font-metrics library, and this is close enough
+# to decide "fits" vs. "doesn't" for the box-label/icon-only/blank
+# three-way fallback below.
+_TREEMAP_CHAR_WIDTH = 7.6
+_TREEMAP_LABEL_PAD = 8
+_TREEMAP_LABEL_MIN_HEIGHT = 22
+_TREEMAP_ICON_SIZE = 15
+_TREEMAP_ICON_GAP = 4
+# A box too small even for the name can often still fit just the
+# category's icon, centered, rather than showing nothing at all.
+_TREEMAP_ICON_ONLY_MIN = 20
+
 # A continuous 3-stop gradient (dark green -> amber -> dark red) for
 # a box's color, rather than a small set of discrete bands — far more
 # visually differentiated across a realistic spread of category shares
@@ -1648,10 +1663,27 @@ def _category_treemap(
     for category, (x, y, w, h) in zip(active, rects, strict=True):
         pct = float(category.total / grand_total * 100) if grand_total else 0.0
         color, light_text = _treemap_color(pct)
+        icon = expense_config.get(category.name, {}).get("icon", "")
+        icon_scale = _TREEMAP_ICON_SIZE / 24
+
+        required_width = (
+            2 * _TREEMAP_LABEL_PAD
+            + (_TREEMAP_ICON_SIZE + _TREEMAP_ICON_GAP if icon else 0)
+            + len(category.name) * _TREEMAP_CHAR_WIDTH
+        )
+        show_name = w >= required_width and h >= _TREEMAP_LABEL_MIN_HEIGHT
+        # A box too narrow/short for its full name often still has room
+        # for just the icon, centered — better than showing nothing.
+        show_icon_only = (
+            not show_name
+            and bool(icon)
+            and w >= _TREEMAP_ICON_ONLY_MIN
+            and h >= _TREEMAP_ICON_ONLY_MIN
+        )
         boxes.append(
             {
                 "name": category.name,
-                "icon": expense_config.get(category.name, {}).get("icon", ""),
+                "icon": icon,
                 "total": category.total,
                 "count": category.count,
                 "pct": pct,
@@ -1661,10 +1693,18 @@ def _category_treemap(
                 "h": h,
                 "color": color,
                 "light_text": light_text,
-                # Just the category name renders on the box now (its
-                # %/count only show in the hover tooltip), so this only
-                # needs to fit one line, not two.
-                "show_label": w >= 50 and h >= 22,
+                "show_name": show_name,
+                "show_icon_only": show_icon_only,
+                "icon_scale": icon_scale,
+                "icon_x": x + _TREEMAP_LABEL_PAD,
+                "icon_y": y + _TREEMAP_LABEL_PAD,
+                "icon_only_x": x + w / 2 - _TREEMAP_ICON_SIZE / 2,
+                "icon_only_y": y + h / 2 - _TREEMAP_ICON_SIZE / 2,
+                "name_x": (
+                    x
+                    + _TREEMAP_LABEL_PAD
+                    + (_TREEMAP_ICON_SIZE + _TREEMAP_ICON_GAP if icon else 0)
+                ),
                 "link": breadcrumbs.transactions_link(
                     category=category.name,
                     txn_type=TransactionType.EXPENSE.value,

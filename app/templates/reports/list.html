@@ -75,13 +75,17 @@
             <g class="{{ 'treemap-text-light' if box.light_text }}">
               <rect x="{{ box.x }}" y="{{ box.y }}" width="{{ box.w }}" height="{{ box.h }}"
                     class="treemap-box" style="fill: {{ box.color }};"/>
-              {% if box.show_label %}
+              {% if box.show_name %}
                 {% if box.icon %}
-                  <g transform="translate({{ box.x + 8 }}, {{ box.y + 8 }}) scale(0.62)">
+                  <g transform="translate({{ box.icon_x }}, {{ box.icon_y }}) scale({{ box.icon_scale }})">
                     {{ category_icon(box.icon) }}
                   </g>
                 {% endif %}
-                <text x="{{ box.x + (26 if box.icon else 8) }}" y="{{ box.y + 20 }}" class="treemap-label-name">{{ box.name }}</text>
+                <text x="{{ box.name_x }}" y="{{ box.y + 20 }}" class="treemap-label-name">{{ box.name }}</text>
+              {% elif box.show_icon_only %}
+                <g transform="translate({{ box.icon_only_x }}, {{ box.icon_only_y }}) scale({{ box.icon_scale }})">
+                  {{ category_icon(box.icon) }}
+                </g>
               {% endif %}
             </g>
           </a>
