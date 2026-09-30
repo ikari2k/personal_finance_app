@@ -563,6 +563,7 @@ def _svg_category_chart(
     budget: Decimal | None,
     txn_type: TransactionType | None = None,
     category: str = "",
+    subcategory: str = "",
     account_id: str = "",
     per_month_width: int = PER_MONTH_W,
     height: int = 380,
@@ -643,6 +644,7 @@ def _svg_category_chart(
                         date_from=month_date_from,
                         date_to=month_date_to,
                         category=category,
+                        subcategory=subcategory,
                         txn_type=txn_type.value,
                         account_id=account_id,
                     )
@@ -692,6 +694,8 @@ def _weekly_points_for_month(
     txn_type: TransactionType,
     year: int,
     month: int,
+    *,
+    subcategory: str | None = None,
 ) -> tuple[list[CategoryMonthPoint], list[tuple[str, str]]]:
     """Return ``(points, date_ranges)`` — one entry per 7-day chunk of one month.
 
@@ -703,6 +707,9 @@ def _weekly_points_for_month(
     transactions outside the month actually being viewed. ``date_ranges``
     is each chunk's own ``(first day, last day)`` as ISO strings, parallel
     to ``points``, for the chart's own per-bar click-through links.
+    ``subcategory``, when given, further narrows to just that subcategory
+    — the subcategory-detail page's own month-scoped chart reuses this
+    same weekly-bucketing.
     """
     last_day = monthrange(year, month)[1]
     chunks = []
@@ -720,6 +727,7 @@ def _weekly_points_for_month(
             for t in transactions
             if t.type is txn_type
             and t.category == category
+            and (subcategory is None or t.subcategory == subcategory)
             and t.date.year == year
             and t.date.month == month
             and start_day <= t.date.day <= end_day
@@ -749,6 +757,7 @@ def _svg_category_week_chart(
     *,
     txn_type: TransactionType,
     category: str,
+    subcategory: str = "",
     account_id: str = "",
     width: int = 640,
     height: int = 260,
@@ -805,6 +814,7 @@ def _svg_category_week_chart(
                     date_from=date_from,
                     date_to=date_to,
                     category=category,
+                    subcategory=subcategory,
                     txn_type=txn_type.value,
                     account_id=account_id,
                 ),
@@ -2080,6 +2090,74 @@ def category_detail_month(
     )
 
 
+@router.get("/subcategory", response_class=HTMLResponse)
+def subcategory_detail(
+    request: Request,
+    txn_type: TransactionType,
+    category: str,
+    subcategory: str,
+    account_id: str = "",
+) -> HTMLResponse:
+    """Render one subcategory's full, all-time trend and year rollup.
+
+    A drill-down one level deeper than ``category_detail`` — reached
+    from the category page's own "By subcategory" section (clicking a
+    subcategory name there, at whichever of This month/This year/All
+    time it's currently showing, lands on this same page scoped to that
+    period). Shares its entire implementation with ``category_detail``
+    via ``_category_detail_response``'s ``subcategory`` keyword — a
+    subcategory is a category with one more equality filter applied
+    everywhere, not a second parallel set of aggregation/chart code —
+    except a subcategory has no further subdivision of its own, so the
+    by-subcategory shares/stacked-chart sections are skipped and a
+    dedicated ``reports/subcategory.html`` template (no such sections)
+    renders instead of ``reports/category.html``.
+    """
+    return _category_detail_response(
+        request, txn_type, category, account_id, None, None, [], subcategory=subcategory
+    )
+
+
+@router.get("/subcategory/{year:int}", response_class=HTMLResponse)
+def subcategory_detail_year(
+    request: Request,
+    year: int,
+    txn_type: TransactionType,
+    category: str,
+    subcategory: str,
+    account_id: str = "",
+) -> HTMLResponse:
+    """Render one subcategory's stats scoped to a year — see ``subcategory_detail``."""
+    return _category_detail_response(
+        request, txn_type, category, account_id, year, None, [], subcategory=subcategory
+    )
+
+
+@router.get("/subcategory/{year:int}/{month:int}", response_class=HTMLResponse)
+def subcategory_detail_month(
+    request: Request,
+    year: int,
+    month: int,
+    txn_type: TransactionType,
+    category: str,
+    subcategory: str,
+    account_id: str = "",
+) -> HTMLResponse:
+    """Render one subcategory's stats scoped to a month — see ``subcategory_detail``."""
+    if not 1 <= month <= 12:
+        raise HTTPException(status_code=404, detail="Invalid month")
+    return _category_detail_response(
+        request,
+        txn_type,
+        category,
+        account_id,
+        year,
+        month,
+        [],
+        subcategory=subcategory,
+    )
+
+
 def _category_detail_response(
     request: Request,
     txn_type: TransactionType,
@@ -2088,6 +2166,8 @@ def _category_detail_response(
     year: int | None,
     month: int | None,
     subcategories: list[str],
+    *,
+    subcategory: str | None = None,
 ) -> HTMLResponse:
     """Shared implementation behind ``category_detail``/``_year``/``_month``.
 
@@ -2104,38 +2184,79 @@ def _category_detail_response(
     entirely-invalid selection (a stale link after a category's
     subcategories changed, say) falls back to showing every subcategory
     rather than a confusing empty chart.
+
+    ``subcategory`` (keyword-only, distinct from the ``subcategories``
+    list above) is set only by ``_subcategory_detail_response`` — it
+    narrows every stat/chart down one further level, to one specific
+    subcategory within ``category``, and switches the rendered template
+    to ``reports/subcategory.html``. A subcategory has no further
+    subdivision of its own, so the by-subcategory shares/stacked-chart
+    sections (only meaningful for a whole category) are skipped
+    entirely in that mode rather than rendered empty.
     """
     if txn_type is TransactionType.TRANSFER:
         return HTMLResponse("Invalid transaction type", status_code=404)
 
+    template_name = (
+        "reports/subcategory.html"
+        if subcategory is not None
+        else "reports/category.html"
+    )
+
     accounts = read_accounts()
     transactions = _filter_by_account(read_ledger(), account_id)
     categories = read_categories()
-    config = _category_config(categories, txn_type).get(
-        category, {"icon": "", "budget": None}
+    category_config = _category_config(categories, txn_type).get(
+        category, {"icon": "", "budget": None, "subcategories": {}}
+    )
+    config = (
+        category_config.get("subcategories", {}).get(
+            subcategory, {"icon": "", "budget": None}
+        )
+        if subcategory is not None
+        else category_config
     )
 
-    monthly = category_monthly_series(transactions, category, txn_type)
-    all_time_link = (
-        f"/reports/category?txn_type={txn_type.value}&category={quote(category)}"
-        + (f"&account_id={quote(account_id)}" if account_id else "")
+    monthly = category_monthly_series(
+        transactions, category, txn_type, subcategory=subcategory
+    )
+    scope_qs = f"txn_type={txn_type.value}&category={quote(category)}"
+    if subcategory is not None:
+        scope_qs += f"&subcategory={quote(subcategory)}"
+    scope_path = (
+        "/reports/subcategory" if subcategory is not None else "/reports/category"
+    )
+    all_time_link = f"{scope_path}?{scope_qs}" + (
+        f"&account_id={quote(account_id)}" if account_id else ""
     )
     context = {
         "category": category,
+        "subcategory": subcategory,
         "txn_type": txn_type,
         "config": config,
         "accounts": accounts,
         "account_id": account_id,
         "has_data": bool(monthly),
-        "breadcrumbs": breadcrumbs.for_category(
-            category, account_id, txn_type=txn_type.value, year=year, month=month
+        "breadcrumbs": (
+            breadcrumbs.for_subcategory(
+                category,
+                subcategory,
+                account_id,
+                txn_type=txn_type.value,
+                year=year,
+                month=month,
+            )
+            if subcategory is not None
+            else breadcrumbs.for_category(
+                category, account_id, txn_type=txn_type.value, year=year, month=month
+            )
         ),
         "scope_year": year,
         "scope_month": month,
         "all_time_link": all_time_link,
     }
     if not monthly:
-        return templates.TemplateResponse(request, "reports/category.html", context)
+        return templates.TemplateResponse(request, template_name, context)
 
     today = date.today()
     if year is not None and month is not None:
@@ -2239,8 +2360,17 @@ def _category_detail_response(
             "total_count": len(dots),
         }
 
-    sub_months, sub_series = category_subcategory_monthly_series(
-        transactions, category, txn_type, today=today
+    # A subcategory has no further subdivision of its own, so there's no
+    # by-subcategory breakdown to compute once ``subcategory`` is set —
+    # every downstream user of ``sub_months``/``sub_series`` degrades
+    # gracefully on an empty pair (the stacked chart below simply never
+    # gets built, and the subcategory template doesn't reference it).
+    sub_months, sub_series = (
+        ([], [])
+        if subcategory is not None
+        else category_subcategory_monthly_series(
+            transactions, category, txn_type, today=today
+        )
     )
 
     # Trim the trend chart (and, when there's one, the by-subcategory
@@ -2365,6 +2495,7 @@ def _category_detail_response(
             for t in transactions
             if t.type is txn_type
             and t.category == category
+            and (subcategory is None or t.subcategory == subcategory)
             and t.date.year == year
             and t.date.month == month
         ]
@@ -2395,34 +2526,38 @@ def _category_detail_response(
         }
 
         week_points, week_ranges = _weekly_points_for_month(
-            transactions, category, txn_type, year, month
+            transactions, category, txn_type, year, month, subcategory=subcategory
         )
         week_chart = _svg_category_week_chart(
             week_points,
             week_ranges,
             txn_type=txn_type,
             category=category,
+            subcategory=subcategory or "",
             account_id=account_id,
         )
 
-        month_shares = category_subcategory_shares(
-            transactions, category, txn_type, year=year, month=month
-        )
+        # A subcategory has no further subdivision, so there's no shares
+        # breakdown or stacked chart to build once ``subcategory`` is set.
+        if subcategory is None:
+            month_shares = category_subcategory_shares(
+                transactions, category, txn_type, year=year, month=month
+            )
 
-        week_sub_points, week_sub_series, week_sub_ranges = (
-            _weekly_subcategory_points_for_month(
-                transactions, category, txn_type, year, month
+            week_sub_points, week_sub_series, week_sub_ranges = (
+                _weekly_subcategory_points_for_month(
+                    transactions, category, txn_type, year, month
+                )
             )
-        )
-        if week_sub_series:
-            week_subcategory_chart = _svg_subcategory_week_stack_chart(
-                week_sub_points,
-                week_sub_series,
-                week_sub_ranges,
-                txn_type=txn_type,
-                category=category,
-                account_id=account_id,
-            )
+            if week_sub_series:
+                week_subcategory_chart = _svg_subcategory_week_stack_chart(
+                    week_sub_points,
+                    week_sub_series,
+                    week_sub_ranges,
+                    txn_type=txn_type,
+                    category=category,
+                    account_id=account_id,
+                )
 
     # A subcategory with zero activity in the shown (possibly trimmed)
     # window shouldn't get a legend checkbox for a series that's always
@@ -2469,6 +2604,7 @@ def _category_detail_response(
                     budget=config["budget"],
                     txn_type=txn_type,
                     category=category,
+                    subcategory=subcategory or "",
                     account_id=account_id,
                 )
             ),
@@ -2508,12 +2644,20 @@ def _category_detail_response(
             "current_month_point": current_month_point,
             "current_month_ring": current_month_ring,
             "highest_month": highest_month,
-            "years": category_yearly_series(transactions, category, txn_type),
-            "all_time_shares": category_subcategory_shares(
-                transactions, category, txn_type
+            "years": category_yearly_series(
+                transactions, category, txn_type, subcategory=subcategory
             ),
-            "this_year_shares": category_subcategory_shares(
-                transactions, category, txn_type, year=today.year
+            "all_time_shares": (
+                category_subcategory_shares(transactions, category, txn_type)
+                if subcategory is None
+                else None
+            ),
+            "this_year_shares": (
+                category_subcategory_shares(
+                    transactions, category, txn_type, year=today.year
+                )
+                if subcategory is None
+                else None
             ),
             "avg_transaction_size": (
                 all_time_total / all_time_count if all_time_count else None
@@ -2531,4 +2675,4 @@ def _category_detail_response(
             "year_stats": year_stats,
         }
     )
-    return templates.TemplateResponse(request, "reports/category.html", context)
+    return templates.TemplateResponse(request, template_name, context)

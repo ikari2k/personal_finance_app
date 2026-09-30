@@ -702,6 +702,7 @@ def category_monthly_series(
     category: str,
     txn_type: TransactionType,
     *,
+    subcategory: str | None = None,
     today: date_ | None = None,
 ) -> list[CategoryMonthPoint]:
     """Return one point per month for ``category``, oldest first, zero-filled.
@@ -714,7 +715,12 @@ def category_monthly_series(
     whole-ledger view: a single category can easily go quiet for months
     at a time, and a chart that silently skipped those months would
     misleadingly compress the timeline. Raises on ``TRANSFER``, same as
-    ``category_breakdown``.
+    ``category_breakdown``. ``subcategory``, when given, further narrows
+    to just that subcategory — the subcategory-detail page's own trend
+    chart (``/reports/subcategory``) reuses this same month-range/zero-
+    fill machinery rather than a second implementation, still keyed off
+    the *whole ledger's* month range (not just this subcategory's own
+    active window) so it lines up with the category page's own chart.
     """
     if txn_type is TransactionType.TRANSFER:
         raise ValueError("transfers have no category breakdown")
@@ -730,6 +736,8 @@ def category_monthly_series(
     counts: dict[str, int] = defaultdict(int)
     for transaction in transactions:
         if transaction.type is not txn_type or transaction.category != category:
+            continue
+        if subcategory is not None and transaction.subcategory != subcategory:
             continue
         key = f"{transaction.date.year:04d}-{transaction.date.month:02d}"
         totals[key] += abs(transaction.amount)
@@ -865,7 +873,11 @@ class CategoryYearTotal:
 
 
 def category_yearly_series(
-    transactions: Iterable[Transaction], category: str, txn_type: TransactionType
+    transactions: Iterable[Transaction],
+    category: str,
+    txn_type: TransactionType,
+    *,
+    subcategory: str | None = None,
 ) -> list[CategoryYearTotal]:
     """Return one ``CategoryYearTotal`` per year with activity, newest first.
 
@@ -873,7 +885,9 @@ def category_yearly_series(
     plain total-vs-immediately-prior-year convention (not adjusted for a
     currently in-progress year; the caller decides how to present that,
     same simplification ``yearly_totals_with_yoy`` already accepts).
-    Raises on ``TRANSFER``, same as ``category_breakdown``.
+    Raises on ``TRANSFER``, same as ``category_breakdown``. ``subcategory``,
+    when given, further narrows to just that subcategory — see
+    ``category_monthly_series``'s own ``subcategory`` param.
     """
     if txn_type is TransactionType.TRANSFER:
         raise ValueError("transfers have no category breakdown")
@@ -882,6 +896,8 @@ def category_yearly_series(
     counts: dict[int, int] = defaultdict(int)
     for transaction in transactions:
         if transaction.type is not txn_type or transaction.category != category:
+            continue
+        if subcategory is not None and transaction.subcategory != subcategory:
             continue
         totals[transaction.date.year] += abs(transaction.amount)
         counts[transaction.date.year] += 1

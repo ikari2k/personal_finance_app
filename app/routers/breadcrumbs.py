@@ -131,6 +131,45 @@ def for_category(
     return crumbs
 
 
+def for_subcategory(
+    category: str,
+    subcategory: str,
+    account_id: str = "",
+    txn_type: str = "",
+    year: int | None = None,
+    month: int | None = None,
+) -> list[Crumb]:
+    """Breadcrumb trail for ``/reports/subcategory``[``/{year}``[``/{month}``]].
+
+    Same "trail is itself the way back up a level" shape as
+    ``for_category``, with one more rung: the category's own crumb
+    always links back to its all-time ``/reports/category`` page (the
+    subcategory page has no scope-less view of "the category itself"),
+    then the subcategory, then year/month same as ``for_category``.
+    """
+    category_qs = f"txn_type={txn_type}&category={quote(category)}"
+    if account_id:
+        category_qs += f"&account_id={quote(account_id)}"
+    crumbs = [
+        Crumb("Reports", _report_link("/reports", account_id)),
+        Crumb("Categories", _categories_link(txn_type, account_id)),
+        Crumb(category, f"/reports/category?{category_qs}"),
+    ]
+    subcategory_qs = category_qs + f"&subcategory={quote(subcategory)}"
+    if year is None:
+        crumbs.append(Crumb(subcategory, None))
+        return crumbs
+
+    crumbs.append(Crumb(subcategory, f"/reports/subcategory?{subcategory_qs}"))
+    if month is None:
+        crumbs.append(Crumb(str(year), None))
+        return crumbs
+
+    crumbs.append(Crumb(str(year), f"/reports/subcategory/{year}?{subcategory_qs}"))
+    crumbs.append(Crumb(calendar.month_name[month], None))
+    return crumbs
+
+
 def for_categories_index(account_id: str = "") -> list[Crumb]:
     """Breadcrumb trail for ``/reports/categories``."""
     return [

@@ -2,19 +2,18 @@
 {% from "_category_icons.html" import category_icon %}
 {% from "reports/_account_filter.html" import account_filter %}
 {% from "_breadcrumb.html" import breadcrumb %}
-{% block title %}{{ category }} — Reports — Finance Tracker{% endblock %}
+{% block title %}{{ subcategory }} — {{ category }} — Reports — Finance Tracker{% endblock %}
 {% block content %}
-  {% set txn_link = "/transactions?txn_type=" + txn_type.value + "&category=" + (category | urlencode) + ("&account_id=" + account_id if account_id else "") %}
   {#
-    The top/bottom "All {{ category }} transactions" buttons scope to
-    whatever period this page itself is scoped to — unscoped (all-time)
-    on /reports/category, that year on /reports/category/{year}, that
-    month on /reports/category/{year}/{month} — rather than always
-    linking to the category's entire history regardless of which page
-    you're actually looking at. Subcategory row links elsewhere on this
-    page already append their own date_from/date_to per section, so
-    only these two buttons need a shared "current period" link.
+    A subcategory is a category with one more equality filter applied
+    everywhere — this template mirrors reports/category.html's own
+    structure/markup almost verbatim, just without the by-subcategory
+    shares/stacked-chart sections (a subcategory has no further
+    subdivision of its own to break down). See
+    app.routers.reports._category_detail_response's ``subcategory``
+    keyword for the shared implementation behind both pages.
   #}
+  {% set txn_link = "/transactions?txn_type=" + txn_type.value + "&category=" + (category | urlencode) + "&subcategory=" + (subcategory | urlencode) + ("&account_id=" + account_id if account_id else "") %}
   {% if has_data and scope_month %}
     {% set period_txn_link = txn_link + "&date_from=" + month_date_bounds[0] + "&date_to=" + month_date_bounds[1] %}
     {% set period_label = " in " + current_month_label %}
@@ -39,8 +38,9 @@
   {% endif %}
 
   {% if not has_data %}
-    <h1>{{ category }}</h1>
-    <p>No transactions in this category yet.</p>
+    <h1>{{ subcategory }}</h1>
+    <p class="muted">{{ category }}</p>
+    <p>No transactions in this subcategory yet.</p>
   {% else %}
     <div class="cat-detail-hero">
       {% if config.icon %}
@@ -49,9 +49,10 @@
         </span>
       {% endif %}
       <div class="cat-detail-titles">
-        <h1>{{ category }}</h1>
+        <h1>{{ subcategory }}</h1>
         <div class="cat-detail-badges">
           <span class="type-pill type-pill-{{ txn_type.value }}">{{ txn_type.value }}</span>
+          <span class="muted">{{ category }}</span>
           {% if config.budget %}
             <span class="budget-pill">{{ "%.2f"|format(config.budget) }}/mo</span>
           {% endif %}
@@ -59,7 +60,7 @@
       </div>
       <div class="cat-detail-actions">
         {{ account_filter(accounts, account_id) }}
-        <a class="cat-cta-link" href="{{ period_txn_link }}">All {{ category }} transactions{{ period_label }} &rsaquo;</a>
+        <a class="cat-cta-link" href="{{ period_txn_link }}">All {{ subcategory }} transactions{{ period_label }} &rsaquo;</a>
       </div>
     </div>
 
@@ -118,7 +119,7 @@
             <div class="cat-stat-sub">Jan &rarr; Dec {{ scope_year }}, left to right.</div>
           {% else %}
             <div class="cat-stat-number">—</div>
-            <div class="cat-stat-sub">No budget set for this category</div>
+            <div class="cat-stat-sub">No budget set for this subcategory</div>
           {% endif %}
         </div>
       </div>
@@ -157,7 +158,7 @@
                   <circle cx="10" cy="10" r="7" class="ring-fill"
                           stroke-dasharray="{{ current_month_ring.dash }} {{ current_month_ring.gap }}"
                           transform="rotate(-90 10 10)">
-                    <title>{{ category }}, {{ current_month_label }}: {{ current_month_ring.pct_label }} of budget</title>
+                    <title>{{ subcategory }}, {{ current_month_label }}: {{ current_month_ring.pct_label }} of budget</title>
                   </circle>
                 </svg>
               </span>
@@ -168,7 +169,7 @@
             </div>
           {% else %}
             <div class="cat-stat-number">{{ "%.2f"|format(current_month_point.total) if current_month_point else "0.00" }}</div>
-            <div class="cat-stat-sub">No budget set for this category</div>
+            <div class="cat-stat-sub">No budget set for this subcategory</div>
           {% endif %}
         </div>
 
@@ -211,7 +212,7 @@
             </div>
           {% else %}
             <div class="cat-stat-number">—</div>
-            <div class="cat-stat-sub">No budget set for this category</div>
+            <div class="cat-stat-sub">No budget set for this subcategory</div>
           {% endif %}
         </div>
       </div>
@@ -249,7 +250,7 @@
                   <circle cx="10" cy="10" r="7" class="ring-fill"
                           stroke-dasharray="{{ month_stats.budget_ring.dash }} {{ month_stats.budget_ring.gap }}"
                           transform="rotate(-90 10 10)">
-                    <title>{{ category }}, {{ current_month_label }}: {{ month_stats.budget_ring.pct_label }} of budget</title>
+                    <title>{{ subcategory }}, {{ current_month_label }}: {{ month_stats.budget_ring.pct_label }} of budget</title>
                   </circle>
                 </svg>
               </span>
@@ -260,7 +261,7 @@
             </div>
           {% else %}
             <div class="cat-stat-number">—</div>
-            <div class="cat-stat-sub">No budget set for this category</div>
+            <div class="cat-stat-sub">No budget set for this subcategory</div>
           {% endif %}
         </div>
       </div>
@@ -268,23 +269,21 @@
       {% if month_stats.top_transactions %}
         <article style="margin-top: 0.75rem;">
           <h2 style="margin-bottom: 0.15rem;">Top {{ month_stats.top_transactions|length }} transaction{{ "s" if month_stats.top_transactions|length != 1 else "" }}</h2>
-          <p class="muted" style="margin-top: 0;">{{ category }}'s largest transactions in {{ current_month_label }}.</p>
+          <p class="muted" style="margin-top: 0;">{{ subcategory }}'s largest transactions in {{ current_month_label }}.</p>
           <div class="table-scroll">
             <table class="dash-txn-table">
               <colgroup>
                 <col style="width: 14ch">
                 <col>
-                <col style="width: 16ch">
                 <col style="width: calc(10ch + 1rem)">
               </colgroup>
-              <thead><tr><th>Date</th><th>Description</th><th>Subcategory</th><th style="text-align:right">Amount</th></tr></thead>
+              <thead><tr><th>Date</th><th>Description</th><th style="text-align:right">Amount</th></tr></thead>
               <tbody>
                 {% for row in month_stats.top_transactions %}
                   {% set t = row.txn %}
                   <tr>
                     <td>{{ t.date.strftime("%b %-d, %Y") }}</td>
                     <td class="dash-txn-desc"{% if t.notes %} title="Original description: {{ t.description }}"{% endif %}>{{ t.notes or t.description or row.account_name }}</td>
-                    <td class="muted">{{ t.subcategory or "—" }}</td>
                     <td class="dash-txn-amount {{ 'amount-negative' if t.amount < 0 else 'amount-positive' }}">{{ "%.2f"|format(t.amount) }}</td>
                   </tr>
                 {% endfor %}
@@ -296,11 +295,11 @@
     {% endif %}
 
     <article style="margin-top: 1.5rem;">
-      <h2 style="margin-bottom: 0.15rem;">{{ category }} over time</h2>
+      <h2 style="margin-bottom: 0.15rem;">{{ subcategory }} over time</h2>
       {% if chart_is_weekly %}
         <p class="muted" style="margin-top: 0;">Weekly {{ txn_type.value }} in {{ current_month_label }}.</p>
         <p class="chart-legend">
-          <span class="chart-legend-swatch bar-{{ txn_type.value }}"></span> {{ category }}
+          <span class="chart-legend-swatch bar-{{ txn_type.value }}"></span> {{ subcategory }}
         </p>
         {% include "reports/_category_week_chart.html" %}
       {% else %}
@@ -309,7 +308,7 @@
           {% if chart.needs_scroll %}Scroll to see earlier months.{% endif %}
         </p>
         <p class="chart-legend">
-          <span class="chart-legend-swatch bar-{{ txn_type.value }}"></span> {{ category }}
+          <span class="chart-legend-swatch bar-{{ txn_type.value }}"></span> {{ subcategory }}
           {% if config.budget %}
             <span class="chart-legend-line"></span> Budget ({{ "%.2f"|format(config.budget) }}/mo)
           {% endif %}
@@ -349,23 +348,7 @@
       {% endif %}
     </article>
 
-    {% if subcategory_chart %}
-      <article style="margin-top: 1.5rem;">
-        <h2 style="margin-bottom: 0.15rem;">{{ category }} by subcategory</h2>
-        {% if subcategory_chart_is_weekly %}
-          <p class="muted" style="margin-top: 0;">Weekly {{ txn_type.value }} in {{ current_month_label }}, split by subcategory.</p>
-          {% include "reports/_category_subcategory_week_chart.html" %}
-        {% else %}
-          <p class="muted" style="margin-top: 0;">
-            Same monthly {{ txn_type.value }}, split by subcategory.
-            {% if chart.needs_scroll %}Scroll to see earlier months.{% endif %}
-          </p>
-          {% include "reports/_category_subcategory_chart.html" %}
-        {% endif %}
-      </article>
-    {% endif %}
-
-    <div class="report-columns" style="margin-top: 1.5rem;">
+    <div style="margin-top: 1.5rem;">
       <div>
         <h2>By year</h2>
         <div class="table-scroll">
@@ -375,7 +358,7 @@
               {% for y in years %}
                 <tr>
                   <td>
-                    <a class="table-link" href="/reports/category/{{ y.year }}?txn_type={{ txn_type.value }}&category={{ category | urlencode }}{{ '&account_id=' + account_id if account_id }}">{{ y.year }}</a>
+                    <a class="table-link" href="/reports/subcategory/{{ y.year }}?txn_type={{ txn_type.value }}&category={{ category | urlencode }}&subcategory={{ subcategory | urlencode }}{{ '&account_id=' + account_id if account_id }}">{{ y.year }}</a>
                     {% if y.year == this_year %}<span class="muted">(in progress)</span>{% endif %}
                   </td>
                   <td>{{ "%.2f"|format(y.total) }}</td>
@@ -409,7 +392,7 @@
                 {% for m in year_stats.month_rows %}
                   <tr>
                     <td>
-                      <a class="table-link" href="/reports/category/{{ scope_year }}/{{ m.month }}?txn_type={{ txn_type.value }}&category={{ category | urlencode }}{{ '&account_id=' + account_id if account_id }}">{{ m.label }}</a>
+                      <a class="table-link" href="/reports/subcategory/{{ scope_year }}/{{ m.month }}?txn_type={{ txn_type.value }}&category={{ category | urlencode }}&subcategory={{ subcategory | urlencode }}{{ '&account_id=' + account_id if account_id }}">{{ m.label }}</a>
                     </td>
                     <td>{{ "%.2f"|format(m.total) }}</td>
                     <td>{{ m.count }}</td>
@@ -431,116 +414,10 @@
           </div>
         {% endif %}
       </div>
-
-      <div>
-        <h2>By subcategory</h2>
-        {#
-          Three-way when month-scoped (This month/This year/All time,
-          "This month" the default), two-way otherwise (This year/All
-          time, unchanged) — one shared toggle function rather than a
-          near-duplicate onclick per button, since it's now 2-3 buttons
-          instead of always 2.
-        #}
-        <div class="cat-scope-toggle" role="group" aria-label="Time range">
-          {% if month_shares is not none %}
-            <button type="button" class="cat-scope-toggle-{{ txn_type.value }}" aria-pressed="true"
-                    onclick="catScopeToggle(this, 'cat-shares-month')">This month</button>
-          {% endif %}
-          <button type="button" class="cat-scope-toggle-{{ txn_type.value }}" aria-pressed="{{ 'false' if month_shares is not none else 'true' }}"
-                  onclick="catScopeToggle(this, 'cat-shares-year')">This year</button>
-          <button type="button" class="cat-scope-toggle-{{ txn_type.value }}" aria-pressed="false"
-                  onclick="catScopeToggle(this, 'cat-shares-all')">All time</button>
-        </div>
-        <script>
-          function catScopeToggle(btn, showId) {
-            ['cat-shares-month', 'cat-shares-year', 'cat-shares-all'].forEach(function (id) {
-              var el = document.getElementById(id);
-              if (el) el.hidden = (id !== showId);
-            });
-            btn.parentNode.querySelectorAll('button').forEach(function (b) {
-              b.setAttribute('aria-pressed', b === btn ? 'true' : 'false');
-            });
-          }
-        </script>
-
-        {% if month_shares is not none %}
-          <div id="cat-shares-month">
-            {% if month_shares %}
-              <div class="dash-cat-bars">
-                {% for s in month_shares %}
-                  {% set sub_icon = config.subcategories.get(s.name, {}).get('icon', '') %}
-                  <div class="dash-cat-bar-row">
-                    {% if sub_icon %}<span class="dash-cat-glyph">{{ category_icon(sub_icon) }}</span>{% endif %}
-                    <span class="dash-cat-bar-main">
-                      <span class="dash-cat-bar-top">
-                        <a class="table-link dash-cat-bar-name" href="/reports/subcategory/{{ scope_year }}/{{ scope_month }}?txn_type={{ txn_type.value }}&category={{ category | urlencode }}&subcategory={{ s.name | urlencode }}{{ '&account_id=' + account_id if account_id }}">{{ s.name }}</a>
-                        <span class="dash-cat-bar-amount">{{ "%.2f"|format(s.total) }} &middot; {{ "%.1f"|format(s.pct) }}% &middot; {{ s.count }} txns</span>
-                      </span>
-                      <span class="dash-cat-bar-track">
-                        <span class="dash-cat-bar-fill cat-subrow-fill-{{ txn_type.value }}" style="width: {{ s.pct }}%"></span>
-                      </span>
-                    </span>
-                  </div>
-                {% endfor %}
-              </div>
-            {% else %}
-              <p class="muted">No subcategorized activity in {{ current_month_label }}.</p>
-            {% endif %}
-          </div>
-        {% endif %}
-
-        <div id="cat-shares-year" {{ 'hidden' if month_shares is not none }}>
-          {% if this_year_shares %}
-            <div class="dash-cat-bars">
-              {% for s in this_year_shares %}
-                {% set sub_icon = config.subcategories.get(s.name, {}).get('icon', '') %}
-                <div class="dash-cat-bar-row">
-                  {% if sub_icon %}<span class="dash-cat-glyph">{{ category_icon(sub_icon) }}</span>{% endif %}
-                  <span class="dash-cat-bar-main">
-                    <span class="dash-cat-bar-top">
-                      <a class="table-link dash-cat-bar-name" href="/reports/subcategory/{{ this_year }}?txn_type={{ txn_type.value }}&category={{ category | urlencode }}&subcategory={{ s.name | urlencode }}{{ '&account_id=' + account_id if account_id }}">{{ s.name }}</a>
-                      <span class="dash-cat-bar-amount">{{ "%.2f"|format(s.total) }} &middot; {{ "%.1f"|format(s.pct) }}% &middot; {{ s.count }} txns</span>
-                    </span>
-                    <span class="dash-cat-bar-track">
-                      <span class="dash-cat-bar-fill cat-subrow-fill-{{ txn_type.value }}" style="width: {{ s.pct }}%"></span>
-                    </span>
-                  </span>
-                </div>
-              {% endfor %}
-            </div>
-          {% else %}
-            <p class="muted">No subcategorized activity this year.</p>
-          {% endif %}
-        </div>
-
-        <div id="cat-shares-all" hidden>
-          {% if all_time_shares %}
-            <div class="dash-cat-bars">
-              {% for s in all_time_shares %}
-                {% set sub_icon = config.subcategories.get(s.name, {}).get('icon', '') %}
-                <div class="dash-cat-bar-row">
-                  {% if sub_icon %}<span class="dash-cat-glyph">{{ category_icon(sub_icon) }}</span>{% endif %}
-                  <span class="dash-cat-bar-main">
-                    <span class="dash-cat-bar-top">
-                      <a class="table-link dash-cat-bar-name" href="/reports/subcategory?txn_type={{ txn_type.value }}&category={{ category | urlencode }}&subcategory={{ s.name | urlencode }}{{ '&account_id=' + account_id if account_id }}">{{ s.name }}</a>
-                      <span class="dash-cat-bar-amount">{{ "%.2f"|format(s.total) }} &middot; {{ "%.1f"|format(s.pct) }}% &middot; {{ s.count }} txns</span>
-                    </span>
-                    <span class="dash-cat-bar-track">
-                      <span class="dash-cat-bar-fill cat-subrow-fill-{{ txn_type.value }}" style="width: {{ s.pct }}%"></span>
-                    </span>
-                  </span>
-                </div>
-              {% endfor %}
-            </div>
-          {% else %}
-            <p class="muted">No subcategorized activity.</p>
-          {% endif %}
-        </div>
-      </div>
     </div>
 
     <div class="cat-detail-footer">
-      <a class="cat-cta-link" href="{{ period_txn_link }}">View all {{ category }} transactions{{ period_label }} &rsaquo;</a>
+      <a class="cat-cta-link" href="{{ period_txn_link }}">View all {{ subcategory }} transactions{{ period_label }} &rsaquo;</a>
     </div>
   {% endif %}
 {% endblock %}

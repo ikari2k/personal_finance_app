@@ -937,3 +937,171 @@ def test_category_detail_subcategory_only_link_targets_single_subcategory(client
         or "&subcategories=Farmers+Market" in response.text
     )
     assert response.text.count("pie-legend-only") == 2
+
+
+def test_subcategory_detail_rejects_transfer_type(client):
+    response = client.get(
+        "/reports/subcategory",
+        params={
+            "txn_type": "transfer",
+            "category": "Transfer",
+            "subcategory": "Transfer",
+        },
+    )
+
+    assert response.status_code == 404
+
+
+def test_subcategory_detail_shows_no_data_message_for_unused_subcategory(client):
+    response = client.get(
+        "/reports/subcategory",
+        params={
+            "txn_type": "expense",
+            "category": "Groceries",
+            "subcategory": "Supermarket",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "No transactions in this subcategory yet" in response.text
+
+
+def test_subcategory_detail_shows_total_scoped_to_just_that_subcategory(client):
+    _create_account(client)
+    _create_transaction(
+        client,
+        date="2026-01-10",
+        type="expense",
+        category="Groceries",
+        subcategory="Supermarket",
+        amount="50",
+    )
+    _create_transaction(
+        client,
+        date="2026-01-11",
+        type="expense",
+        category="Groceries",
+        subcategory="Farmers Market",
+        amount="999",
+    )
+
+    response = client.get(
+        "/reports/subcategory",
+        params={
+            "txn_type": "expense",
+            "category": "Groceries",
+            "subcategory": "Supermarket",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "Supermarket" in response.text
+    assert "50.00" in response.text
+    assert "999.00" not in response.text
+
+
+def test_subcategory_detail_year_and_month_scoping(client):
+    _create_account(client)
+    _create_transaction(
+        client,
+        date="2026-01-10",
+        type="expense",
+        category="Groceries",
+        subcategory="Supermarket",
+        amount="50",
+    )
+    _create_transaction(
+        client,
+        date="2025-06-10",
+        type="expense",
+        category="Groceries",
+        subcategory="Supermarket",
+        amount="30",
+    )
+
+    year_response = client.get(
+        "/reports/subcategory/2026",
+        params={
+            "txn_type": "expense",
+            "category": "Groceries",
+            "subcategory": "Supermarket",
+        },
+    )
+    assert year_response.status_code == 200
+    assert "2026 total" in year_response.text
+    assert "50.00" in year_response.text
+
+    month_response = client.get(
+        "/reports/subcategory/2026/1",
+        params={
+            "txn_type": "expense",
+            "category": "Groceries",
+            "subcategory": "Supermarket",
+        },
+    )
+    assert month_response.status_code == 200
+    assert "Jan 2026 total" in month_response.text
+    assert "Top 1 transaction" in month_response.text
+
+    invalid_month_response = client.get(
+        "/reports/subcategory/2026/13",
+        params={
+            "txn_type": "expense",
+            "category": "Groceries",
+            "subcategory": "Supermarket",
+        },
+    )
+    assert invalid_month_response.status_code == 404
+
+
+def test_subcategory_detail_uses_its_own_budget_not_the_categorys(client):
+    client.post("/categories/expense", data={"name": "Groceries", "budget": "500.00"})
+    client.post(
+        "/categories/expense/Groceries/subcategories",
+        data={"name": "Supermarket", "budget": "40.00"},
+    )
+    _create_account(client)
+    today = date.today().isoformat()
+    _create_transaction(
+        client,
+        date=today,
+        type="expense",
+        category="Groceries",
+        subcategory="Supermarket",
+        amount="20",
+    )
+
+    response = client.get(
+        "/reports/subcategory",
+        params={
+            "txn_type": "expense",
+            "category": "Groceries",
+            "subcategory": "Supermarket",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "50% of budget" in response.text
+
+
+def test_category_detail_subcategory_links_point_to_subcategory_report(client):
+    _create_account(client)
+    today = date.today().isoformat()
+    _create_transaction(
+        client,
+        date=today,
+        type="expense",
+        category="Groceries",
+        subcategory="Supermarket",
+        amount="80",
+    )
+
+    response = client.get(
+        "/reports/category", params={"txn_type": "expense", "category": "Groceries"}
+    )
+
+    assert response.status_code == 200
+    assert (
+        "/reports/subcategory?txn_type=expense&category=Groceries"
+        "&subcategory=Supermarket" in response.text
+    )
