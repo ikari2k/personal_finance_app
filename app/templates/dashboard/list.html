@@ -77,6 +77,11 @@
               {{ '▲' if expense_delta_pct >= 0 else '▼' }} {{ "%.1f"|format(expense_delta_pct|abs) }}% vs last month
             </span>
           {% endif %}
+          {% if expense_forecast %}
+            <span class="dash-stat-forecast" title="{{ 'Spent so far plus the typical remainder of earlier months' if expense_forecast.method == 'history' else 'Straight-line pace (not enough history yet)' }}">
+              On pace for ~{{ "%.2f"|format(expense_forecast.projected) }}
+            </span>
+          {% endif %}
         </span>
       </div>
       <div class="dash-net-line">
@@ -171,28 +176,38 @@
         <a class="dash-widget-link" href="/categories">Categories &rsaquo;</a>
       </div>
       <p class="dash-widget-caption">Budgeted categories at {{ budget_threshold_pct }}%+ of this month's limit, worst first.</p>
-      {% if budget_rows %}
-        <div class="dash-budget-list">
-          {% for row in budget_rows %}
-            <div class="dash-budget-row">
-              <span class="utilization utilization-{{ row.ring.tier }}">
-                <svg width="30" height="30" viewBox="0 0 20 20" class="utilization-ring">
-                  <circle cx="10" cy="10" r="7" class="ring-track"/>
-                  <circle cx="10" cy="10" r="7" class="ring-fill"
-                          stroke-dasharray="{{ row.ring.dash }} {{ row.ring.gap }}"
-                          transform="rotate(-90 10 10)">
-                    <title>{{ row.name }}: {{ row.ring.pct_label }} of budget</title>
-                  </circle>
-                </svg>
-              </span>
-              <span class="dash-budget-main">
-                <span class="dash-budget-name">{{ row.name }}</span>
-                <span class="dash-budget-figures">{{ "%.2f"|format(row.amount) }} / {{ "%.2f"|format(row.budget) }}</span>
-              </span>
-              <span class="dash-budget-pct utilization-{{ row.ring.tier }}">{{ row.ring.pct_label }}</span>
-            </div>
-          {% endfor %}
+      {% macro budget_row(row) %}
+        <div class="dash-budget-row">
+          <span class="utilization utilization-{{ row.ring.tier }}">
+            <svg width="30" height="30" viewBox="0 0 20 20" class="utilization-ring">
+              <circle cx="10" cy="10" r="7" class="ring-track"/>
+              <circle cx="10" cy="10" r="7" class="ring-fill"
+                      stroke-dasharray="{{ row.ring.dash }} {{ row.ring.gap }}"
+                      transform="rotate(-90 10 10)">
+                <title>{{ row.name }}: {{ row.ring.pct_label }} of budget</title>
+              </circle>
+            </svg>
+          </span>
+          <span class="dash-budget-main">
+            <span class="dash-budget-name">{{ row.name }}</span>
+            <span class="dash-budget-figures">{{ "%.2f"|format(row.amount) }} / {{ "%.2f"|format(row.budget) }}</span>
+          </span>
+          <span class="dash-budget-pct utilization-{{ row.ring.tier }}">{{ row.ring.pct_label }}</span>
         </div>
+      {% endmacro %}
+      {% if over_budget_rows or near_budget_rows %}
+        {% if over_budget_rows %}
+          <div class="dash-budget-group-label">Over budget</div>
+          <div class="dash-budget-list">
+            {% for row in over_budget_rows %}{{ budget_row(row) }}{% endfor %}
+          </div>
+        {% endif %}
+        {% if near_budget_rows %}
+          <div class="dash-budget-group-label">Nearing limit</div>
+          <div class="dash-budget-list">
+            {% for row in near_budget_rows %}{{ budget_row(row) }}{% endfor %}
+          </div>
+        {% endif %}
       {% else %}
         <p class="dash-all-clear">No budgeted category is over {{ budget_threshold_pct }}% this month.</p>
       {% endif %}

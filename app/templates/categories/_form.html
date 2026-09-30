@@ -9,6 +9,14 @@
     <label>Monthly budget (optional)
       <input type="text" name="budget" value="{{ values.budget }}" placeholder="e.g. 500.00">
     </label>
+    {% if budget_suggestion %}
+      <p class="budget-suggestion">
+        <small>Suggested: {{ budget_suggestion.amount }}
+          (median of the last {{ budget_suggestion.months }} full months)</small>
+        <button type="button" class="secondary outline"
+                onclick="this.form.elements.budget.value = '{{ budget_suggestion.amount }}'">Use this</button>
+      </p>
+    {% endif %}
   {% endif %}
   <fieldset>
     <legend>Icon</legend>

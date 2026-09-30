@@ -32,6 +32,11 @@
     <div class="dash-widget dash-widget-bordered dash-span-3">
       <div class="dash-widget-head"><span class="dash-widget-title">Expenses</span></div>
       <div class="cat-stat-number">{{ "%.2f"|format(month_stats.expense_total|abs) }}</div>
+      {% if expense_forecast %}
+        <div class="cat-stat-sub" title="{{ 'Spent so far plus the typical remainder of earlier months' if expense_forecast.method == 'history' else 'Straight-line pace (not enough history yet)' }}">
+          On pace for ~{{ "%.2f"|format(expense_forecast.projected) }} by month-end
+        </div>
+      {% endif %}
       {% if month_stats.expense_delta is not none %}
         {% set expense_rising = month_stats.expense_delta < 0 %}
         <div class="cat-stat-delta {{ 'down' if expense_rising else 'up' }}">
@@ -104,7 +109,7 @@
     </div>
     <div>
       <h2>Expense by category</h2>
-      {{ expense_month_breakdown_table(expense_month_rows, date_from, date_to, account_id, year=year, month=month) }}
+      {{ expense_month_breakdown_table(expense_month_rows, date_from, date_to, account_id, year=year, month=month, show_projected=show_projected) }}
     </div>
   </div>
 {% endblock %}

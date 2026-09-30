@@ -19,6 +19,7 @@ from app.services.aggregation import (
     category_subcategory_shares,
     category_totals_all_time,
     category_yearly_series,
+    forecast_month_end,
     group_by_month_and_type,
     grouped_transaction_view,
     merge_months,
@@ -27,6 +28,7 @@ from app.services.aggregation import (
     rolling_average_daily_expense,
     rolling_average_monthly_expense,
     subcategory_monthly_totals,
+    suggest_monthly_budget,
     top_uncategorized_descriptions,
     yearly_totals_with_yoy,
 )
@@ -1707,3 +1709,222 @@ def test_category_all_time_monthly_average_raises_for_transfer_type():
         category_all_time_monthly_average(
             [], TransactionType.TRANSFER, today=date(2026, 4, 10)
         )
+
+
+# --- suggest_monthly_budget -------------------------------------------------
+
+_TODAY = date(2026, 9, 15)
+
+
+def _spend(month: int, amount: str, **overrides) -> Transaction:
+    overrides.setdefault("id", f"s{month}-{amount}")
+    return _txn(date=date(2026, month, 10), amount=Decimal(f"-{amount}"), **overrides)
+
+
+def test_suggest_monthly_budget_is_the_median_of_full_months():
+    txns = [
+        _spend(m, a)
+        for m, a in [
+            (3, "100"),
+            (4, "200"),
+            (5, "300"),
+            (6, "400"),
+            (7, "500"),
+            (8, "600"),
+        ]
+    ]
+
+    suggestion = suggest_monthly_budget(txns, "c", _TODAY)
+
+    assert suggestion is not None
+    assert suggestion.amount == Decimal("350")
+    assert suggestion.months == 6
+
+
+def test_suggest_monthly_budget_ignores_a_single_outlier_month():
+    txns = [_spend(m, "100") for m in (3, 4, 5, 6, 7)] + [_spend(8, "5000")]
+
+    suggestion = suggest_monthly_budget(txns, "c", _TODAY)
+
+    assert suggestion.amount == Decimal("100")
+
+
+def test_suggest_monthly_budget_excludes_the_current_partial_month():
+    txns = [_spend(m, "100") for m in (6, 7, 8)] + [_spend(9, "9000")]
+
+    suggestion = suggest_monthly_budget(txns, "c", _TODAY)
+
+    assert suggestion.amount == Decimal("100")
+    assert suggestion.months == 3
+
+
+def test_suggest_monthly_budget_counts_quiet_months_as_zero():
+    txns = [_spend(m, "100") for m in (3, 7, 8)]
+
+    suggestion = suggest_monthly_budget(txns, "c", _TODAY)
+
+    assert suggestion.amount == Decimal("50")  # median of [0, 0, 0, 100, 100, 100]
+
+
+def test_suggest_monthly_budget_needs_three_months_of_history():
+    txns = [_spend(7, "100"), _spend(8, "100")]
+
+    assert suggest_monthly_budget(txns, "c", _TODAY) is None
+
+
+def test_suggest_monthly_budget_does_not_pad_before_first_activity():
+    txns = [_spend(m, "120") for m in (6, 7, 8)]
+
+    suggestion = suggest_monthly_budget(txns, "c", _TODAY)
+
+    assert suggestion.amount == Decimal("120")
+    assert suggestion.months == 3
+
+
+def test_suggest_monthly_budget_scopes_to_category_and_type():
+    txns = [_spend(m, "100") for m in (6, 7, 8)]
+    txns += [_spend(m, "999", id=f"o{m}", category="other") for m in (6, 7, 8)]
+    txns += [
+        _txn(
+            id=f"i{m}",
+            date=date(2026, m, 10),
+            amount=Decimal("999"),
+            type=TransactionType.INCOME,
+        )
+        for m in (6, 7, 8)
+    ]
+
+    assert suggest_monthly_budget(txns, "c", _TODAY).amount == Decimal("100")
+
+
+def test_suggest_monthly_budget_can_scope_to_a_subcategory():
+    txns = [_spend(m, "100", subcategory="a") for m in (6, 7, 8)]
+    txns += [_spend(m, "900", id=f"b{m}", subcategory="b") for m in (6, 7, 8)]
+
+    assert suggest_monthly_budget(txns, "c", _TODAY, "a").amount == Decimal("100")
+    assert suggest_monthly_budget(txns, "c", _TODAY).amount == Decimal("1000")
+
+
+def test_suggest_monthly_budget_none_when_median_is_zero():
+    txns = [_spend(3, "100"), _spend(8, "100")]
+
+    assert suggest_monthly_budget(txns, "c", _TODAY) is None
+
+
+def test_suggest_monthly_budget_none_without_any_spend():
+    assert suggest_monthly_budget([], "c", _TODAY) is None
+
+
+# --- forecast_month_end -----------------------------------------------------
+
+_FORECAST_TODAY = date(2026, 9, 10)
+
+
+def _on(year: int, month: int, day: int, amount: str, **overrides) -> Transaction:
+    overrides.setdefault(
+        "id", f"{year}-{month}-{day}-{amount}-{overrides.get('category', 'c')}"
+    )
+    return _txn(date=date(year, month, day), amount=Decimal(f"-{amount}"), **overrides)
+
+
+def _rent_and_bill_history() -> list[Transaction]:
+    """Jun-Aug: 100 on the 1st, 50 on the 20th."""
+    txns = []
+    for month in (6, 7, 8):
+        txns += [
+            _on(2026, month, 1, "100", id=f"r{month}"),
+            _on(2026, month, 20, "50", id=f"b{month}"),
+        ]
+    return txns
+
+
+def test_forecast_adds_typical_remainder_to_spent_so_far():
+    txns = _rent_and_bill_history() + [_on(2026, 9, 1, "100", id="r9")]
+
+    forecast = forecast_month_end(txns, _FORECAST_TODAY)
+
+    assert forecast.method == "history"
+    assert forecast.spent_so_far == Decimal("100")
+    # Straight-line would say 300; the 1st-of-month rent isn't recurring daily.
+    assert forecast.projected == Decimal("150")
+
+
+def test_forecast_ignores_one_unusual_month_via_the_median():
+    txns = _rent_and_bill_history()
+    txns += [_on(2026, 5, 1, "100", id="r5"), _on(2026, 5, 20, "50", id="b5")]
+    txns += [_on(2026, 4, 1, "100", id="r4"), _on(2026, 4, 25, "5000", id="big")]
+    txns += [_on(2026, 9, 1, "100", id="r9")]
+
+    forecast = forecast_month_end(txns, _FORECAST_TODAY)
+
+    assert forecast.projected == Decimal("150")
+
+
+def test_forecast_never_falls_below_spent_so_far():
+    txns = [_on(2026, m, 1, "10", id=f"h{m}") for m in (6, 7, 8)]
+    txns.append(_on(2026, 9, 5, "400", id="now"))
+
+    forecast = forecast_month_end(txns, _FORECAST_TODAY)
+
+    assert forecast.projected == Decimal("400")
+
+
+def test_forecast_falls_back_to_straight_line_pace_with_short_history():
+    txns = [_on(2026, 8, 20, "10", id="old"), _on(2026, 9, 5, "100", id="now")]
+
+    forecast = forecast_month_end(txns, _FORECAST_TODAY)
+
+    assert forecast.method == "pace"
+    assert forecast.projected == Decimal("300")  # 100 over 10 days -> 30-day month
+
+
+def test_forecast_does_not_count_months_before_tracking_began():
+    txns = [_on(2026, m, 20, "50", id=f"h{m}") for m in (7, 8)]
+    txns.append(_on(2026, 9, 5, "60", id="now"))
+
+    assert forecast_month_end(txns, _FORECAST_TODAY).method == "pace"
+
+
+def test_forecast_ignores_transactions_after_today_and_other_types():
+    txns = _rent_and_bill_history() + [
+        _on(2026, 9, 1, "100", id="r9"),
+        _on(2026, 9, 25, "777", id="future"),
+        _txn(
+            id="inc",
+            date=date(2026, 9, 2),
+            amount=Decimal("999"),
+            type=TransactionType.INCOME,
+        ),
+    ]
+
+    forecast = forecast_month_end(txns, _FORECAST_TODAY)
+
+    assert forecast.spent_so_far == Decimal("100")
+
+
+def test_forecast_scopes_to_a_category():
+    txns = _rent_and_bill_history() + [_on(2026, 9, 1, "100", id="r9")]
+    txns += [_on(2026, m, 20, "900", id=f"o{m}", category="other") for m in (6, 7, 8)]
+    txns.append(_on(2026, 9, 3, "40", id="o9", category="other"))
+
+    forecast = forecast_month_end(txns, _FORECAST_TODAY, "other")
+
+    assert forecast.spent_so_far == Decimal("40")
+    assert forecast.projected == Decimal("940")
+
+
+def test_forecast_short_history_month_cutoff_is_clamped():
+    txns = [_on(2026, m, 28, "30", id=f"h{m}") for m in (1, 2, 3)]
+    txns.append(_on(2026, 3, 31, "5", id="now"))
+
+    forecast = forecast_month_end(txns, date(2026, 3, 31))
+
+    assert forecast.method == "pace"
+
+
+def test_forecast_none_with_no_data_or_nothing_spent():
+    assert forecast_month_end([], _FORECAST_TODAY) is None
+    txns = [
+        _txn(date=date(2026, 9, 1), amount=Decimal("100"), type=TransactionType.INCOME)
+    ]
+    assert forecast_month_end(txns, _FORECAST_TODAY) is None

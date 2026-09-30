@@ -14,7 +14,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field, replace
 from datetime import date as date_
 from datetime import timedelta
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
 from app.models.account import Account
 from app.models.transaction import Transaction, TransactionType
@@ -1283,3 +1283,171 @@ def rolling_average_monthly_expense(
     """
     daily = rolling_average_daily_expense(transactions, today, days)
     return daily * _AVG_DAYS_PER_MONTH if daily is not None else None
+
+
+def _median(values: list[Decimal]) -> Decimal:
+    """Return the median of a non-empty list (mean of the middle two when even)."""
+    ordered = sorted(values)
+    middle = len(ordered) // 2
+    if len(ordered) % 2:
+        return ordered[middle]
+    return (ordered[middle - 1] + ordered[middle]) / 2
+
+
+@dataclass
+class BudgetSuggestion:
+    """A suggested monthly budget and how many months it was derived from."""
+
+    amount: Decimal
+    months: int
+
+
+MIN_BUDGET_HISTORY_MONTHS = 3
+BUDGET_SUGGESTION_WINDOW_MONTHS = 6
+
+
+def suggest_monthly_budget(
+    transactions: Iterable[Transaction],
+    category: str,
+    today: date_,
+    subcategory: str | None = None,
+    window: int = BUDGET_SUGGESTION_WINDOW_MONTHS,
+) -> BudgetSuggestion | None:
+    """Suggest a monthly expense budget from a category's recent history.
+
+    Takes the *median* of the category's monthly totals (not the mean), so
+    one outlier month — an annual insurance premium, a one-off repair —
+    can't drag the suggestion up. The window is the last ``window`` *full*
+    calendar months (``today``'s own partial month is left out), trimmed
+    to start no earlier than the category's first-ever activity so a
+    category created two months ago isn't padded with zero months it
+    couldn't have had. Months inside that span with no activity count as
+    zero, since a category that's quiet half the time really does need a
+    lower budget. Pass ``subcategory`` to scope to one subcategory of
+    ``category`` instead of the whole category. Returns ``None`` when
+    there are fewer than ``MIN_BUDGET_HISTORY_MONTHS`` months of history
+    or the median comes out to zero (nothing sensible to suggest).
+    """
+    matching = [
+        t
+        for t in transactions
+        if t.type is TransactionType.EXPENSE
+        and t.category == category
+        and (subcategory is None or t.subcategory == subcategory)
+    ]
+    if not matching:
+        return None
+
+    def month_index(d: date_) -> int:
+        return d.year * 12 + (d.month - 1)
+
+    window_end = month_index(today) - 1
+    window_start = max(
+        window_end - window + 1, min(month_index(t.date) for t in matching)
+    )
+    span = window_end - window_start + 1
+    if span < MIN_BUDGET_HISTORY_MONTHS:
+        return None
+
+    monthly = [Decimal("0")] * span
+    for t in matching:
+        index = month_index(t.date)
+        if window_start <= index <= window_end:
+            monthly[index - window_start] += abs(t.amount)
+
+    amount = _median(monthly).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+    if amount <= 0:
+        return None
+    return BudgetSuggestion(amount=amount, months=span)
+
+
+@dataclass
+class MonthForecast:
+    """A projected month-end expense total, and how it was derived.
+
+    ``method`` is ``"history"`` (spent so far plus the typical remainder
+    seen in earlier months) or ``"pace"`` (straight-line extrapolation,
+    used when there isn't enough history for the first).
+    """
+
+    spent_so_far: Decimal
+    projected: Decimal
+    method: str
+
+
+MIN_FORECAST_HISTORY_MONTHS = 3
+FORECAST_HISTORY_MONTHS = 6
+
+
+def forecast_month_end(
+    transactions: Iterable[Transaction],
+    today: date_,
+    category: str | None = None,
+    history_months: int = FORECAST_HISTORY_MONTHS,
+) -> MonthForecast | None:
+    """Project ``today``'s month's expense total (all, or one category) at month-end.
+
+    The projection is *spent so far + the median of what earlier months
+    still had left to spend after the same day of the month* — not a
+    straight-line extrapolation, which wrongly doubles a bill paid once
+    on the 1st and misses one that only lands on the 20th. The median
+    (not the mean) keeps one unusual month from skewing it, and because
+    the remainder is never negative the projection can never fall below
+    what's already been spent. History is the last ``history_months``
+    full months, starting no earlier than the ledger's first transaction
+    (a month before tracking began isn't a genuine zero-spend month).
+    With fewer than ``MIN_FORECAST_HISTORY_MONTHS`` months available it
+    falls back to straight-line pacing. Returns ``None`` when nothing has
+    been spent and nothing is expected (no useful projection to show).
+    """
+    transactions = list(transactions)
+    if not transactions:
+        return None
+
+    def month_index(d: date_) -> int:
+        return d.year * 12 + (d.month - 1)
+
+    expenses = [
+        t
+        for t in transactions
+        if t.type is TransactionType.EXPENSE
+        and (category is None or t.category == category)
+    ]
+    this_month = month_index(today)
+    days_in_month = calendar.monthrange(today.year, today.month)[1]
+    spent = sum(
+        (
+            abs(t.amount)
+            for t in expenses
+            if month_index(t.date) == this_month and t.date <= today
+        ),
+        Decimal("0"),
+    )
+
+    first_month = month_index(min(t.date for t in transactions))
+    history_start = max(this_month - history_months, first_month)
+    history_span = this_month - history_start
+
+    if history_span >= MIN_FORECAST_HISTORY_MONTHS:
+        remainders = []
+        for index in range(history_start, this_month):
+            year, month0 = divmod(index, 12)
+            cutoff_day = min(today.day, calendar.monthrange(year, month0 + 1)[1])
+            remaining = sum(
+                (
+                    abs(t.amount)
+                    for t in expenses
+                    if month_index(t.date) == index and t.date.day > cutoff_day
+                ),
+                Decimal("0"),
+            )
+            remainders.append(remaining)
+        projected = spent + _median(remainders)
+        method = "history"
+    else:
+        projected = spent / today.day * days_in_month
+        method = "pace"
+
+    if projected <= 0:
+        return None
+    return MonthForecast(spent_so_far=spent, projected=projected, method=method)

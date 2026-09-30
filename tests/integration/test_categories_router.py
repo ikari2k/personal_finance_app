@@ -397,3 +397,61 @@ def test_delete_category_does_not_check_ledger_usage(client):
 
     assert response.status_code == 200
     assert read_categories(config.CATEGORIES_PATH) == {"income": {}, "expense": {}}
+
+
+def _monthly_expenses(category: str, subcategory: str = "") -> list[Transaction]:
+    today = date.today()
+    index = today.year * 12 + today.month - 1
+    txns = []
+    for back in (1, 2, 3, 4):
+        year, month0 = divmod(index - back, 12)
+        txns.append(
+            Transaction(
+                id=f"{category}-{subcategory}-{back}",
+                date=date(year, month0 + 1, 5),
+                account_id="chk",
+                category=category,
+                subcategory=subcategory,
+                description="x",
+                amount=Decimal("-200.00"),
+                type=TransactionType.EXPENSE,
+            )
+        )
+    return txns
+
+
+def test_edit_category_form_suggests_budget_when_none_set(client):
+    client.post("/categories/expense", data={"name": "Groceries"})
+    write_ledger(_monthly_expenses("Groceries"), config.LEDGER_PATH)
+
+    response = client.get("/categories/expense/Groceries/edit")
+
+    assert "Suggested: 200" in response.text
+    assert "Use this" in response.text
+
+
+def test_edit_category_form_no_suggestion_when_budget_already_set(client):
+    client.post("/categories/expense", data={"name": "Groceries", "budget": "50"})
+    write_ledger(_monthly_expenses("Groceries"), config.LEDGER_PATH)
+
+    response = client.get("/categories/expense/Groceries/edit")
+
+    assert "Suggested:" not in response.text
+
+
+def test_edit_category_form_no_suggestion_without_history(client):
+    client.post("/categories/expense", data={"name": "Groceries"})
+
+    response = client.get("/categories/expense/Groceries/edit")
+
+    assert "Suggested:" not in response.text
+
+
+def test_edit_subcategory_form_suggests_budget_from_its_own_spend(client):
+    client.post("/categories/expense", data={"name": "Food"})
+    client.post("/categories/expense/Food/subcategories", data={"name": "Fruit"})
+    write_ledger(_monthly_expenses("Food", "Fruit"), config.LEDGER_PATH)
+
+    response = client.get("/categories/expense/Food/subcategories/Fruit/edit")
+
+    assert "Suggested: 200" in response.text

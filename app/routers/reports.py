@@ -43,6 +43,7 @@ from app.services.aggregation import (
     category_totals_all_time,
     category_totals_for_month,
     category_yearly_series,
+    forecast_month_end,
     monthly_totals_with_mom,
     net_worth_by_month,
     subcategory_monthly_totals,
@@ -276,6 +277,7 @@ def _month_breakdown_rows(
     breakdown: list[CategoryTotal],
     config: dict,
     deltas: dict[str, object],
+    forecasts: dict[str, object] | None = None,
 ) -> list[dict]:
     """Build expense-by-category rows for the month drill-down's budget/MoM table.
 
@@ -284,8 +286,11 @@ def _month_breakdown_rows(
     concern, not a Jinja concern" split as ``_category_month_matrix``.
     ``deltas`` is ``category_mom_deltas``'s result; a category/subcategory
     missing from it (no activity in either month, or type mismatch) gets
-    ``delta=None`` rather than a KeyError.
+    ``delta=None`` rather than a KeyError. ``forecasts`` (category name →
+    ``MonthForecast``) is only passed for the in-progress current month;
+    each category's ``projected`` is ``None`` when absent from it.
     """
+    forecasts = forecasts or {}
     rows = []
     for category in breakdown:
         cat_config = config.get(category.name, {})
@@ -314,6 +319,11 @@ def _month_breakdown_rows(
                 "count": category.count,
                 "ring": _ring_geometry(category.total, cat_config.get("budget")),
                 "delta": cat_mom.delta if cat_mom else None,
+                "projected": (
+                    forecasts[category.name].projected
+                    if category.name in forecasts
+                    else None
+                ),
                 "subcategories": sub_rows,
             }
         )
@@ -2295,6 +2305,17 @@ def month_detail(
         for m in movers
     }
 
+    is_current_month = (year, month) == (date.today().year, date.today().month)
+    expense_forecast = None
+    category_forecasts: dict[str, object] = {}
+    if is_current_month:
+        today = date.today()
+        expense_forecast = forecast_month_end(transactions, today)
+        for cat in expense_breakdown:
+            cat_forecast = forecast_month_end(transactions, today, cat.name)
+            if cat_forecast is not None:
+                category_forecasts[cat.name] = cat_forecast
+
     return templates.TemplateResponse(
         request,
         "reports/month.html",
@@ -2314,8 +2335,10 @@ def month_detail(
             "income_config": income_config,
             "expense_config": expense_config,
             "expense_month_rows": _month_breakdown_rows(
-                expense_breakdown, expense_config, mom_deltas
+                expense_breakdown, expense_config, mom_deltas, category_forecasts
             ),
+            "expense_forecast": expense_forecast,
+            "show_projected": is_current_month,
             "month_stats": month_stats,
             "movers": movers,
             "movers_txn_links": movers_txn_links,

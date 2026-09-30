@@ -35,6 +35,7 @@ from app.services.aggregation import (
     category_all_time_monthly_average,
     category_recent_monthly_totals,
     category_totals_for_month,
+    forecast_month_end,
     monthly_totals_with_mom,
     net_worth_by_month,
     rolling_average_monthly_expense,
@@ -63,11 +64,13 @@ ACCOUNT_TYPE_ICONS: dict[AccountType, str] = {
 # How many categories/rows each widget shows — a dashboard summarizes,
 # it doesn't replace the full /reports or /transactions views a widget
 # links out to.
-BUDGET_ATTENTION_LIMIT = 5
-# Independent of _ring_geometry's own 75%/100% color-tier boundaries
-# (which also drive /reports' ring colors and must stay put) — this is
-# just the dashboard widget's own "worth surfacing here" cutoff.
-BUDGET_ATTENTION_THRESHOLD_PCT = 60
+# Budget status lists *every* qualifying category (no row cap), split
+# into "over budget" (>= 100%) and "nearing limit" (>= the threshold
+# below, < 100%). The values mirror _ring_geometry's 75%/100% color
+# tiers on purpose, but stay separate constants — those drive /reports'
+# ring colors and shouldn't shift if this widget's cutoff is retuned.
+BUDGET_ATTENTION_THRESHOLD_PCT = 75
+BUDGET_OVER_PCT = 100
 TOP_CATEGORIES_LIMIT = 10
 # Last month plus this (partial) one.
 TOP_CATEGORIES_TREND_MONTHS = 2
@@ -249,6 +252,8 @@ def dashboard(request: Request) -> HTMLResponse:
         else None
     )
 
+    expense_forecast = forecast_month_end(ledger, today)
+
     # --- rolling average monthly spend (30/90/180-day windows) ---
     rolling_averages = [
         {
@@ -297,7 +302,8 @@ def dashboard(request: Request) -> HTMLResponse:
             }
         )
     budget_rows.sort(key=lambda row: row["pct"], reverse=True)
-    budget_rows = budget_rows[:BUDGET_ATTENTION_LIMIT]
+    over_budget_rows = [r for r in budget_rows if r["pct"] >= BUDGET_OVER_PCT]
+    near_budget_rows = [r for r in budget_rows if r["pct"] < BUDGET_OVER_PCT]
 
     # --- top categories this month ---
     # Last month comes from a 2-month trailing window (index -2; -1 is
@@ -410,6 +416,7 @@ def dashboard(request: Request) -> HTMLResponse:
             "sparkline_labels": [p.label for p in sparkline_points],
             "income_total": income_total,
             "expense_total": expense_total,
+            "expense_forecast": expense_forecast,
             "net_total": net_total,
             "income_delta_pct": income_delta_pct,
             "expense_delta_pct": expense_delta_pct,
@@ -419,7 +426,8 @@ def dashboard(request: Request) -> HTMLResponse:
             "balances": balances,
             "account_type_labels": ACCOUNT_TYPE_LABELS,
             "account_type_icons": ACCOUNT_TYPE_ICONS,
-            "budget_rows": budget_rows,
+            "over_budget_rows": over_budget_rows,
+            "near_budget_rows": near_budget_rows,
             "budget_threshold_pct": BUDGET_ATTENTION_THRESHOLD_PCT,
             "top_categories": top_categories,
             "top_category_max": top_category_max,

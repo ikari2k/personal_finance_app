@@ -85,12 +85,12 @@
   income, so the month page's income breakdown keeps using the plain
   ``breakdown_table`` above instead.
 #}
-{% macro expense_month_breakdown_table(rows, date_from, date_to, account_id="", year=none, month=none) %}
+{% macro expense_month_breakdown_table(rows, date_from, date_to, account_id="", year=none, month=none, show_projected=false) %}
   {% if rows %}
     <div class="table-scroll">
       <table class="breakdown-table">
         <thead>
-          <tr><th>Category</th><th>Total</th><th># Txns</th><th>Budget</th><th>vs last month</th></tr>
+          <tr><th>Category</th><th>Total</th><th># Txns</th><th>Budget</th><th>vs last month</th>{% if show_projected %}<th title="Spent so far plus the typical remainder of earlier months">Projected</th>{% endif %}</tr>
         </thead>
         <tbody>
           {% for cat in rows %}
@@ -109,6 +109,9 @@
               <td>{{ cat.count }}</td>
               <td>{{ budget_ring_cell(cat.ring) }}</td>
               <td>{{ mom_delta_cell(cat.delta) }}</td>
+              {% if show_projected %}
+                <td>{% if cat.projected is not none %}~{{ "%.2f"|format(cat.projected) }}{% else %}<span class="muted">—</span>{% endif %}</td>
+              {% endif %}
             </tr>
             {% for sub in cat.subcategories %}
               <tr class="subcategory-row">
@@ -122,6 +125,7 @@
                 <td>{{ sub.count }}</td>
                 <td>{{ budget_ring_cell(sub.ring) }}</td>
                 <td>{{ mom_delta_cell(sub.delta) }}</td>
+                {% if show_projected %}<td></td>{% endif %}
               </tr>
             {% endfor %}
           {% endfor %}

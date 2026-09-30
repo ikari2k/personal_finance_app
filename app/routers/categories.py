@@ -1,5 +1,6 @@
 """Routes for managing the income/expense category and subcategory trees."""
 
+from datetime import date
 from decimal import Decimal, InvalidOperation
 
 from fastapi import APIRouter, Form, Request
@@ -8,7 +9,11 @@ from fastapi.responses import HTMLResponse
 from app.models.category import ICON_HINTS, VALID_ICONS, CategoriesByType
 from app.models.transaction import TransactionType
 from app.routers.htmx_events import toast
-from app.services.aggregation import top_uncategorized_descriptions
+from app.services.aggregation import (
+    BudgetSuggestion,
+    suggest_monthly_budget,
+    top_uncategorized_descriptions,
+)
 from app.services.categories import (
     add_category,
     add_subcategory,
@@ -125,6 +130,18 @@ def _rename_in_rules(old_name: str, new_name: str, apply_rename) -> int:
     return sum(1 for old, new in zip(rules, renamed_rules) if old != new)
 
 
+def _budget_suggestion(
+    txn_type: TransactionType,
+    current_budget: str,
+    category: str,
+    subcategory: str | None = None,
+) -> BudgetSuggestion | None:
+    """Return a suggested budget, only for an expense entry with none set yet."""
+    if txn_type is not TransactionType.EXPENSE or current_budget:
+        return None
+    return suggest_monthly_budget(read_ledger(), category, date.today(), subcategory)
+
+
 def _render_form(
     request: Request,
     *,
@@ -136,6 +153,7 @@ def _render_form(
     editing: bool,
     show_budget: bool,
     error: str | None = None,
+    budget_suggestion: BudgetSuggestion | None = None,
 ) -> HTMLResponse:
     """Render the shared category/subcategory add-or-edit form fragment."""
     return templates.TemplateResponse(
@@ -149,6 +167,7 @@ def _render_form(
             "values": values,
             "editing": editing,
             "show_budget": show_budget,
+            "budget_suggestion": budget_suggestion,
             "icon_keys": ICON_KEYS,
             "icon_hints": ICON_HINTS,
             "error": error,
@@ -215,6 +234,7 @@ def edit_category_form(
         },
         editing=True,
         show_budget=txn_type is not TransactionType.INCOME,
+        budget_suggestion=_budget_suggestion(txn_type, entry["budget"], category_name),
     )
 
 
@@ -399,6 +419,9 @@ def edit_subcategory_form(
         },
         editing=True,
         show_budget=txn_type is not TransactionType.INCOME,
+        budget_suggestion=_budget_suggestion(
+            txn_type, sub_entry["budget"], category_name, sub_name
+        ),
     )
 
 

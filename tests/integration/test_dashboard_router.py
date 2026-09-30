@@ -136,7 +136,7 @@ def test_dashboard_flags_over_budget_category(client):
     assert "150% of budget" in response.text
 
 
-def test_dashboard_budget_status_shows_categories_at_60_pct_and_explains_it(client):
+def test_dashboard_budget_status_shows_categories_at_75_pct_and_explains_it(client):
     client.post("/categories/expense", data={"name": "Groceries", "budget": "100.00"})
     _create_account(client)
     _create_transaction(
@@ -144,17 +144,17 @@ def test_dashboard_budget_status_shows_categories_at_60_pct_and_explains_it(clie
         date_str=date.today().isoformat(),
         type="expense",
         category="Groceries",
-        amount="65.00",
+        amount="80.00",
     )
 
     response = client.get("/dashboard")
 
     assert response.status_code == 200
-    assert "65% of budget" in response.text
-    assert "60%+" in response.text
+    assert "80% of budget" in response.text
+    assert "75%+" in response.text
 
 
-def test_dashboard_budget_status_excludes_categories_under_60_pct(client):
+def test_dashboard_budget_status_excludes_categories_under_75_pct(client):
     client.post("/categories/expense", data={"name": "Groceries", "budget": "100.00"})
     _create_account(client)
     _create_transaction(
@@ -162,13 +162,13 @@ def test_dashboard_budget_status_excludes_categories_under_60_pct(client):
         date_str=date.today().isoformat(),
         type="expense",
         category="Groceries",
-        amount="50.00",
+        amount="70.00",
     )
 
     response = client.get("/dashboard")
 
     assert response.status_code == 200
-    assert "No budgeted category is over 60% this month." in response.text
+    assert "No budgeted category is over 75% this month." in response.text
     assert "utilization-ring" not in response.text
 
 
@@ -314,3 +314,77 @@ def test_dashboard_top_categories_omits_comparisons_for_brand_new_category(clien
     assert "Groceries" in response.text
     assert "dash-cat-line-delta up" not in response.text
     assert "dash-cat-line-delta down" not in response.text
+
+
+def _seed_forecastable_history(client):
+    """Four prior months of a 200 expense plus one today, so a forecast exists."""
+    from datetime import date as _date
+
+    _create_account(client)
+    today = _date.today()
+    index = today.year * 12 + today.month - 1
+    for back in (1, 2, 3, 4):
+        year, month0 = divmod(index - back, 12)
+        _create_transaction(
+            client,
+            date_str=_date(year, month0 + 1, 28).isoformat(),
+            type="expense",
+            category="Groceries",
+            amount="200",
+        )
+    _create_transaction(
+        client,
+        date_str=today.isoformat(),
+        type="expense",
+        category="Groceries",
+        amount="50",
+    )
+
+
+def test_dashboard_shows_month_end_projection(client):
+    _seed_forecastable_history(client)
+
+    response = client.get("/dashboard")
+
+    assert "On pace for ~" in response.text
+
+
+def test_dashboard_budget_status_splits_over_budget_from_nearing_limit(client):
+    _create_account(client)
+    for name, spent in [("Over", "150.00"), ("Near", "90.00"), ("Fine", "10.00")]:
+        client.post("/categories/expense", data={"name": name, "budget": "100.00"})
+        _create_transaction(
+            client,
+            date_str=date.today().isoformat(),
+            type="expense",
+            category=name,
+            amount=spent,
+        )
+
+    text = client.get("/dashboard").text
+
+    assert "Over budget" in text
+    assert "Nearing limit" in text
+    assert text.index("Over budget") < text.index("Nearing limit")
+    assert "Over: 150% of budget" in text
+    assert "Near: 90% of budget" in text
+    assert "Fine:" not in text
+
+
+def test_dashboard_budget_status_shows_every_qualifying_category(client):
+    _create_account(client)
+    for i in range(8):
+        name = f"Cat{i}"
+        client.post("/categories/expense", data={"name": name, "budget": "100.00"})
+        _create_transaction(
+            client,
+            date_str=date.today().isoformat(),
+            type="expense",
+            category=name,
+            amount="120.00",
+        )
+
+    text = client.get("/dashboard").text
+
+    assert all(f"Cat{i}: 120% of budget" in text for i in range(8))
+    assert "Nearing limit" not in text

@@ -1971,6 +1971,7 @@ fieldset legend {
 .dash-stat-delta { font-size: 0.7rem; font-weight: 600; font-variant-numeric: tabular-nums; }
 .dash-stat-delta.up { color: var(--pico-ins-color); }
 .dash-stat-delta.down { color: var(--pico-del-color); }
+.dash-stat-forecast { display: block; font-size: 0.7rem; color: var(--pico-muted-color); font-variant-numeric: tabular-nums; }
 
 .dash-net-line {
   display: flex;
@@ -2044,6 +2045,14 @@ fieldset legend {
 
 /* ---- budget status ---- */
 .dash-budget-list { display: flex; flex-direction: column; }
+.dash-budget-group-label {
+  margin: 0.6rem 0 0.1rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--pico-muted-color);
+}
 
 .dash-budget-row {
   display: flex;

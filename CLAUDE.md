@@ -551,6 +551,19 @@ every color is still assigned from each subcategory's position in the *full*, un
 its own color even filtered down to being the only series drawn). An entirely-unrecognized selection
 (a stale link after a category's subcategories changed) falls back to showing everything rather than
 a confusingly empty chart, same defensive-fallback instinct as elsewhere in the app.
+Three small ML-opportunities items (`audits/ml-opportunities.md` §4.6/§4.3) plus a dashboard tweak
+followed, all pure-Python "suggest, never auto-apply" arithmetic over existing aggregation data:
+`services.aggregation.suggest_monthly_budget` (median — not mean, so one outlier month can't inflate
+it — of the category's/subcategory's last ≤6 full months, counted only from its first activity,
+≥3 months of history required) pre-fills a "Suggested: X / Use this" hint on the category/subcategory
+edit dialog when no budget is set (expense only); `forecast_month_end` projects the current month's
+expense total as spent-so-far plus the *median remainder* earlier months still had left after the
+same day (not straight-line pacing, which misprices rent-on-the-1st; falls back to straight-line
+with <3 months of history, never below spent-so-far) — shown as "On pace for ~X" on the dashboard
+and `/reports/{year}/{month}` (current month only), plus a per-category "Projected" column on that
+page's expense table. The dashboard's Budget status widget now lists *every* budgeted category at
+≥75% of its monthly limit, split into "Over budget" (≥100%) and "Nearing limit" sections (previously
+a 60% cutoff capped at the top 5, which hid e.g. a 92% category behind five over-budget ones).
 See `docs/implementation-plan.md` for the full phased plan, finalized schemas, and per-phase status
 checkboxes/implementation notes.
 

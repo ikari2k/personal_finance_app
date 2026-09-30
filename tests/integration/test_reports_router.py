@@ -1582,3 +1582,49 @@ def test_reports_overview_treemap_has_toggle_for_both_metrics(client):
     assert 'id="expense-treemap-by-total" hidden' in response.text
     assert "Color = % of total expense" in response.text
     assert "Color = % of all transactions" in response.text
+
+
+def _seed_forecastable_history(client):
+    """Four prior months of a 200 expense plus one today, so a forecast exists."""
+    from datetime import date as _date
+
+    _create_account(client)
+    today = _date.today()
+    index = today.year * 12 + today.month - 1
+    for back in (1, 2, 3, 4):
+        year, month0 = divmod(index - back, 12)
+        _create_transaction(
+            client,
+            date=_date(year, month0 + 1, 28).isoformat(),
+            type="expense",
+            category="Groceries",
+            amount="200",
+        )
+    _create_transaction(
+        client,
+        date=today.isoformat(),
+        type="expense",
+        category="Groceries",
+        amount="50",
+    )
+
+
+def test_current_month_drilldown_shows_projection(client):
+    from datetime import date as _date
+
+    _seed_forecastable_history(client)
+    today = _date.today()
+
+    response = client.get(f"/reports/{today.year}/{today.month}")
+
+    assert "On pace for ~" in response.text
+    assert ">Projected</th>" in response.text
+
+
+def test_past_month_drilldown_has_no_projection(client):
+    _seed_forecastable_history(client)
+
+    response = client.get("/reports/2020/1")
+
+    assert "On pace for" not in response.text
+    assert ">Projected<" not in response.text
