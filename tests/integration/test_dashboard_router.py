@@ -1,6 +1,7 @@
 """Integration tests for the dashboard router."""
 
 from datetime import date
+from decimal import Decimal
 
 
 def _create_account(
@@ -239,3 +240,77 @@ def test_dashboard_recent_days_caps_at_5_distinct_dates_with_activity(client):
     assert "Jan 03" in response.text
     assert "Jan 02" not in response.text
     assert "Jan 01" not in response.text
+
+
+def _months_ago(today, n):
+    year = today.year
+    month = today.month - n
+    while month <= 0:
+        month += 12
+        year -= 1
+    return date(year, month, 15)
+
+
+def test_dashboard_top_categories_shows_vs_last_month_and_12mo_avg(client):
+    _create_account(client)
+    today = date.today()
+
+    other_months_amount = Decimal("100.00")
+    for n in range(2, 13):
+        _create_transaction(
+            client,
+            date_str=_months_ago(today, n).isoformat(),
+            type="expense",
+            category="Groceries",
+            amount=str(other_months_amount),
+        )
+    last_month_amount = Decimal("200.00")
+    _create_transaction(
+        client,
+        date_str=_months_ago(today, 1).isoformat(),
+        type="expense",
+        category="Groceries",
+        amount=str(last_month_amount),
+    )
+    this_month_amount = Decimal("150.00")
+    _create_transaction(
+        client,
+        date_str=today.isoformat(),
+        type="expense",
+        category="Groceries",
+        amount=str(this_month_amount),
+    )
+
+    avg_12mo = (other_months_amount * 11 + last_month_amount) / 12
+    vs_last_month_pct = (
+        (this_month_amount - last_month_amount) / last_month_amount * 100
+    )
+    vs_avg_pct = (this_month_amount - avg_12mo) / avg_12mo * 100
+
+    response = client.get("/dashboard")
+
+    assert response.status_code == 200
+    assert f"{abs(vs_last_month_pct):.0f}% vs last month" in response.text
+    assert f"{abs(vs_avg_pct):.0f}% vs 12mo avg" in response.text
+    # Spent less than last month (-25%) -> "up"/green; spent more than
+    # the 12-month average (+38%) -> "down"/red.
+    assert "dash-cat-bar-delta up" in response.text
+    assert "dash-cat-bar-delta down" in response.text
+
+
+def test_dashboard_top_categories_omits_comparisons_for_brand_new_category(client):
+    _create_account(client)
+    _create_transaction(
+        client,
+        date_str=date.today().isoformat(),
+        type="expense",
+        category="Groceries",
+        amount="50.00",
+    )
+
+    response = client.get("/dashboard")
+
+    assert response.status_code == 200
+    assert "Groceries" in response.text
+    assert "vs last month" not in response.text
+    assert "vs 12mo avg" not in response.text

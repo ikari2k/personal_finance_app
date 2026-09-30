@@ -2096,6 +2096,22 @@ fieldset legend {
 }
 .dash-cat-bar-fill { display: block; height: 100%; background: #2563eb; border-radius: 999px; }
 
+/* Dashboard "Top categories this month" — each row's own vs-last-month/
+ * vs-12mo-average deltas, same up=green/down=red expense convention as
+ * .dash-rolling-avg-trend above (a rising expense is "down"/bad here,
+ * not a plain sign-based color) — a new pair of classes rather than
+ * reusing that one directly, since these sit inside a .dash-cat-bar-row
+ * rather than that widget's own markup. */
+.dash-cat-bar-compare {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 0.6rem;
+  margin-top: 0.15rem;
+  font-size: 0.72rem;
+}
+.dash-cat-bar-delta.up { color: var(--pico-ins-color); }
+.dash-cat-bar-delta.down { color: var(--pico-del-color); }
+
 /* ---- recent transactions ---- */
 .dash-txn-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
 .dash-txn-table th {
