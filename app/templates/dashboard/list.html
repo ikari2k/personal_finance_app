@@ -203,32 +203,27 @@
         <span class="dash-widget-title">Top categories this month</span>
       </div>
       {% if top_categories %}
+        {% macro cat_line(label, value, fill_class, pct, max_value) %}
+          <span class="dash-cat-line">
+            <span class="dash-cat-line-label">{{ label }}</span>
+            <span class="dash-cat-bar-track">
+              <span class="dash-cat-bar-fill {{ fill_class }}" style="width: {{ (value / max_value * 100) if max_value else 0 }}%"></span>
+            </span>
+            <span class="dash-cat-line-amount">{{ "%.2f"|format(value) }}</span>
+            <span class="dash-cat-line-delta {{ ('down' if pct >= 0 else 'up') if pct is not none else '' }}" title="This month vs {{ label|lower }}">
+              {%- if pct is not none %}{{ '▲' if pct >= 0 else '▼' }} {{ "%.0f"|format(pct|abs) }}%{% endif -%}
+            </span>
+          </span>
+        {% endmacro %}
         <div class="dash-cat-bars">
           {% for cat in top_categories %}
             <div class="dash-cat-bar-row">
               <span class="dash-cat-glyph">{{ category_icon(cat.icon) }}</span>
               <span class="dash-cat-bar-main">
-                <span class="dash-cat-bar-top">
-                  <span class="dash-cat-bar-name">{{ cat.name }}</span>
-                  <span class="dash-cat-bar-amount">{{ "%.2f"|format(cat.amount) }}</span>
-                </span>
-                <span class="dash-cat-bar-track">
-                  <span class="dash-cat-bar-fill" style="width: {{ (cat.amount / top_category_max * 100) if top_category_max else 0 }}%"></span>
-                </span>
-                {% if cat.vs_last_month_pct is not none or cat.vs_avg_12mo_pct is not none %}
-                  <span class="dash-cat-bar-compare">
-                    {% if cat.vs_last_month_pct is not none %}
-                      <span class="dash-cat-bar-delta {{ 'down' if cat.vs_last_month_pct >= 0 else 'up' }}">
-                        {{ '▲' if cat.vs_last_month_pct >= 0 else '▼' }} {{ "%.0f"|format(cat.vs_last_month_pct|abs) }}% vs last month
-                      </span>
-                    {% endif %}
-                    {% if cat.vs_avg_12mo_pct is not none %}
-                      <span class="dash-cat-bar-delta {{ 'down' if cat.vs_avg_12mo_pct >= 0 else 'up' }}">
-                        {{ '▲' if cat.vs_avg_12mo_pct >= 0 else '▼' }} {{ "%.0f"|format(cat.vs_avg_12mo_pct|abs) }}% vs 12mo avg
-                      </span>
-                    {% endif %}
-                  </span>
-                {% endif %}
+                <span class="dash-cat-bar-name">{{ cat.name }}</span>
+                {{ cat_line("This month", cat.amount, "", none, top_category_max) }}
+                {{ cat_line("Last month", cat.last_month_amount, "dash-cat-bar-fill-last", cat.vs_last_month_pct, top_category_max) }}
+                {{ cat_line("Avg / month", cat.avg_all_time, "dash-cat-bar-fill-avg", cat.vs_avg_all_time_pct, top_category_max) }}
               </span>
             </div>
           {% endfor %}

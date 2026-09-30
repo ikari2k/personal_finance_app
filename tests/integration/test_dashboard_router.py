@@ -251,7 +251,7 @@ def _months_ago(today, n):
     return date(year, month, 15)
 
 
-def test_dashboard_top_categories_shows_vs_last_month_and_12mo_avg(client):
+def test_dashboard_top_categories_shows_vs_last_month_and_all_time_avg(client):
     _create_account(client)
     today = date.today()
 
@@ -281,21 +281,21 @@ def test_dashboard_top_categories_shows_vs_last_month_and_12mo_avg(client):
         amount=str(this_month_amount),
     )
 
-    avg_12mo = (other_months_amount * 11 + last_month_amount) / 12
+    avg_all_time = (other_months_amount * 11 + last_month_amount) / 12
     vs_last_month_pct = (
         (this_month_amount - last_month_amount) / last_month_amount * 100
     )
-    vs_avg_pct = (this_month_amount - avg_12mo) / avg_12mo * 100
+    vs_avg_pct = (this_month_amount - avg_all_time) / avg_all_time * 100
 
     response = client.get("/dashboard")
 
     assert response.status_code == 200
-    assert f"{abs(vs_last_month_pct):.0f}% vs last month" in response.text
-    assert f"{abs(vs_avg_pct):.0f}% vs 12mo avg" in response.text
+    assert f"{abs(vs_last_month_pct):.0f}%" in response.text
+    assert f"{abs(vs_avg_pct):.0f}%" in response.text
     # Spent less than last month (-25%) -> "up"/green; spent more than
-    # the 12-month average (+38%) -> "down"/red.
-    assert "dash-cat-bar-delta up" in response.text
-    assert "dash-cat-bar-delta down" in response.text
+    # the all-time monthly average (+38%) -> "down"/red.
+    assert "dash-cat-line-delta up" in response.text
+    assert "dash-cat-line-delta down" in response.text
 
 
 def test_dashboard_top_categories_omits_comparisons_for_brand_new_category(client):
@@ -312,5 +312,5 @@ def test_dashboard_top_categories_omits_comparisons_for_brand_new_category(clien
 
     assert response.status_code == 200
     assert "Groceries" in response.text
-    assert "vs last month" not in response.text
-    assert "vs 12mo avg" not in response.text
+    assert "dash-cat-line-delta up" not in response.text
+    assert "dash-cat-line-delta down" not in response.text

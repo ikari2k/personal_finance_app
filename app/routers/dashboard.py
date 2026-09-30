@@ -32,6 +32,7 @@ from app.models.transaction import TransactionType
 from app.routers.reports import _category_config, _ring_geometry
 from app.services.aggregation import (
     UNCATEGORIZED,
+    category_all_time_monthly_average,
     category_recent_monthly_totals,
     category_totals_for_month,
     monthly_totals_with_mom,
@@ -68,9 +69,8 @@ BUDGET_ATTENTION_LIMIT = 5
 # just the dashboard widget's own "worth surfacing here" cutoff.
 BUDGET_ATTENTION_THRESHOLD_PCT = 60
 TOP_CATEGORIES_LIMIT = 10
-# 12 full months plus this (partial) one — see "top categories this
-# month" below for why the extra month is needed.
-TOP_CATEGORIES_TREND_MONTHS = 13
+# Last month plus this (partial) one.
+TOP_CATEGORIES_TREND_MONTHS = 2
 TOP_TRANSACTIONS_LIMIT = 5
 # The most recent transactions widget groups by calendar day rather than
 # capping at a flat row count — RECENT_DAYS_LIMIT is the number of most
@@ -300,16 +300,15 @@ def dashboard(request: Request) -> HTMLResponse:
     budget_rows = budget_rows[:BUDGET_ATTENTION_LIMIT]
 
     # --- top categories this month ---
-    # 13 trailing months (12 full months before this one, plus this one
-    # itself) so both comparisons below come from one call:
-    # trend_keys[-1]/trend_totals[...][-1] is this month (mirrors
-    # month_categories above, just per-category-series shaped instead),
-    # trend_keys[-2] is last month, and trend_keys[:12] are the 12 full
-    # months the average is over — deliberately excluding this month's
-    # own (still-partial) total, which would otherwise drag a mid-month
-    # average down for no real reason.
+    # Last month comes from a 2-month trailing window (index -2; -1 is
+    # this month). The all-time average deliberately excludes this
+    # month's own still-partial total, which would otherwise drag a
+    # mid-month average down for no real reason.
     _, trend_totals = category_recent_monthly_totals(
         ledger, TransactionType.EXPENSE, today, months=TOP_CATEGORIES_TREND_MONTHS
+    )
+    all_time_avg = category_all_time_monthly_average(
+        ledger, TransactionType.EXPENSE, today
     )
     top_categories = []
     for cat in month_categories[:TOP_CATEGORIES_LIMIT]:
@@ -317,7 +316,7 @@ def dashboard(request: Request) -> HTMLResponse:
             cat.name, [Decimal("0")] * TOP_CATEGORIES_TREND_MONTHS
         )
         last_month_amount = series[-2]
-        avg_12mo = sum(series[:12], Decimal("0")) / 12
+        avg_all_time = all_time_avg.get(cat.name, Decimal("0"))
         top_categories.append(
             {
                 "name": cat.name,
@@ -325,11 +324,18 @@ def dashboard(request: Request) -> HTMLResponse:
                 "amount": cat.total,
                 "last_month_amount": last_month_amount,
                 "vs_last_month_pct": _pct_change(cat.total, last_month_amount),
-                "avg_12mo": avg_12mo,
-                "vs_avg_12mo_pct": _pct_change(cat.total, avg_12mo),
+                "avg_all_time": avg_all_time,
+                "vs_avg_all_time_pct": _pct_change(cat.total, avg_all_time),
             }
         )
-    top_category_max = max((c["amount"] for c in top_categories), default=Decimal("0"))
+    top_category_max = max(
+        (
+            value
+            for c in top_categories
+            for value in (c["amount"], c["last_month_amount"], c["avg_all_time"])
+        ),
+        default=Decimal("0"),
+    )
 
     # --- needs attention ---
     uncategorized_count = sum(

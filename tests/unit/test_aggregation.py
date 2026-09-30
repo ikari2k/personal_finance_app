@@ -8,6 +8,7 @@ import pytest
 from app.models.account import Account
 from app.models.transaction import Transaction, TransactionType
 from app.services.aggregation import (
+    category_all_time_monthly_average,
     category_breakdown,
     category_mom_deltas,
     category_monthly_series,
@@ -1665,3 +1666,44 @@ def test_rolling_average_monthly_expense_scales_the_daily_rate():
 
 def test_rolling_average_monthly_expense_none_when_daily_is_none():
     assert rolling_average_monthly_expense([], date(2026, 9, 15), 30) is None
+
+
+def test_category_all_time_monthly_average_spans_full_months_and_excludes_current():
+    txns = [
+        _txn(
+            id="a", date=date(2026, 1, 5), category="Groceries", amount=Decimal("-40")
+        ),
+        _txn(
+            id="b", date=date(2026, 3, 5), category="Groceries", amount=Decimal("-80")
+        ),
+        _txn(
+            id="c", date=date(2026, 4, 2), category="Groceries", amount=Decimal("-999")
+        ),
+        _txn(id="d", date=date(2026, 2, 9), category="Fuel", amount=Decimal("-30")),
+    ]
+
+    avg = category_all_time_monthly_average(
+        txns, TransactionType.EXPENSE, today=date(2026, 4, 10)
+    )
+
+    # Jan-Mar = 3 full months; April (current) is left out of both sides.
+    assert avg["Groceries"] == Decimal("40")
+    assert avg["Fuel"] == Decimal("10")
+
+
+def test_category_all_time_monthly_average_empty_when_no_full_month_yet():
+    txns = [_txn(id="a", date=date(2026, 4, 2), amount=Decimal("-10"))]
+
+    assert (
+        category_all_time_monthly_average(
+            txns, TransactionType.EXPENSE, today=date(2026, 4, 10)
+        )
+        == {}
+    )
+
+
+def test_category_all_time_monthly_average_raises_for_transfer_type():
+    with pytest.raises(ValueError):
+        category_all_time_monthly_average(
+            [], TransactionType.TRANSFER, today=date(2026, 4, 10)
+        )

@@ -2085,7 +2085,7 @@ fieldset legend {
   font-size: 0.8rem;
   margin-bottom: 0.25rem;
 }
-.dash-cat-bar-name { font-weight: 600; }
+.dash-cat-bar-name { font-weight: 600; display: block; font-size: 0.8rem; }
 .dash-cat-bar-amount { font-variant-numeric: tabular-nums; color: var(--pico-muted-color); font-size: 0.76rem; }
 .dash-cat-bar-track {
   display: block;
@@ -2096,21 +2096,25 @@ fieldset legend {
 }
 .dash-cat-bar-fill { display: block; height: 100%; background: #2563eb; border-radius: 999px; }
 
-/* Dashboard "Top categories this month" — each row's own vs-last-month/
- * vs-12mo-average deltas, same up=green/down=red expense convention as
- * .dash-rolling-avg-trend above (a rising expense is "down"/bad here,
- * not a plain sign-based color) — a new pair of classes rather than
- * reusing that one directly, since these sit inside a .dash-cat-bar-row
- * rather than that widget's own markup. */
-.dash-cat-bar-compare {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0 0.6rem;
-  margin-top: 0.15rem;
+/* This-month / last-month / average-per-month lines share one grid so
+ * their labels, bars, amounts and delta columns line up exactly, all on
+ * one scale (the widget's own max) so lengths compare across rows too.
+ * The delta column is empty on the this-month line. */
+.dash-cat-line {
+  display: grid;
+  grid-template-columns: 5rem 1fr 4.6rem 3.6rem;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.3rem;
   font-size: 0.72rem;
+  color: var(--pico-muted-color);
 }
-.dash-cat-bar-delta.up { color: var(--pico-ins-color); }
-.dash-cat-bar-delta.down { color: var(--pico-del-color); }
+.dash-cat-line-amount { text-align: right; font-variant-numeric: tabular-nums; }
+.dash-cat-line-delta { text-align: right; font-variant-numeric: tabular-nums; }
+.dash-cat-line-delta.up { color: var(--pico-ins-color); }
+.dash-cat-line-delta.down { color: var(--pico-del-color); }
+.dash-cat-bar-fill-last { background: #8b5cf6; }
+.dash-cat-bar-fill-avg { background: #14b8a6; }
 
 /* ---- recent transactions ---- */
 .dash-txn-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }

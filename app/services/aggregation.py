@@ -1099,6 +1099,46 @@ def category_recent_monthly_totals(
     return keys, result
 
 
+def category_all_time_monthly_average(
+    transactions: Iterable[Transaction],
+    txn_type: TransactionType,
+    today: date_,
+) -> dict[str, Decimal]:
+    """Return each category's average monthly total over the ledger's full months.
+
+    The divisor is every calendar month from the earliest transaction in
+    the ledger (any category, any type — the same span
+    ``_full_ledger_month_range`` walks) through the month *before*
+    ``today``'s, so a category that's quiet for some months is honestly
+    averaged down by them. ``today``'s own (still-partial) month is left
+    out of both numerator and divisor, which would otherwise drag a
+    mid-month average down for no real reason. Returns ``{}`` when there
+    is no full month yet. Raises on TRANSFER, same as
+    ``category_breakdown``.
+    """
+    if txn_type is TransactionType.TRANSFER:
+        raise ValueError("transfers have no category breakdown")
+
+    transactions = list(transactions)
+    if not transactions:
+        return {}
+
+    first = min(t.date for t in transactions)
+    current_index = today.year * 12 + (today.month - 1)
+    month_count = current_index - (first.year * 12 + (first.month - 1))
+    if month_count <= 0:
+        return {}
+
+    totals: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
+    for transaction in transactions:
+        if transaction.type is not txn_type:
+            continue
+        if transaction.date.year * 12 + (transaction.date.month - 1) >= current_index:
+            continue
+        totals[transaction.category] += abs(transaction.amount)
+    return {name: total / month_count for name, total in totals.items()}
+
+
 @dataclass
 class CategoryMoM:
     """One category's total vs. its immediately preceding calendar month.
