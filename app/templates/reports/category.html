@@ -365,7 +365,17 @@
       </article>
     {% endif %}
 
-    <div class="report-columns" style="margin-top: 1.5rem;">
+    {#
+      The "By subcategory" column only makes sense once the category
+      actually has subcategories of its own — a category never used
+      with one (e.g. "Salary") has nothing to break down there, so the
+      whole column (toggle + all three panels) is skipped rather than
+      shown with an empty "No subcategorized activity" state in every
+      one of its three tabs. Falls back to the single-column "By year"/
+      "By month" layout (no report-columns grid) in that case, rather
+      than leaving an empty second grid cell.
+    #}
+    <div class="{{ 'report-columns' if config.subcategories else '' }}" style="margin-top: 1.5rem;">
       <div>
         <h2>By year</h2>
         <div class="table-scroll">
@@ -432,6 +442,7 @@
         {% endif %}
       </div>
 
+      {% if config.subcategories %}
       <div>
         <h2>By subcategory</h2>
         {#
@@ -537,6 +548,7 @@
           {% endif %}
         </div>
       </div>
+      {% endif %}
     </div>
 
     <div class="cat-detail-footer">

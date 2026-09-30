@@ -1105,3 +1105,38 @@ def test_category_detail_subcategory_links_point_to_subcategory_report(client):
         "/reports/subcategory?txn_type=expense&category=Groceries"
         "&subcategory=Supermarket" in response.text
     )
+
+
+def test_category_detail_hides_by_subcategory_section_when_none_exist(client):
+    _create_account(client)
+    _create_transaction(
+        client, date="2026-01-10", type="expense", category="Groceries", amount="50"
+    )
+
+    response = client.get(
+        "/reports/category", params={"txn_type": "expense", "category": "Groceries"}
+    )
+
+    assert response.status_code == 200
+    assert "By subcategory" not in response.text
+    assert "report-columns" not in response.text
+
+
+def test_category_detail_shows_by_subcategory_section_when_any_exist(client):
+    _create_account(client)
+    _create_transaction(
+        client,
+        date="2026-01-10",
+        type="expense",
+        category="Groceries",
+        subcategory="Supermarket",
+        amount="50",
+    )
+
+    response = client.get(
+        "/reports/category", params={"txn_type": "expense", "category": "Groceries"}
+    )
+
+    assert response.status_code == 200
+    assert "By subcategory" in response.text
+    assert "report-columns" in response.text
