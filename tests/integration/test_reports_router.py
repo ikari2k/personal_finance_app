@@ -1,6 +1,5 @@
 """Integration tests for the reports router."""
 
-from calendar import monthrange
 from datetime import date
 
 
@@ -1143,14 +1142,14 @@ def test_category_detail_shows_by_subcategory_section_when_any_exist(client):
     assert "report-columns" in response.text
 
 
-def test_reports_overview_omits_heatmap_when_no_expenses(client):
+def test_reports_overview_omits_treemap_when_no_expenses(client):
     response = client.get("/reports")
 
     assert response.status_code == 200
-    assert "Spending heatmap" not in response.text
+    assert "Spending breakdown" not in response.text
 
 
-def test_reports_overview_shows_spending_heatmap_for_top_categories(client):
+def test_reports_overview_shows_treemap_for_every_expense_category(client):
     _create_account(client)
     today = date.today().isoformat()
     _create_transaction(
@@ -1163,37 +1162,30 @@ def test_reports_overview_shows_spending_heatmap_for_top_categories(client):
     response = client.get("/reports")
 
     assert response.status_code == 200
-    assert "Spending heatmap" in response.text
-    assert "top-cat-heatmap" in response.text
+    assert "Spending breakdown" in response.text
+    assert "expense-treemap-svg" in response.text
     assert "Groceries" in response.text
     assert "Rent" in response.text
-    assert "heatmap-fill" in response.text
+    assert "treemap-tier-" in response.text
 
 
-def test_reports_overview_heatmap_cell_links_to_that_category_and_month(client):
+def test_reports_overview_treemap_box_links_to_that_category(client):
     _create_account(client)
-    today = date.today()
+    today = date.today().isoformat()
     _create_transaction(
-        client,
-        date=today.isoformat(),
-        type="expense",
-        category="Groceries",
-        amount="80",
+        client, date=today, type="expense", category="Groceries", amount="80"
     )
 
     response = client.get("/reports")
 
     assert response.status_code == 200
-    last_day = monthrange(today.year, today.month)[1]
-    month_from = f"{today.year:04d}-{today.month:02d}-01"
-    month_to = f"{today.year:04d}-{today.month:02d}-{last_day:02d}"
     assert (
-        f"date_from={month_from}&amp;date_to={month_to}&amp;category=Groceries"
-        f"&amp;subcategory=&amp;txn_type=expense" in response.text
+        'href="/transactions?date_from=&amp;date_to=&amp;category=Groceries'
+        "&amp;subcategory=&amp;txn_type=expense" in response.text
     )
 
 
-def test_reports_overview_heatmap_round_trips_account_filter(client):
+def test_reports_overview_treemap_round_trips_account_filter(client):
     _create_account(client, "chk")
     _create_transaction(
         client,
@@ -1208,3 +1200,71 @@ def test_reports_overview_heatmap_round_trips_account_filter(client):
 
     assert response.status_code == 200
     assert "account_id=chk" in response.text
+
+
+def test_reports_overview_treemap_color_reflects_share_of_total_expense(client):
+    _create_account(client)
+    today = date.today().isoformat()
+    # Rent dominates the dollar total (90% of all expense) despite being
+    # a single transaction, while Groceries is many small transactions
+    # (a bigger box) but a small dollar share (a paler tier) — size and
+    # color should read independently.
+    _create_transaction(
+        client, date=today, type="expense", category="Rent", amount="900"
+    )
+    for _ in range(5):
+        _create_transaction(
+            client, date=today, type="expense", category="Groceries", amount="20"
+        )
+
+    response = client.get("/reports")
+
+    assert response.status_code == 200
+    rent_start = response.text.index('data-tooltip-title="Rent"')
+    rent_block = response.text[rent_start : rent_start + 400]
+    assert "treemap-tier-5" in rent_block  # 90% -> top tier
+
+    groceries_start = response.text.index('data-tooltip-title="Groceries"')
+    groceries_block = response.text[groceries_start : groceries_start + 400]
+    assert "treemap-tier-1" in groceries_block  # 10% -> low tier
+
+
+def test_reports_overview_treemap_box_size_reflects_transaction_count(client):
+    _create_account(client)
+    today = date.today().isoformat()
+    _create_transaction(
+        client, date=today, type="expense", category="Rent", amount="900"
+    )
+    for _ in range(9):
+        _create_transaction(
+            client, date=today, type="expense", category="Groceries", amount="20"
+        )
+
+    from app.routers.reports import (
+        _category_treemap,
+        _normalize_treemap_sizes,
+        _squarify,
+    )
+    from app.services.aggregation import CategoryTotal
+
+    categories = [
+        CategoryTotal(
+            name="Groceries", total=180, count=9, yoy_delta=None, subcategories=[]
+        ),
+        CategoryTotal(
+            name="Rent", total=900, count=1, yoy_delta=None, subcategories=[]
+        ),
+    ]
+    treemap = _category_treemap(categories, {}, "", 1080)
+    boxes = {b["name"]: b for b in treemap["boxes"]}
+    groceries_area = boxes["Groceries"]["w"] * boxes["Groceries"]["h"]
+    rent_area = boxes["Rent"]["w"] * boxes["Rent"]["h"]
+    assert groceries_area > rent_area
+    assert boxes["Rent"]["tier"] == 5
+    assert boxes["Groceries"]["tier"] == 1
+
+    # Sanity check the layout primitives directly too.
+    sizes = _normalize_treemap_sizes([9.0, 1.0], 100, 50)
+    rects = _squarify(sizes, 0, 0, 100, 50)
+    assert len(rects) == 2
+    assert sum(w * h for _, _, w, h in rects) == 100 * 50

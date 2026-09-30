@@ -1450,80 +1450,216 @@ def _year_stats(years: list, today: date) -> dict[int, dict]:
     return stats
 
 
-# The landing page's "Top spending categories" heatmap — how many
-# trailing calendar months it plots per row.
-HEATMAP_MONTHS = 12
+def _normalize_treemap_sizes(sizes: list[float], dx: float, dy: float) -> list[float]:
+    """Scale ``sizes`` to sum to exactly ``dx * dy`` — squarify's input contract."""
+    total = sum(sizes)
+    if total <= 0:
+        return [0.0] * len(sizes)
+    factor = dx * dy / total
+    return [s * factor for s in sizes]
 
 
-def _category_heatmap(
-    transactions: list,
+def _treemap_layout_row(
+    sizes: list[float], x: float, y: float, dy: float
+) -> list[tuple[float, float, float, float]]:
+    covered = sum(sizes)
+    width = covered / dy if dy else 0.0
+    rects = []
+    cy = y
+    for size in sizes:
+        h = size / width if width else 0.0
+        rects.append((x, cy, width, h))
+        cy += h
+    return rects
+
+
+def _treemap_layout_col(
+    sizes: list[float], x: float, y: float, dx: float
+) -> list[tuple[float, float, float, float]]:
+    covered = sum(sizes)
+    height = covered / dx if dx else 0.0
+    rects = []
+    cx = x
+    for size in sizes:
+        w = size / height if height else 0.0
+        rects.append((cx, y, w, height))
+        cx += w
+    return rects
+
+
+def _treemap_layout(
+    sizes: list[float], x: float, y: float, dx: float, dy: float
+) -> list[tuple[float, float, float, float]]:
+    return (
+        _treemap_layout_row(sizes, x, y, dy)
+        if dx >= dy
+        else _treemap_layout_col(sizes, x, y, dx)
+    )
+
+
+def _treemap_leftover(
+    sizes: list[float], x: float, y: float, dx: float, dy: float
+) -> tuple[float, float, float, float]:
+    covered = sum(sizes)
+    if dx >= dy:
+        width = covered / dy if dy else 0.0
+        return (x + width, y, dx - width, dy)
+    height = covered / dx if dx else 0.0
+    return (x, y + height, dx, dy - height)
+
+
+def _treemap_worst_ratio(
+    sizes: list[float], x: float, y: float, dx: float, dy: float
+) -> float:
+    worst = 0.0
+    for _, _, w, h in _treemap_layout(sizes, x, y, dx, dy):
+        if w <= 0 or h <= 0:
+            return float("inf")
+        worst = max(worst, w / h, h / w)
+    return worst if sizes else float("inf")
+
+
+def _squarify(
+    sizes: list[float], x: float, y: float, dx: float, dy: float
+) -> list[tuple[float, float, float, float]]:
+    """Return one ``(x, y, w, h)`` rect per entry in ``sizes``, tiled to fill the rect.
+
+    A straightforward port of the well-known "squarified treemap"
+    algorithm (Bruls, Huizing, van Wijk): greedily grows the current
+    row as long as doing so doesn't worsen the row's worst box aspect
+    ratio, lays that row out across whichever side of the remaining
+    rectangle is shorter, then recurses into whatever rectangle is
+    left over. ``sizes`` must already be area-normalized to sum to
+    ``dx * dy`` (``_normalize_treemap_sizes``) and read best sorted
+    descending, same as every reference implementation — the caller is
+    responsible for both.
+    """
+    if not sizes or dx <= 0 or dy <= 0:
+        return []
+    if len(sizes) == 1:
+        return _treemap_layout(sizes, x, y, dx, dy)
+
+    i = 1
+    while i < len(sizes) and _treemap_worst_ratio(
+        sizes[:i], x, y, dx, dy
+    ) >= _treemap_worst_ratio(sizes[: i + 1], x, y, dx, dy):
+        i += 1
+
+    current = sizes[:i]
+    remaining = sizes[i:]
+    leftover_x, leftover_y, leftover_dx, leftover_dy = _treemap_leftover(
+        current, x, y, dx, dy
+    )
+    return _treemap_layout(current, x, y, dx, dy) + _squarify(
+        remaining, leftover_x, leftover_y, leftover_dx, leftover_dy
+    )
+
+
+# The landing page's expense-category treemap — fixed canvas size (the
+# viewBox coordinate system every box's x/y/w/h is computed in; the
+# template stretches it to the container's actual width via CSS, same
+# "no-scroll, scale to fill" convention as a short net-worth chart).
+_TREEMAP_WIDTH = 960
+_TREEMAP_HEIGHT = 440
+
+# Upper bound (exclusive) of each color tier, as a % of the whole
+# period's total expense — the last tier has no upper bound. Chosen for
+# a *category*-level distribution (a handful of categories can
+# realistically claim 20-40%+ of a whole budget, unlike an individual
+# transaction or subcategory), not the finer-grained bands a per-
+# subcategory or per-month view would want.
+_TREEMAP_TIER_BOUNDS = [10, 20, 30, 40, 50]
+_TREEMAP_TIER_COUNT = len(_TREEMAP_TIER_BOUNDS) + 1
+
+
+def _treemap_tier(pct: float) -> int:
+    for index, bound in enumerate(_TREEMAP_TIER_BOUNDS):
+        if pct < bound:
+            return index
+    return _TREEMAP_TIER_COUNT - 1
+
+
+def _treemap_tier_labels() -> list[str]:
+    """Return one legend label per tier, e.g. ``["<10%", "10–20%", ..., "50%+"]``."""
+    bounds = _TREEMAP_TIER_BOUNDS
+    labels = [f"<{bounds[0]}%"]
+    labels.extend(f"{lo}–{hi}%" for lo, hi in zip(bounds, bounds[1:]))
+    labels.append(f"{bounds[-1]}%+")
+    return labels
+
+
+def _category_treemap(
     categories: list[CategoryTotal],
     expense_config: dict,
     account_id: str,
-    today: date,
-) -> dict:
-    """Build the "Top spending categories" heatmap's geometry (``/reports``).
+    grand_total: Decimal,
+) -> dict | None:
+    """Build the all-time expense-category treemap's geometry (``/reports``).
 
-    One row per category in ``categories`` — already ranked and capped
-    by the caller, the same set the table above it shows, so the chart
-    reads as a visualization of that same data rather than a second,
-    differently-scoped metric. One column per of the trailing
-    ``HEATMAP_MONTHS`` calendar months (``category_recent_monthly_totals``,
-    already used for the categories-index sparklines — reused here
-    rather than a second monthly-totals implementation), oldest first.
+    One box per expense category with any all-time activity — every
+    category, not just the "Top spending categories" table's own
+    capped preview above it, since a treemap can legibly show far more
+    entries than a ranked table. Deliberately category-level only,
+    never drilling into subcategories: this page is explicitly all-time/
+    whole-portfolio context (the per-category drill-down with its own
+    subcategory breakdown already lives one click away, at
+    ``/reports/category``).
 
-    Each cell's fill intensity is relative to that *row's own* highest
-    month, not the whole grid's highest cell — a high-volume category
-    (Housing) and a low-volume one (Entertainment) both read as
-    light/dark within their own range instead of the smaller category
-    washing out to nothing next to the larger one. Every cell is a
-    click-through into ``/transactions`` scoped to exactly that
-    category and month, same convention as every other chart mark in
-    this app.
+    A box's *area* is proportional to that category's own share of the
+    whole period's *transaction count* (many small transactions read as
+    a big box), while its *color* is an independent 6-tier scale of
+    that category's share of the whole period's total *expense*
+    (dominates your spending = deep red, a small slice = pale). The two
+    are deliberately decoupled: a rare, large expense (a mortgage
+    payment — few transactions, high dollar share) reads as "small and
+    deep red," while a frequent, cheap one (groceries) reads as "big
+    and however red its own dollar share earns" — a pattern a plain
+    dollar-total ranking can't show on its own.
     """
-    keys, totals_by_category = category_recent_monthly_totals(
-        transactions, TransactionType.EXPENSE, today, months=HEATMAP_MONTHS
-    )
-    month_headers = []
-    previous_year = None
-    for key in keys:
-        year, month = (int(part) for part in key.split("-"))
-        month_headers.append(
-            {"month": _MONTH_ABBR[month], "year": year if year != previous_year else ""}
-        )
-        previous_year = year
+    active = [c for c in categories if c.count > 0]
+    if not active:
+        return None
 
-    rows = []
-    for category in categories:
-        values = totals_by_category.get(category.name, [Decimal("0")] * len(keys))
-        row_max = max(values, default=Decimal("0"))
-        cells = []
-        for key, value in zip(keys, values, strict=True):
-            year, month = (int(part) for part in key.split("-"))
-            date_from, date_to = _month_date_bounds(key)
-            cells.append(
-                {
-                    "amount": value,
-                    "pct": float(value / row_max * 100) if row_max else 0.0,
-                    "label": f"{_MONTH_ABBR[month]} {year}",
-                    "link": breadcrumbs.transactions_link(
-                        date_from=date_from,
-                        date_to=date_to,
-                        category=category.name,
-                        txn_type=TransactionType.EXPENSE.value,
-                        account_id=account_id,
-                    ),
-                }
-            )
-        rows.append(
+    active = sorted(active, key=lambda c: c.count, reverse=True)
+    sizes = _normalize_treemap_sizes(
+        [float(c.count) for c in active], _TREEMAP_WIDTH, _TREEMAP_HEIGHT
+    )
+    rects = _squarify(sizes, 0, 0, _TREEMAP_WIDTH, _TREEMAP_HEIGHT)
+
+    boxes = []
+    for category, (x, y, w, h) in zip(active, rects, strict=True):
+        pct = float(category.total / grand_total * 100) if grand_total else 0.0
+        tier = _treemap_tier(pct)
+        boxes.append(
             {
                 "name": category.name,
                 "icon": expense_config.get(category.name, {}).get("icon", ""),
-                "cells": cells,
+                "total": category.total,
+                "count": category.count,
+                "pct": pct,
+                "x": x,
+                "y": y,
+                "w": w,
+                "h": h,
+                "tier": tier,
+                # Tiers 3-5's fill is dark enough that dark text loses
+                # contrast — see .treemap-text-light in style.css.
+                "light_text": tier >= 3,
+                "show_label": w >= 68 and h >= 34,
+                "link": breadcrumbs.transactions_link(
+                    category=category.name,
+                    txn_type=TransactionType.EXPENSE.value,
+                    account_id=account_id,
+                ),
             }
         )
 
-    return {"months": month_headers, "rows": rows}
+    return {
+        "width": _TREEMAP_WIDTH,
+        "height": _TREEMAP_HEIGHT,
+        "boxes": boxes,
+        "tier_labels": _treemap_tier_labels(),
+    }
 
 
 @router.get("", response_class=HTMLResponse)
@@ -1571,12 +1707,8 @@ def reports_overview(request: Request, account_id: str = "") -> HTMLResponse:
         )
         for c in top_categories
     }
-    top_categories_heatmap = (
-        _category_heatmap(
-            transactions, top_categories, expense_config, account_id, today
-        )
-        if top_categories
-        else None
+    expense_treemap = _category_treemap(
+        all_time_expense_breakdown, expense_config, account_id, expense_all_time_total
     )
 
     # All-time hero stats — no delta alongside them, since there's no
@@ -1611,7 +1743,7 @@ def reports_overview(request: Request, account_id: str = "") -> HTMLResponse:
             "top_categories": top_categories,
             "top_categories_pct": top_categories_pct,
             "top_categories_txn_links": top_categories_txn_links,
-            "top_categories_heatmap": top_categories_heatmap,
+            "expense_treemap": expense_treemap,
             "expense_config": expense_config,
             "all_time_stats": all_time_stats,
             "current_year": today.year,

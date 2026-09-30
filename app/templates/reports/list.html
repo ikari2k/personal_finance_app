@@ -58,59 +58,54 @@
       </table>
     </div>
 
-    {% if top_categories_heatmap %}
-      <h3 style="margin-top: 1.25rem; margin-bottom: 0.15rem;">Spending heatmap</h3>
+    {% if expense_treemap %}
+      <h3 style="margin-top: 1.25rem; margin-bottom: 0.15rem;">Spending breakdown</h3>
       <p class="muted" style="margin-top: 0;">
-        Monthly spend per category, last {{ top_categories_heatmap.months|length }} months.
-        Shading is relative to each category's own highest month — click a cell to view those transactions.
+        Every expense category, all time. Box size is that category's share of your transaction count;
+        color is its share of total expense — click a box to view those transactions.
       </p>
-      <div class="table-scroll">
-        <table class="heatmap-table" id="top-cat-heatmap">
-          <thead>
-            <tr>
-              <th></th>
-              {% for m in top_categories_heatmap.months %}
-                <th class="heatmap-month-th">
-                  {{ m.month }}{% if m.year %}<span class="heatmap-month-th-year">{{ m.year }}</span>{% endif %}
-                </th>
-              {% endfor %}
-            </tr>
-          </thead>
-          <tbody>
-            {% for row in top_categories_heatmap.rows %}
-              <tr>
-                <td class="heatmap-row-label">
-                  {% if row.icon %}<span class="cat-cell-icon cat-cell-icon-expense">{{ category_icon(row.icon) }}</span>{% endif %}
-                  {{ row.name }}
-                </td>
-                {% for cell in row.cells %}
-                  <td class="heatmap-td">
-                    <a class="heatmap-cell" href="{{ cell.link }}"
-                       aria-label="{{ row.name }}, {{ cell.label }}: {{ '%.2f'|format(cell.amount) }} — view transactions"
-                       data-tooltip-title="{{ row.name }}"
-                       data-tooltip-kind="{{ cell.label }}"
-                       data-tooltip-amount="{{ '%.2f'|format(cell.amount) }}">
-                      <span class="heatmap-fill" style="opacity: {{ '%.3f'|format(cell.pct / 100) }};"></span>
-                    </a>
-                  </td>
-                {% endfor %}
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+      <svg viewBox="0 0 {{ expense_treemap.width }} {{ expense_treemap.height }}"
+           class="treemap-svg" id="expense-treemap-svg" role="img" aria-label="Expense categories by transaction count and share of spend">
+        {% for box in expense_treemap.boxes %}
+          <a class="treemap-box-link" href="{{ box.link }}"
+             aria-label="{{ box.name }}: {{ '%.2f'|format(box.total) }}, {{ '%.1f'|format(box.pct) }}% of expenses, {{ box.count }} transaction{{ 's' if box.count != 1 else '' }} — view transactions"
+             data-tooltip-title="{{ box.name }}"
+             data-tooltip-amount="{{ '%.2f'|format(box.total) }} &middot; {{ '%.1f'|format(box.pct) }}% of expenses"
+             data-tooltip-count="{{ box.count }} transaction{{ 's' if box.count != 1 else '' }}">
+            <g class="{{ 'treemap-text-light' if box.light_text }}">
+              <rect x="{{ box.x }}" y="{{ box.y }}" width="{{ box.w }}" height="{{ box.h }}"
+                    class="treemap-box treemap-tier-{{ box.tier }}"/>
+              {% if box.show_label %}
+                {% if box.icon %}
+                  <g transform="translate({{ box.x + 8 }}, {{ box.y + 8 }}) scale(0.62)">
+                    {{ category_icon(box.icon) }}
+                  </g>
+                {% endif %}
+                <text x="{{ box.x + (26 if box.icon else 8) }}" y="{{ box.y + 20 }}" class="treemap-label-name">{{ box.name }}</text>
+                <text x="{{ box.x + 8 }}" y="{{ box.y + 36 }}" class="treemap-label-sub">{{ '%.1f'|format(box.pct) }}% &middot; {{ box.count }} txn{{ 's' if box.count != 1 else '' }}</text>
+              {% endif %}
+            </g>
+          </a>
+        {% endfor %}
+      </svg>
+      <div class="treemap-legend">
+        <span>Color = % of total expense:</span>
+        {% for label in expense_treemap.tier_labels %}
+          <span><span class="treemap-legend-swatch treemap-tier-{{ loop.index0 }}"></span>{{ label }}</span>
+        {% endfor %}
       </div>
-      <div class="chart-tooltip" id="top-cat-heatmap-tooltip" hidden></div>
+      <div class="chart-tooltip" id="expense-treemap-tooltip" hidden></div>
       <script>
         (function () {
-          var tooltip = document.getElementById("top-cat-heatmap-tooltip");
+          var tooltip = document.getElementById("expense-treemap-tooltip");
           if (!tooltip) return;
-          document.querySelectorAll("#top-cat-heatmap .heatmap-cell").forEach(function (link) {
+          document.querySelectorAll("#expense-treemap-svg .treemap-box-link").forEach(function (link) {
             link.addEventListener("mouseenter", function () {
               var d = link.dataset;
               tooltip.innerHTML =
                 '<div class="chart-tooltip-title">' + d.tooltipTitle + '</div>' +
-                '<div class="chart-tooltip-amount">' + d.tooltipKind + ': ' + d.tooltipAmount + '</div>' +
-                '<div class="chart-tooltip-hint">Click to view transactions</div>';
+                '<div class="chart-tooltip-amount">' + d.tooltipAmount + '</div>' +
+                '<div class="chart-tooltip-hint">' + d.tooltipCount + ' &middot; click to view</div>';
               tooltip.hidden = false;
             });
             link.addEventListener("mousemove", function (event) {

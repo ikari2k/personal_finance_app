@@ -1597,59 +1597,79 @@ fieldset legend {
   white-space: nowrap;
 }
 
-/* /reports' "Top spending categories" heatmap — same pinned-first-
- * column treatment as .month-matrix-table, since it's the same "a
- * category name column plus many month columns" shape. Each cell is a
- * two-layer square: a neutral .heatmap-fill base (so a genuinely
- * zero-spend month still reads as a visible, if empty, cell rather
- * than vanishing) with a var(--pico-del-color) overlay whose opacity
- * (set inline per cell, server-side) encodes that month's spend
- * relative to the row's own highest month. */
-.heatmap-table th:first-child,
-.heatmap-table td:first-child {
-  position: sticky;
-  left: 0;
-  background: var(--pico-background-color);
-  z-index: 1;
-  white-space: nowrap;
-}
-.heatmap-month-th {
-  text-align: center;
-  font-weight: 400;
-  color: var(--pico-muted-color);
-  font-size: 0.78rem;
-}
-.heatmap-month-th-year {
+/* /reports' expense-category treemap (app.routers.reports
+ * ._category_treemap/_squarify) — a box's area is that category's
+ * share of the period's transaction *count*, its fill tier is an
+ * independent 6-step scale of its share of the period's total
+ * *expense* (deep red = dominates spending, pale = a small slice).
+ * Always fills its container width (no scroll — a single fixed-aspect
+ * canvas, same "stretch to fill" treatment as a short trend chart). */
+.treemap-svg {
   display: block;
-  font-size: 0.68rem;
+  width: 100%;
+  height: auto;
 }
-.heatmap-row-label {
+.treemap-box {
+  stroke: var(--pico-background-color);
+  stroke-width: 2;
+}
+.treemap-box-link:hover .treemap-box,
+.treemap-box-link:focus .treemap-box {
+  stroke: var(--pico-color);
+}
+.treemap-tier-0 { fill: #fbe4e1; }
+.treemap-tier-1 { fill: #f3b8b0; }
+.treemap-tier-2 { fill: #e88b7d; }
+.treemap-tier-3 { fill: #d85d49; }
+.treemap-tier-4 { fill: #b93b28; }
+.treemap-tier-5 { fill: #8f2416; }
+.treemap-label-name {
+  font-size: 13px;
+  font-weight: 700;
+  fill: #241512;
+  pointer-events: none;
+}
+.treemap-label-sub {
+  font-size: 11px;
+  fill: #241512;
+  opacity: 0.8;
+  pointer-events: none;
+}
+/* Tiers 3-5's fill is dark enough that dark text loses contrast — the
+ * box's own group (app/templates/reports/_treemap.html wraps each
+ * box's rect+text in one <g>) carries this class so the descendant
+ * selector reaches both labels; a plain per-tier selector on the text
+ * itself can't work since the text is a sibling of the rect, not its
+ * descendant. */
+.treemap-text-light .treemap-label-name {
+  fill: #fdf1ef;
+}
+.treemap-text-light .treemap-label-sub {
+  fill: #fdf1ef;
+  opacity: 0.85;
+}
+.treemap-box-link svg {
+  color: #241512;
+}
+.treemap-text-light svg {
+  color: #fdf1ef;
+}
+.treemap-legend {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.35rem 0.6rem;
+  font-size: 0.78rem;
+  color: var(--pico-muted-color);
+  margin-top: 0.5rem;
 }
-.heatmap-td {
-  padding: 0.15rem !important;
-}
-.heatmap-cell {
-  position: relative;
-  display: block;
-  width: 2.1rem;
-  height: 2.1rem;
-  margin: 0 auto;
-  border-radius: var(--pico-border-radius);
-  background: var(--pico-muted-border-color);
-  overflow: hidden;
-}
-.heatmap-cell:hover,
-.heatmap-cell:focus {
-  outline: 2px solid var(--pico-del-color);
-  outline-offset: 1px;
-}
-.heatmap-fill {
-  position: absolute;
-  inset: 0;
-  background: var(--pico-del-color);
+.treemap-legend-swatch {
+  display: inline-block;
+  width: 0.8rem;
+  height: 0.8rem;
+  border-radius: 2px;
+  vertical-align: middle;
+  margin-right: 0.2rem;
 }
 
 /* Month drill-down: spending pie chart, plain inline SVG (see
