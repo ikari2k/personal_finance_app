@@ -59,9 +59,6 @@ router = APIRouter(prefix="/reports", tags=["reports"])
 # The month drill-down's own "Biggest movers" list — how many ranked
 # categories it shows.
 MOVERS_LIMIT = 10
-# The landing page's "Top spending categories" preview — how many rows
-# it shows before pointing at the full /reports/categories index.
-TOP_SPENDING_CATEGORIES_LIMIT = 10
 
 
 def _savings_rate(net_total: Decimal, income_total: Decimal) -> Decimal | None:
@@ -1730,9 +1727,80 @@ def _category_treemap(
     }
 
 
+_SPENDING_CATEGORIES_COLUMNS = ["name", "total", "pct", "count"]
+_SPENDING_CATEGORIES_DEFAULT_DIR = {
+    "name": "asc",
+    "total": "desc",
+    "pct": "desc",
+    "count": "desc",
+}
+_SPENDING_CATEGORIES_LABELS = {
+    "name": "Category",
+    "total": "Total",
+    "pct": "% of expenses",
+    "count": "# Txns",
+}
+
+
+def _spending_categories_sort_link(
+    column: str, current_sort: str, current_dir: str, account_id: str
+) -> str:
+    """Build one column header's sort link for the Top spending categories table.
+
+    Clicking the already-active column flips its direction; clicking
+    any other column switches to it at that column's own sensible
+    default direction (name: A-Z, every numeric column: highest
+    first) — the same "click again to reverse" convention as any
+    ordinary sortable table header.
+    """
+    next_dir = (
+        ("asc" if current_dir == "desc" else "desc")
+        if column == current_sort
+        else _SPENDING_CATEGORIES_DEFAULT_DIR[column]
+    )
+    query = f"cat_sort={column}&cat_dir={next_dir}"
+    if account_id:
+        query += f"&account_id={quote(account_id)}"
+    return f"/reports?{query}"
+
+
+def _spending_categories_headers(
+    current_sort: str, current_dir: str, account_id: str
+) -> list[dict]:
+    """Return one header cell per sortable column, in display order."""
+    return [
+        {
+            "column": column,
+            "label": _SPENDING_CATEGORIES_LABELS[column],
+            "link": _spending_categories_sort_link(
+                column, current_sort, current_dir, account_id
+            ),
+            "arrow": (
+                ("▲" if current_dir == "asc" else "▼") if column == current_sort else ""
+            ),
+        }
+        for column in _SPENDING_CATEGORIES_COLUMNS
+    ]
+
+
 @router.get("", response_class=HTMLResponse)
-def reports_overview(request: Request, account_id: str = "") -> HTMLResponse:
-    """Render the reports landing page: net worth chart + annual summary."""
+def reports_overview(
+    request: Request,
+    account_id: str = "",
+    cat_sort: str = "total",
+    cat_dir: str = "desc",
+) -> HTMLResponse:
+    """Render the reports landing page: net worth chart + annual summary.
+
+    ``cat_sort``/``cat_dir`` control the "Top spending categories" table
+    only (not the treemap below it, which always sorts by count/color
+    independently of this) — plain strings, not enums, so a stale or
+    hand-edited link falls back to the default rather than 404ing, same
+    convention as ``categories_index``'s own ``sort`` param.
+    """
+    resolved_sort = cat_sort if cat_sort in _SPENDING_CATEGORIES_COLUMNS else "total"
+    resolved_dir = cat_dir if cat_dir in ("asc", "desc") else "desc"
+
     accounts = read_accounts()
     transactions = _filter_by_account(read_ledger(), account_id)
     categories = read_categories()
@@ -1748,33 +1816,43 @@ def reports_overview(request: Request, account_id: str = "") -> HTMLResponse:
         )
         for y in years
     }
-    # "Top spending categories" preview — whole-history totals (this page
-    # is all-time stats only; per-year/YTD figures live on /reports
-    # /{year} and the category detail page instead), capped and linked
-    # to the full sortable /reports/categories index.
+    # "Top spending categories" — every expense category's whole-history
+    # total (this page is all-time stats only; per-year/YTD figures live
+    # on /reports/{year} and the category detail page instead), sortable
+    # by any column via cat_sort/cat_dir.
     all_time_expense_breakdown = category_totals_all_time(
         transactions, TransactionType.EXPENSE
     )
     expense_all_time_total = sum(
         (c.total for c in all_time_expense_breakdown), Decimal("0")
     )
-    top_categories = all_time_expense_breakdown[:TOP_SPENDING_CATEGORIES_LIMIT]
-    top_categories_pct = {
-        c.name: (
-            float(c.total / expense_all_time_total * 100)
-            if expense_all_time_total
-            else 0.0
-        )
-        for c in top_categories
-    }
-    top_categories_txn_links = {
-        c.name: breadcrumbs.transactions_link(
-            category=c.name,
-            txn_type=TransactionType.EXPENSE.value,
-            account_id=account_id,
-        )
-        for c in top_categories
-    }
+    spending_categories = [
+        {
+            "name": c.name,
+            "total": c.total,
+            "pct": (
+                float(c.total / expense_all_time_total * 100)
+                if expense_all_time_total
+                else 0.0
+            ),
+            "count": c.count,
+            "link": breadcrumbs.transactions_link(
+                category=c.name,
+                txn_type=TransactionType.EXPENSE.value,
+                account_id=account_id,
+            ),
+        }
+        for c in all_time_expense_breakdown
+    ]
+    spending_categories.sort(
+        key=lambda r: (
+            r["name"].lower() if resolved_sort == "name" else r[resolved_sort]
+        ),
+        reverse=(resolved_dir == "desc"),
+    )
+    spending_categories_headers = _spending_categories_headers(
+        resolved_sort, resolved_dir, account_id
+    )
     expense_treemap = _category_treemap(
         all_time_expense_breakdown, expense_config, account_id, expense_all_time_total
     )
@@ -1808,9 +1886,8 @@ def reports_overview(request: Request, account_id: str = "") -> HTMLResponse:
             "account_id": account_id,
             "year_txn_links": year_txn_links,
             "year_stats": _year_stats(years, today),
-            "top_categories": top_categories,
-            "top_categories_pct": top_categories_pct,
-            "top_categories_txn_links": top_categories_txn_links,
+            "spending_categories": spending_categories,
+            "spending_categories_headers": spending_categories_headers,
             "expense_treemap": expense_treemap,
             "expense_config": expense_config,
             "all_time_stats": all_time_stats,

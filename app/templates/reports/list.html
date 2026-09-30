@@ -31,27 +31,36 @@
     </div>
   </div>
 
-  {% if top_categories %}
+  {% if spending_categories %}
     <div class="dash-widget-head" style="margin-bottom: 0.15rem;">
       <h2 style="margin: 0;">Top spending categories</h2>
       <a class="table-link" href="/reports/categories{{ '?account_id=' + account_id if account_id }}">Full report &rsaquo;</a>
     </div>
     <p class="muted" style="margin-top: 0;">
-      All-time expense categories, ranked by total.
+      Every all-time expense category. Click a column to sort by it, click again to reverse.
     </p>
     <div class="table-scroll">
       <table>
-        <thead><tr><th>Category</th><th>Total</th><th>% of expenses</th></tr></thead>
+        <thead>
+          <tr>
+            {% for header in spending_categories_headers %}
+              <th>
+                <a class="table-link sortable-th-link" href="{{ header.link }}">{{ header.label }}{% if header.arrow %} {{ header.arrow }}{% endif %}</a>
+              </th>
+            {% endfor %}
+          </tr>
+        </thead>
         <tbody>
-          {% for c in top_categories %}
+          {% for c in spending_categories %}
             <tr>
               <td>
                 {% set icon = expense_config.get(c.name, {}).get('icon', '') %}
                 {% if icon %}<span class="cat-cell-icon cat-cell-icon-expense">{{ category_icon(icon) }}</span>{% endif %}
-                <a class="table-link" href="{{ top_categories_txn_links[c.name] }}">{{ c.name }}</a>
+                <a class="table-link" href="{{ c.link }}">{{ c.name }}</a>
               </td>
               <td>{{ "%.2f"|format(c.total) }}</td>
-              <td class="muted">{{ "%.0f"|format(top_categories_pct[c.name]) }}%</td>
+              <td class="muted">{{ "%.0f"|format(c.pct) }}%</td>
+              <td class="muted">{{ c.count }}</td>
             </tr>
           {% endfor %}
         </tbody>

@@ -1509,6 +1509,17 @@ fieldset legend {
   text-decoration: underline;
 }
 
+/* Sortable column headers ("Top spending categories" on /reports) —
+ * the whole header cell is a .table-link (same "understated until you
+ * reach for it" treatment above) so clicking anywhere in the header,
+ * not just its text, resorts the table; a full page GET round-trip
+ * with ?cat_sort=&cat_dir=, same "plain link, not htmx" convention as
+ * every other sort/filter control on this page. */
+.sortable-th-link {
+  display: block;
+  white-space: nowrap;
+}
+
 /* Reports breadcrumb trail (app/templates/_breadcrumb.html), and its
  * reconstruction on /transactions once a drill-down link lands there
  * (app.routers.breadcrumbs.from_transaction_filters) — same muted-until-

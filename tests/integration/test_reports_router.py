@@ -1334,3 +1334,102 @@ def test_reports_overview_treemap_hint_shows_pct_of_all_transactions(client):
     # Rent: 1 of 6 transactions (16.7%); Groceries: 5 of 6 (83.3%).
     assert "16.7% of all transactions" in response.text
     assert "83.3% of all transactions" in response.text
+
+
+def test_reports_overview_spending_categories_table_shows_every_category(client):
+    _create_account(client)
+    today = date.today().isoformat()
+    for i in range(15):
+        _create_transaction(
+            client,
+            date=today,
+            type="expense",
+            category=f"Cat{i:02d}",
+            amount="10",
+        )
+
+    response = client.get("/reports")
+
+    assert response.status_code == 200
+    for i in range(15):
+        assert f"Cat{i:02d}" in response.text
+
+
+def test_reports_overview_spending_categories_table_shows_txn_count_column(client):
+    _create_account(client)
+    today = date.today().isoformat()
+    for _ in range(4):
+        _create_transaction(
+            client, date=today, type="expense", category="Groceries", amount="10"
+        )
+
+    response = client.get("/reports")
+
+    assert response.status_code == 200
+    assert "# Txns" in response.text
+    table_start = response.text.index("Top spending categories")
+    table_end = response.text.index("Spending breakdown")
+    table = response.text[table_start:table_end]
+    assert ">4<" in table
+
+
+def test_reports_overview_spending_categories_table_sorts_by_column(client):
+    _create_account(client)
+    today = date.today().isoformat()
+    _create_transaction(
+        client, date=today, type="expense", category="Rent", amount="900"
+    )
+    for _ in range(5):
+        _create_transaction(
+            client, date=today, type="expense", category="Groceries", amount="20"
+        )
+
+    # Default: total descending -> Rent (900) before Groceries (100).
+    response = client.get("/reports")
+    assert response.text.index("Rent") < response.text.index("Groceries")
+
+    # Sort by count ascending -> Rent (1 txn) before Groceries (5 txns).
+    response = client.get("/reports", params={"cat_sort": "count", "cat_dir": "asc"})
+    assert response.text.index("Rent") < response.text.index("Groceries")
+
+    # Sort by count descending -> Groceries (5 txns) before Rent (1 txn).
+    response = client.get("/reports", params={"cat_sort": "count", "cat_dir": "desc"})
+    assert response.text.index("Groceries") < response.text.index("Rent")
+
+    # Sort by name ascending -> Groceries before Rent alphabetically.
+    response = client.get("/reports", params={"cat_sort": "name", "cat_dir": "asc"})
+    assert response.text.index("Groceries") < response.text.index("Rent")
+
+
+def test_reports_overview_spending_categories_headers_link_to_sort_and_toggle(client):
+    _create_account(client)
+    today = date.today().isoformat()
+    _create_transaction(
+        client, date=today, type="expense", category="Groceries", amount="20"
+    )
+
+    # Not yet sorted by count -> clicking it goes to its own default
+    # direction (desc).
+    response = client.get("/reports")
+    assert "cat_sort=count&amp;cat_dir=desc" in response.text
+
+    # Already sorted by total desc (the page's own default) -> clicking
+    # Total again should flip to ascending.
+    assert "cat_sort=total&amp;cat_dir=asc" in response.text
+
+
+def test_reports_overview_spending_categories_invalid_sort_falls_back_to_default(
+    client,
+):
+    _create_account(client)
+    today = date.today().isoformat()
+    _create_transaction(
+        client, date=today, type="expense", category="Groceries", amount="20"
+    )
+
+    response = client.get(
+        "/reports", params={"cat_sort": "bogus", "cat_dir": "sideways"}
+    )
+
+    assert response.status_code == 200
+    assert "Groceries" in response.text
