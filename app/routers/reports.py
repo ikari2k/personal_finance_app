@@ -1654,6 +1654,7 @@ def _category_treemap(
         return None
 
     active = sorted(active, key=lambda c: c.count, reverse=True)
+    grand_count = sum(c.count for c in active)
     sizes = _normalize_treemap_sizes(
         [float(c.count) for c in active], _TREEMAP_WIDTH, _TREEMAP_HEIGHT
     )
@@ -1662,6 +1663,7 @@ def _category_treemap(
     boxes = []
     for category, (x, y, w, h) in zip(active, rects, strict=True):
         pct = float(category.total / grand_total * 100) if grand_total else 0.0
+        txn_pct = float(category.count / grand_count * 100) if grand_count else 0.0
         color, light_text = _treemap_color(pct)
         icon = expense_config.get(category.name, {}).get("icon", "")
         icon_scale = _TREEMAP_ICON_SIZE / 24
@@ -1687,6 +1689,7 @@ def _category_treemap(
                 "total": category.total,
                 "count": category.count,
                 "pct": pct,
+                "txn_pct": txn_pct,
                 "x": x,
                 "y": y,
                 "w": w,

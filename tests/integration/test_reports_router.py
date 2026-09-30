@@ -1315,3 +1315,22 @@ def test_reports_overview_treemap_shows_icon_when_full_name_does_not_fit():
     box = boxes["Entertainment"]
     assert box["x"] <= box["icon_only_x"] <= box["x"] + box["w"]
     assert box["y"] <= box["icon_only_y"] <= box["y"] + box["h"]
+
+
+def test_reports_overview_treemap_hint_shows_pct_of_all_transactions(client):
+    _create_account(client)
+    today = date.today().isoformat()
+    _create_transaction(
+        client, date=today, type="expense", category="Rent", amount="900"
+    )
+    for _ in range(5):
+        _create_transaction(
+            client, date=today, type="expense", category="Groceries", amount="20"
+        )
+
+    response = client.get("/reports")
+
+    assert response.status_code == 200
+    # Rent: 1 of 6 transactions (16.7%); Groceries: 5 of 6 (83.3%).
+    assert "16.7% of all transactions" in response.text
+    assert "83.3% of all transactions" in response.text
