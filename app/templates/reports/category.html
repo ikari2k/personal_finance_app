@@ -5,6 +5,26 @@
 {% block title %}{{ category }} — Reports — Finance Tracker{% endblock %}
 {% block content %}
   {% set txn_link = "/transactions?txn_type=" + txn_type.value + "&category=" + (category | urlencode) + ("&account_id=" + account_id if account_id else "") %}
+  {#
+    The top/bottom "All {{ category }} transactions" buttons scope to
+    whatever period this page itself is scoped to — unscoped (all-time)
+    on /reports/category, that year on /reports/category/{year}, that
+    month on /reports/category/{year}/{month} — rather than always
+    linking to the category's entire history regardless of which page
+    you're actually looking at. Subcategory row links elsewhere on this
+    page already append their own date_from/date_to per section, so
+    only these two buttons need a shared "current period" link.
+  #}
+  {% if has_data and scope_month %}
+    {% set period_txn_link = txn_link + "&date_from=" + month_date_bounds[0] + "&date_to=" + month_date_bounds[1] %}
+    {% set period_label = " in " + current_month_label %}
+  {% elif scope_year %}
+    {% set period_txn_link = txn_link + "&date_from=" + scope_year|string + "-01-01&date_to=" + scope_year|string + "-12-31" %}
+    {% set period_label = " in " + scope_year|string %}
+  {% else %}
+    {% set period_txn_link = txn_link %}
+    {% set period_label = "" %}
+  {% endif %}
   {{ breadcrumb(breadcrumbs) }}
   {% if has_data and scope_month %}
     <p class="muted">
@@ -39,7 +59,7 @@
       </div>
       <div class="cat-detail-actions">
         {{ account_filter(accounts, account_id) }}
-        <a class="cat-cta-link" href="{{ txn_link }}">All {{ category }} transactions &rsaquo;</a>
+        <a class="cat-cta-link" href="{{ period_txn_link }}">All {{ category }} transactions{{ period_label }} &rsaquo;</a>
       </div>
     </div>
 
@@ -520,7 +540,7 @@
     </div>
 
     <div class="cat-detail-footer">
-      <a class="cat-cta-link" href="{{ txn_link }}">View all {{ category }} transactions &rsaquo;</a>
+      <a class="cat-cta-link" href="{{ period_txn_link }}">View all {{ category }} transactions{{ period_label }} &rsaquo;</a>
     </div>
   {% endif %}
 {% endblock %}
