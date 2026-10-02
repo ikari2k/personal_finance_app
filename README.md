@@ -19,6 +19,45 @@ account, no cloud, no bank integrations, and no network access beyond `localhost
 - **Dashboard & reports** — net worth, monthly/yearly income and expense, category drill-downs,
   budget utilization, month-end spending forecast, and suggested budgets.
 
+## Screenshots
+
+All screenshots use made-up sample data.
+
+### Dashboard
+
+![Dashboard](docs/screenshots/dashboard.png)
+
+An at-a-glance summary: net worth with a 6-month trend, this month's income and expense versus
+last month (plus a month-end spending forecast), active account balances, trailing average
+monthly spend, and budget status. The green/red/amber buttons add income, an expense, or a
+transfer without leaving the page.
+
+### Transactions
+
+![Transactions](docs/screenshots/transactionView.png)
+
+Every transaction, grouped by month with per-month totals and counts. Filter by account,
+category, type, description text, or date range, and change how rows are grouped. Category icons
+are color-coded by type, and the category and note on each row can be edited in place.
+
+### Categories
+
+![Categories](docs/screenshots/categoriesManagement.png)
+
+Separate income and expense category trees with icons, optional monthly budgets, and
+subcategories (the number badge). An amber warning marks a category whose subcategory budgets add
+up to more than its own. Below the trees, a table lists your most frequent uncategorized
+descriptions, which are good candidates for a new auto-categorization rule.
+
+### Yearly report
+
+![Yearly report](docs/screenshots/yearlyReport.png)
+
+The per-year drill-down: income, expenses, net, and savings rate; a net-worth chart with monthly
+income/expense bars; a monthly breakdown; income and expense by category with year-over-year
+change; month-by-month category matrices with budget-utilization rings; and a spending treemap.
+Category names link through to the matching transactions.
+
 ## Requirements
 
 - Python 3.11+
