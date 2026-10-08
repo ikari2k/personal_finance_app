@@ -159,3 +159,14 @@ def test_month_navigation_controls(client):
     current = client.get("/reports/budget-rule").text
     assert "Back to current month" not in current
     assert 'class="br-step disabled"' in current
+
+
+def test_unclassified_row_hidden_when_zero(client):
+    _seed()  # Misc spend is unclassified in March only
+
+    def month_panel(month):
+        text = client.get(f"/reports/budget-rule?month={month}").text
+        return text.split('data-panel="month"')[1].split("</section>")[0]
+
+    assert "br-swatch-unclassified" in month_panel("2026-03")
+    assert "br-swatch-unclassified" not in month_panel("2026-05")

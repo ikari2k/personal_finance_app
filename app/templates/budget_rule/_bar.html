@@ -26,7 +26,7 @@
         <tr>
           <td>Income</td><td>{{ "%.2f"|format(p.split.income) }}</td><td></td><td></td><td></td><td></td>
         </tr>
-        {% for r in p.rows %}
+        {% for r in p.rows if not (r.key == 'unclassified' and r.amount == 0) %}
           <tr>
             <td><span class="chart-legend-swatch br-swatch-{{ r.key }}"></span> {{ r.label }}</td>
             <td>{{ "%.2f"|format(r.amount) }}</td>
