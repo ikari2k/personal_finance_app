@@ -18,6 +18,15 @@
       </p>
     {% endif %}
   {% endif %}
+  {% if bucket_options %}
+    <label>50/30/20 bucket
+      <select name="bucket">
+        {% for value, label in bucket_options %}
+          <option value="{{ value }}" {{ 'selected' if values.bucket == value }}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+  {% endif %}
   <fieldset>
     <legend>Icon</legend>
     <div class="icon-grid-toolbar">

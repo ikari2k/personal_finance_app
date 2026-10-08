@@ -543,3 +543,35 @@ def test_classify_preserves_budget_and_icon(client):
 
     food = read_categories()["expense"]["Food"]
     assert (food["icon"], food["budget"], food["bucket"]) == ("cart", "300", "need")
+
+
+def test_category_dialog_sets_and_preserves_bucket(client):
+    client.post("/categories/expense", data={"name": "Food", "bucket": "need"})
+    assert read_categories()["expense"]["Food"]["bucket"] == "need"
+
+    form = client.get("/categories/expense/Food/edit")
+    assert '<option value="need" selected>' in form.text
+
+    client.post("/categories/expense/Food", data={"name": "Meals", "icon": ""})
+    assert read_categories()["expense"]["Meals"]["bucket"] == "need"
+
+
+def test_subcategory_dialog_offers_inherit_and_saves_bucket(client):
+    client.post("/categories/expense", data={"name": "Food"})
+    form = client.get("/categories/expense/Food/subcategories/new")
+    assert "Inherit from category" in form.text
+
+    client.post(
+        "/categories/expense/Food/subcategories",
+        data={"name": "Cafes", "bucket": "want"},
+    )
+    sub = read_categories()["expense"]["Food"]["subcategories"]["Cafes"]
+    assert sub["bucket"] == "want"
+
+
+def test_income_subcategory_dialog_has_no_bucket_select(client):
+    client.post("/categories/income", data={"name": "Salary"})
+
+    form = client.get("/categories/income/Salary/subcategories/new")
+
+    assert 'name="bucket"' not in form.text

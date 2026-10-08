@@ -144,6 +144,18 @@ def _budget_suggestion(
     return suggest_monthly_budget(read_ledger(), category, date.today(), subcategory)
 
 
+def _bucket_options(txn_type: TransactionType, *, sub: bool) -> list[tuple[str, str]]:
+    """Return the (value, label) choices for the form's 50/30/20 select.
+
+    Empty when there's nothing to choose (an income subcategory has no
+    bucket of its own), so the template omits the select entirely.
+    """
+    if txn_type is TransactionType.INCOME:
+        return [] if sub else [("", "Counts as income"), ("excluded", "Excluded")]
+    blank = "Inherit from category" if sub else "Unclassified"
+    return [("", blank), ("need", "Need"), ("want", "Want")]
+
+
 def _render_form(
     request: Request,
     *,
@@ -154,10 +166,12 @@ def _render_form(
     values: dict[str, str],
     editing: bool,
     show_budget: bool,
+    txn_type: TransactionType,
     error: str | None = None,
     budget_suggestion: BudgetSuggestion | None = None,
 ) -> HTMLResponse:
     """Render the shared category/subcategory add-or-edit form fragment."""
+    bucket_options = _bucket_options(txn_type, sub=kind == "subcategory")
     return templates.TemplateResponse(
         request,
         "categories/_form.html",
@@ -169,6 +183,7 @@ def _render_form(
             "values": values,
             "editing": editing,
             "show_budget": show_budget,
+            "bucket_options": bucket_options,
             "budget_suggestion": budget_suggestion,
             "icon_keys": ICON_KEYS,
             "icon_hints": ICON_HINTS,
@@ -259,9 +274,10 @@ def new_category_form(request: Request, txn_type: TransactionType) -> HTMLRespon
         dialog_content_id="category-dialog-content",
         kind="category",
         action_url=f"/categories/{txn_type.value}",
-        values={"name": "", "icon": "", "budget": ""},
+        values={"name": "", "icon": "", "budget": "", "bucket": ""},
         editing=False,
         show_budget=txn_type is not TransactionType.INCOME,
+        txn_type=txn_type,
     )
 
 
@@ -286,9 +302,11 @@ def edit_category_form(
             "name": category_name,
             "icon": entry["icon"],
             "budget": entry["budget"],
+            "bucket": entry["bucket"],
         },
         editing=True,
         show_budget=txn_type is not TransactionType.INCOME,
+        txn_type=txn_type,
         budget_suggestion=_budget_suggestion(txn_type, entry["budget"], category_name),
     )
 
@@ -300,12 +318,18 @@ def create_category(
     name: str = Form(...),
     icon: str = Form(""),
     budget: str = Form(""),
+    bucket: str | None = Form(None),
 ) -> HTMLResponse:
     """Create a new category; close the dialog and refresh the tree on success."""
-    values = {"name": name, "icon": icon, "budget": budget}
+    values = {"name": name, "icon": icon, "budget": budget, "bucket": bucket or ""}
     try:
         categories = add_category(
-            read_categories(), txn_type, name, icon, _parse_budget(budget)
+            read_categories(),
+            txn_type,
+            name,
+            icon,
+            _parse_budget(budget),
+            bucket or "",
         )
     except ValueError as exc:
         return _render_form(
@@ -317,6 +341,7 @@ def create_category(
             values=values,
             editing=False,
             show_budget=txn_type is not TransactionType.INCOME,
+            txn_type=txn_type,
             error=str(exc),
         )
     write_categories(categories)
@@ -333,9 +358,10 @@ def update_category_route(
     name: str = Form(...),
     icon: str = Form(""),
     budget: str = Form(""),
+    bucket: str | None = Form(None),
 ) -> HTMLResponse:
     """Rename/re-icon/re-budget an existing category; refresh the tree on success."""
-    values = {"name": name, "icon": icon, "budget": budget}
+    values = {"name": name, "icon": icon, "budget": budget, "bucket": bucket or ""}
     try:
         categories = update_category(
             read_categories(),
@@ -344,6 +370,7 @@ def update_category_route(
             name=name,
             icon=icon,
             budget=_parse_budget(budget),
+            bucket=bucket,
         )
     except ValueError as exc:
         return _render_form(
@@ -355,6 +382,7 @@ def update_category_route(
             values=values,
             editing=True,
             show_budget=txn_type is not TransactionType.INCOME,
+            txn_type=txn_type,
             error=str(exc),
         )
     write_categories(categories)
@@ -402,9 +430,10 @@ def new_subcategory_form(
         dialog_content_id="subcategory-dialog-content",
         kind="subcategory",
         action_url=f"/categories/{txn_type.value}/{category_name}/subcategories",
-        values={"name": "", "icon": "", "budget": ""},
+        values={"name": "", "icon": "", "budget": "", "bucket": ""},
         editing=False,
         show_budget=txn_type is not TransactionType.INCOME,
+        txn_type=txn_type,
     )
 
 
@@ -416,9 +445,10 @@ def create_subcategory(
     name: str = Form(...),
     icon: str = Form(""),
     budget: str = Form(""),
+    bucket: str | None = Form(None),
 ) -> HTMLResponse:
     """Create a new subcategory; close the dialog and refresh the tree on success."""
-    values = {"name": name, "icon": icon, "budget": budget}
+    values = {"name": name, "icon": icon, "budget": budget, "bucket": bucket or ""}
     try:
         categories = add_subcategory(
             read_categories(),
@@ -427,6 +457,7 @@ def create_subcategory(
             name,
             icon,
             _parse_budget(budget),
+            bucket or "",
         )
     except ValueError as exc:
         return _render_form(
@@ -438,6 +469,7 @@ def create_subcategory(
             values=values,
             editing=False,
             show_budget=txn_type is not TransactionType.INCOME,
+            txn_type=txn_type,
             error=str(exc),
         )
     write_categories(categories)
@@ -471,9 +503,11 @@ def edit_subcategory_form(
             "name": sub_name,
             "icon": sub_entry["icon"],
             "budget": sub_entry["budget"],
+            "bucket": sub_entry["bucket"],
         },
         editing=True,
         show_budget=txn_type is not TransactionType.INCOME,
+        txn_type=txn_type,
         budget_suggestion=_budget_suggestion(
             txn_type, sub_entry["budget"], category_name, sub_name
         ),
@@ -492,9 +526,10 @@ def update_subcategory_route(
     name: str = Form(...),
     icon: str = Form(""),
     budget: str = Form(""),
+    bucket: str | None = Form(None),
 ) -> HTMLResponse:
     """Rename/re-icon/re-budget an existing subcategory; refresh the tree on success."""
-    values = {"name": name, "icon": icon, "budget": budget}
+    values = {"name": name, "icon": icon, "budget": budget, "bucket": bucket or ""}
     try:
         categories = update_subcategory(
             read_categories(),
@@ -504,6 +539,7 @@ def update_subcategory_route(
             name=name,
             icon=icon,
             budget=_parse_budget(budget),
+            bucket=bucket,
         )
     except ValueError as exc:
         return _render_form(
@@ -517,6 +553,7 @@ def update_subcategory_route(
             values=values,
             editing=True,
             show_budget=txn_type is not TransactionType.INCOME,
+            txn_type=txn_type,
             error=str(exc),
         )
     write_categories(categories)

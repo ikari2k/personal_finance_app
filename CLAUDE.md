@@ -65,6 +65,12 @@ tests/unit/     tmp_path-isolated; tests/integration/  TestClient, conftest redi
   set (`""` unset); `budget` is a quoted non-negative decimal (`""` unset), expense only. Category
   and subcategory budgets are independent (only a non-blocking warning when they exceed).
   Transfers use a fixed `category="Transfer"`, outside the tree. No automatic dedup/cleanup.
+  Every category/subcategory also has `bucket` (50/30/20 report): expense `""`/`need`/`want`
+  (subcategory `""` = inherit; resolve via `services.categories.effective_bucket`); income
+  category `""`/`excluded` (left out of the income base), income subcategories have none. In
+  `update_category`/`update_subcategory`, omitting `bucket` **keeps** it (opposite of `budget`).
+- `config/budget_rule.toml` — `needs, wants, savings` whole-percent targets (default 50/30/20,
+  must sum to 100 via `services.budget_rule.validate_targets`).
 - `data/ledger.csv` — columns: `id, date, account_id, category, subcategory, description, amount,
   type, transfer_id, notes, counterparty_account`. `amount` is signed; `type` ∈
   income|expense|transfer. New columns are appended at the end so older files still read.
