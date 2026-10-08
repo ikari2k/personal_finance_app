@@ -315,3 +315,71 @@ def delete_subcategory(
     del subcategories[name]
     tree[category_name] = {**tree[category_name], "subcategories": subcategories}
     return _with_tree(categories, txn_type, tree)
+
+
+def effective_bucket(entry: CategoryEntry, subcategory: str = "") -> str:
+    """Return the 50/30/20 bucket a (category, subcategory) pair falls under.
+
+    A subcategory's own non-empty bucket wins; otherwise it inherits its
+    category's. A blank or unknown ``subcategory`` resolves to the
+    category's own bucket. ``""`` means unclassified (expense) or counted
+    (income).
+    """
+    sub = entry["subcategories"].get(subcategory)
+    if sub and sub.get("bucket"):
+        return sub["bucket"]
+    return entry.get("bucket", "")
+
+
+def count_unclassified_expense_categories(categories: CategoriesByType) -> int:
+    """Count expense categories with no bucket, for the "N to classify" nudge."""
+    return sum(
+        1 for entry in categories.get("expense", {}).values() if not entry["bucket"]
+    )
+
+
+def set_buckets(
+    categories: CategoriesByType,
+    assignments: list[tuple[TransactionType, str, str, str]],
+) -> CategoriesByType:
+    """Return ``categories`` with many buckets set at once.
+
+    Each assignment is ``(txn_type, category, subcategory, bucket)``; a
+    blank ``subcategory`` targets the category itself. Nothing is applied
+    unless every assignment is valid. Raises ``ValueError`` for an
+    unknown category/subcategory or a bucket invalid for ``txn_type``.
+    """
+    result = categories
+    for txn_type, category, subcategory, bucket in assignments:
+        entry = _tree(result, txn_type).get(category)
+        if entry is None:
+            raise ValueError(f"no category '{category}'")
+        if subcategory:
+            if subcategory not in entry["subcategories"]:
+                raise ValueError(f"no subcategory '{subcategory}'")
+            result = update_subcategory(
+                result,
+                txn_type,
+                category,
+                subcategory,
+                name=subcategory,
+                icon=entry["subcategories"][subcategory]["icon"],
+                budget=_current_budget(entry["subcategories"][subcategory]["budget"]),
+                bucket=bucket,
+            )
+        else:
+            result = update_category(
+                result,
+                txn_type,
+                category,
+                name=category,
+                icon=entry["icon"],
+                budget=_current_budget(entry["budget"]),
+                bucket=bucket,
+            )
+    return result
+
+
+def _current_budget(budget: str) -> Decimal | None:
+    """Turn a stored budget string back into the ``Decimal | None`` updates take."""
+    return Decimal(budget) if budget else None

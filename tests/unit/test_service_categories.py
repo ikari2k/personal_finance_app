@@ -703,3 +703,12 @@ def test_income_category_can_be_excluded_but_not_its_subcategories():
         add_subcategory(
             cats, TransactionType.INCOME, "Refunds", "Tax", bucket="excluded"
         )
+
+
+def test_effective_bucket_subcategory_overrides_then_inherits():
+    from app.services.categories import effective_bucket
+
+    entry = _tree_with_buckets()["expense"]["Food"]
+    assert effective_bucket(entry, "Restaurants") == "want"
+    assert effective_bucket(entry, "") == "need"
+    assert effective_bucket(entry, "Unknown") == "need"

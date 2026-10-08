@@ -469,3 +469,77 @@ def test_edit_subcategory_form_suggests_budget_from_its_own_spend(client):
     response = client.get("/categories/expense/Food/subcategories/Fruit/edit")
 
     assert "Suggested: 200" in response.text
+
+
+def _seed_classify_tree(client):
+    client.post("/categories/expense", data={"name": "Food", "icon": ""})
+    client.post("/categories/expense/Food/subcategories", data={"name": "Cafes"})
+    client.post("/categories/income", data={"name": "Refunds", "icon": ""})
+
+
+def test_classify_page_lists_categories_and_unclassified_count(client):
+    _seed_classify_tree(client)
+
+    response = client.get("/categories/classify")
+
+    assert response.status_code == 200
+    assert "Food" in response.text and "Cafes" in response.text
+    assert "1</strong> expense category" in response.text
+
+
+def test_classify_saves_all_rows_at_once(client):
+    _seed_classify_tree(client)
+
+    response = client.post(
+        "/categories/classify",
+        data={
+            "txn_type": ["expense", "expense", "income"],
+            "category": ["Food", "Food", "Refunds"],
+            "subcategory": ["", "Cafes", ""],
+            "bucket": ["need", "want", "excluded"],
+        },
+        headers={"HX-Request": "true"},
+    )
+
+    assert response.status_code == 200
+    saved = read_categories()
+    assert saved["expense"]["Food"]["bucket"] == "need"
+    assert saved["expense"]["Food"]["subcategories"]["Cafes"]["bucket"] == "want"
+    assert saved["income"]["Refunds"]["bucket"] == "excluded"
+    assert "All expense categories are classified" in response.text
+
+
+def test_classify_rejects_invalid_bucket_without_saving_anything(client):
+    _seed_classify_tree(client)
+
+    response = client.post(
+        "/categories/classify",
+        data={
+            "txn_type": ["expense", "income"],
+            "category": ["Food", "Refunds"],
+            "subcategory": ["", ""],
+            "bucket": ["need", "need"],
+        },
+    )
+
+    assert "invalid bucket" in response.text
+    assert read_categories()["expense"]["Food"]["bucket"] == ""
+
+
+def test_classify_preserves_budget_and_icon(client):
+    client.post(
+        "/categories/expense", data={"name": "Food", "icon": "cart", "budget": "300"}
+    )
+
+    client.post(
+        "/categories/classify",
+        data={
+            "txn_type": ["expense"],
+            "category": ["Food"],
+            "subcategory": [""],
+            "bucket": ["need"],
+        },
+    )
+
+    food = read_categories()["expense"]["Food"]
+    assert (food["icon"], food["budget"], food["bucket"]) == ("cart", "300", "need")

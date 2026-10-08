@@ -1,0 +1,86 @@
+<form id="classify-wrapper" hx-post="/categories/classify"
+      hx-target="#classify-wrapper" hx-swap="outerHTML">
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <p>
+    {% if unclassified_count %}
+      <strong>{{ unclassified_count }}</strong> expense categor{{ "y" if unclassified_count == 1 else "ies" }}
+      still unclassified.
+    {% else %}
+      All expense categories are classified.
+    {% endif %}
+  </p>
+
+  <h2>Expense</h2>
+  <div class="table-scroll">
+    <table class="breakdown-table">
+      <thead><tr><th>Category</th><th>Bucket</th></tr></thead>
+      <tbody>
+        {% for name, entry in categories["expense"] | dictsort %}
+          <tr>
+            <td>
+              <strong>{{ name }}</strong>
+              <input type="hidden" name="txn_type" value="expense">
+              <input type="hidden" name="category" value="{{ name }}">
+              <input type="hidden" name="subcategory" value="">
+            </td>
+            <td>
+              <select name="bucket" aria-label="Bucket for {{ name }}">
+                <option value="" {{ "selected" if not entry.bucket }}>Unclassified</option>
+                <option value="need" {{ "selected" if entry.bucket == "need" }}>Need</option>
+                <option value="want" {{ "selected" if entry.bucket == "want" }}>Want</option>
+              </select>
+            </td>
+          </tr>
+          {% for sub_name, sub in entry.subcategories | dictsort %}
+            <tr>
+              <td>
+                <span class="muted">↳</span> {{ sub_name }}
+                <input type="hidden" name="txn_type" value="expense">
+                <input type="hidden" name="category" value="{{ name }}">
+                <input type="hidden" name="subcategory" value="{{ sub_name }}">
+              </td>
+              <td>
+                <select name="bucket" aria-label="Bucket for {{ name }} / {{ sub_name }}">
+                  <option value="" {{ "selected" if not sub.bucket }}>Inherit</option>
+                  <option value="need" {{ "selected" if sub.bucket == "need" }}>Need</option>
+                  <option value="want" {{ "selected" if sub.bucket == "want" }}>Want</option>
+                </select>
+              </td>
+            </tr>
+          {% endfor %}
+        {% else %}
+          <tr><td colspan="2" class="muted">No expense categories yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Income</h2>
+  <div class="table-scroll">
+    <table class="breakdown-table">
+      <thead><tr><th>Category</th><th>Counts as income?</th></tr></thead>
+      <tbody>
+        {% for name, entry in categories["income"] | dictsort %}
+          <tr>
+            <td>
+              <strong>{{ name }}</strong>
+              <input type="hidden" name="txn_type" value="income">
+              <input type="hidden" name="category" value="{{ name }}">
+              <input type="hidden" name="subcategory" value="">
+            </td>
+            <td>
+              <select name="bucket" aria-label="Income handling for {{ name }}">
+                <option value="" {{ "selected" if not entry.bucket }}>Counts as income</option>
+                <option value="excluded" {{ "selected" if entry.bucket == "excluded" }}>Excluded</option>
+              </select>
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="2" class="muted">No income categories yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <button type="submit">Save classification</button>
+</form>

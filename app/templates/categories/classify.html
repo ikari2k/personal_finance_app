@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Classify categories — Finance Tracker{% endblock %}
+{% block content %}
+  <div class="page-header-row">
+    <h1>Classify categories</h1>
+    <div class="cta-row">
+      <a href="/categories" role="button" class="secondary">Back to categories</a>
+    </div>
+  </div>
+  <p class="muted">
+    Tag each expense category as a Need or a Want for the 50/30/20 report. A subcategory
+    can override its category (e.g. Food: Groceries = Need, Restaurants = Want). Income
+    categories can be excluded from the income the percentages are measured against
+    (refunds, interest, one-offs).
+  </p>
+  {% include "categories/_classify_form.html" %}
+{% endblock %}

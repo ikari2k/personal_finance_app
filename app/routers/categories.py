@@ -17,8 +17,10 @@ from app.services.aggregation import (
 from app.services.categories import (
     add_category,
     add_subcategory,
+    count_unclassified_expense_categories,
     delete_category,
     delete_subcategory,
+    set_buckets,
     subcategories_exceed_category_budget,
     update_category,
     update_subcategory,
@@ -185,12 +187,65 @@ def list_categories(request: Request) -> HTMLResponse:
         {
             "categories": categories,
             "budget_warnings": _budget_warnings(categories),
+            "unclassified_count": count_unclassified_expense_categories(categories),
             "top_uncategorized": top_uncategorized_descriptions(
                 read_ledger(), limit=20
             ),
             "error": None,
         },
     )
+
+
+def _render_classify(
+    request: Request,
+    *,
+    error: str | None = None,
+    headers: dict[str, str] | None = None,
+) -> HTMLResponse:
+    """Render the bulk Need/Want classification page (or its refreshed fragment)."""
+    categories = read_categories()
+    template = (
+        "categories/_classify_form.html"
+        if request.headers.get("HX-Request")
+        else "categories/classify.html"
+    )
+    return templates.TemplateResponse(
+        request,
+        template,
+        {
+            "categories": categories,
+            "unclassified_count": count_unclassified_expense_categories(categories),
+            "error": error,
+        },
+        headers=headers,
+    )
+
+
+@router.get("/classify", response_class=HTMLResponse)
+def classify_page(request: Request) -> HTMLResponse:
+    """Render the page for tagging every category as Need/Want (or excluded income)."""
+    return _render_classify(request)
+
+
+@router.post("/classify", response_class=HTMLResponse)
+def save_classification(
+    request: Request,
+    txn_type: list[TransactionType] = Form(default_factory=list),
+    category: list[str] = Form(default_factory=list),
+    subcategory: list[str] = Form(default_factory=list),
+    bucket: list[str] = Form(default_factory=list),
+) -> HTMLResponse:
+    """Apply every row of the classify form at once (all-or-nothing)."""
+    try:
+        if not len(txn_type) == len(category) == len(subcategory) == len(bucket):
+            raise ValueError("malformed classification form")
+        categories = set_buckets(
+            read_categories(), list(zip(txn_type, category, subcategory, bucket))
+        )
+    except ValueError as exc:
+        return _render_classify(request, error=str(exc))
+    write_categories(categories)
+    return _render_classify(request, headers=toast("Classification saved"))
 
 
 @router.get("/{txn_type}/new", response_class=HTMLResponse)

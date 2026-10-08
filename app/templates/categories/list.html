@@ -4,6 +4,9 @@
   <div class="page-header-row">
     <h1>Categories</h1>
     <div class="cta-row">
+      <a href="/categories/classify" role="button" class="secondary">
+        Classify needs/wants{% if unclassified_count %} ({{ unclassified_count }}){% endif %}
+      </a>
       <button type="button" class="secondary"
               onclick="var anyClosed = document.querySelector('.cat-row:not([open])'); document.querySelectorAll('.cat-row').forEach(function (d) { d.open = !!anyClosed; });">
         Expand/collapse all
