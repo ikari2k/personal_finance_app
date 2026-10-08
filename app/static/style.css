@@ -751,14 +751,14 @@ button.btn-transfer {
  * custom property itself, same as the .btn-income/-expense/-transfer
  * pattern above.
  */
-button.btn-outline {
+.btn-outline {
   background: transparent;
   border: var(--pico-border-width) solid var(--pico-muted-border-color);
   --pico-color: var(--pico-contrast);
   color: var(--pico-color);
 }
 
-button.btn-outline:hover {
+.btn-outline:hover {
   background: rgba(127, 127, 127, 0.12);
   --pico-color: var(--pico-contrast);
   color: var(--pico-color);
@@ -2352,9 +2352,19 @@ fieldset legend {
 .br-bar, .br-trend { width: 100%; height: auto; }
 .br-marker { stroke: var(--pico-muted-color); stroke-width: 1.5; stroke-dasharray: 3 3; }
 .br-marker-label { fill: var(--pico-muted-color); font-size: 11px; }
-.cta-row [role="button"] {
+/* Anchors styled as buttons sit in a cta-row beside real <button>s:
+   same box, no stray margins (Pico's default button margin made the
+   link taller), and vertically centered rather than stretched. */
+.cta-row { align-items: center; }
+.cta-row > button,
+.cta-row > [role="button"] {
+  margin: 0;
   padding: 0.45rem 0.9rem;
   font-size: 0.85rem;
+  line-height: 1.4;
+  width: auto;
+  text-decoration: none;
+  text-align: center;
 }
 .br-controls {
   justify-content: space-between;
@@ -2389,6 +2399,7 @@ fieldset legend {
 .br-step.disabled { opacity: 0.35; pointer-events: none; }
 .br-today { font-size: 0.8rem; margin-left: 0.4rem; white-space: nowrap; }
 .br-tabs {
+  width: auto;
   margin-bottom: 0;
   max-width: 100%;
   overflow-x: auto;
