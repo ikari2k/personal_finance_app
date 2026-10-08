@@ -14,6 +14,7 @@ import tomli_w
 
 from app import config
 from app.models.account import Account
+from app.storage.backup import backup_before_write
 from app.storage.lock import file_lock
 
 
@@ -55,6 +56,7 @@ def write_accounts(accounts: Iterable[Account], path: Path | None = None) -> Non
     path = path if path is not None else config.ACCOUNTS_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
     with file_lock(path):
+        backup_before_write(path)
         data = {"accounts": [_to_dict(account) for account in accounts]}
         tmp_path = path.with_name(path.name + ".tmp")
         with tmp_path.open("wb") as tmp_file:

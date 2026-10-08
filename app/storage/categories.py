@@ -13,6 +13,7 @@ import tomli_w
 
 from app import config
 from app.models.category import CategoriesByType, CategoryEntry, SubcategoryEntry
+from app.storage.backup import backup_before_write
 from app.storage.lock import file_lock
 
 
@@ -106,6 +107,7 @@ def write_categories(categories: CategoriesByType, path: Path | None = None) -> 
     path = path if path is not None else config.CATEGORIES_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
     with file_lock(path):
+        backup_before_write(path)
         data = {
             "income": categories.get("income", {}),
             "expense": categories.get("expense", {}),

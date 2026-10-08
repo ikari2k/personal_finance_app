@@ -91,6 +91,11 @@ tests/unit/     tmp_path-isolated; tests/integration/  TestClient, conftest redi
 - **Lock every write** to ledger/config files via `app.storage.lock.file_lock` (PID lockfile,
   stale locks auto-cleared). `LockError` is handled app-wide in `app/main.py` (toast +
   `HX-Reswap: none`).
+- **Config writes leave backups**: `accounts/categories/rules` writers call
+  `storage.backup.backup_before_write` inside the lock — `<file>.bak` (previous version) plus
+  `config/backups/<file>.<date>` (state before the day's first write, kept 30 days). The ledger
+  and import history are not backed up. Restore by copying a backup over the file while the app
+  is stopped.
 - **Referential integrity lives in app code**: `services.consistency.check_consistency` runs
   (warn-only) at startup; keep it in mind when changing transfer/account-reference logic.
 - **Imported CSV rows are income/expense only** (sign maps directly; no flipping). Transfers are

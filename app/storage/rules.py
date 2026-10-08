@@ -27,6 +27,7 @@ import tomli_w
 from app import config
 from app.models.rule import Rule
 from app.models.transaction import TransactionType
+from app.storage.backup import backup_before_write
 from app.storage.lock import file_lock
 
 
@@ -91,6 +92,7 @@ def write_rules(rules: Iterable[Rule], path: Path | None = None) -> None:
     path = path if path is not None else config.RULES_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
     with file_lock(path):
+        backup_before_write(path)
         data = {"rules": [_to_dict(rule) for rule in rules]}
         tmp_path = path.with_name(path.name + ".tmp")
         with tmp_path.open("wb") as tmp_file:
