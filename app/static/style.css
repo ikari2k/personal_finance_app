@@ -658,7 +658,10 @@ button.btn-transfer {
   flex: 0 0 auto;
   margin-bottom: 0;
   height: calc(var(--control-h) - 0.5rem);
-  padding: 0 0.4rem;
+  /* Keep Pico's right padding (icon width + icon position): the invisible
+   * native calendar indicator that opens the picker is laid out over it
+   * with a negative margin, so shrinking it makes the icon unclickable. */
+  padding: 0 1.75rem 0 0.4rem;
   font-size: var(--text-sm);
   border-color: transparent;
   background-color: transparent;
@@ -2419,7 +2422,7 @@ fieldset legend {
   margin: 0;
   width: auto;
   height: 2.25rem;
-  padding: 0 0.6rem;
+  padding: 0 1.75rem 0 0.6rem; /* right padding hosts the native picker indicator (see date-range-group) */
   font-size: 0.9rem;
 }
 .period-stepper .step {
