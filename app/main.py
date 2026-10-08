@@ -26,6 +26,7 @@ from app.routers import (
     transfers,
 )
 from app.routers.htmx_events import toast
+from app.routers.scope import ACCOUNT_COOKIE, COOKIE_MAX_AGE
 from app.services.consistency import check_consistency
 from app.storage.accounts import read_accounts
 from app.storage.ledger import read_ledger
@@ -68,6 +69,30 @@ app.include_router(transfer_detection.router)
 app.include_router(rules.router)
 app.include_router(reports.router)
 app.include_router(budget_rule.router)
+
+
+@app.middleware("http")
+async def remember_account_scope(request: Request, call_next) -> Response:
+    """Remember an account chosen on Reports/Dashboard in the shared cookie.
+
+    Transactions writes the same ``account_id`` cookie itself; this makes the
+    other pages do likewise whenever the URL carries ``account_id`` (an
+    explicit empty value means "all accounts" and is remembered too), so one
+    choice follows the user between pages.
+    """
+    response = await call_next(request)
+    if (
+        request.method == "GET"
+        and request.url.path.startswith(("/reports", "/dashboard"))
+        and "account_id" in request.query_params
+    ):
+        response.set_cookie(
+            ACCOUNT_COOKIE,
+            request.query_params["account_id"],
+            max_age=COOKIE_MAX_AGE,
+            samesite="lax",
+        )
+    return response
 
 
 @app.exception_handler(LockError)

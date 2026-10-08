@@ -29,6 +29,7 @@ from app.models.category import CategoriesByType
 from app.models.transaction import TransactionType
 from app.routers import breadcrumbs
 from app.routers.budget_rule import month_pair, rolling_summaries
+from app.routers.scope import resolve_account
 from app.services.aggregation import (
     CategoryMonthPoint,
     CategoryTotal,
@@ -1737,7 +1738,7 @@ def _spending_categories_headers(
 @router.get("", response_class=HTMLResponse)
 def reports_overview(
     request: Request,
-    account_id: str = "",
+    account_id: str | None = None,
     cat_sort: str = "total",
     cat_dir: str = "desc",
 ) -> HTMLResponse:
@@ -1749,6 +1750,7 @@ def reports_overview(
     hand-edited link falls back to the default rather than 404ing, same
     convention as ``categories_index``'s own ``sort`` param.
     """
+    account_id = resolve_account(request, account_id)
     resolved_sort = cat_sort if cat_sort in _SPENDING_CATEGORIES_COLUMNS else "total"
     resolved_dir = cat_dir if cat_dir in ("asc", "desc") else "desc"
 
@@ -1898,7 +1900,7 @@ def categories_index(
     request: Request,
     txn_type: str = "expense",
     sort: str = "growth",
-    account_id: str = "",
+    account_id: str | None = None,
 ) -> HTMLResponse:
     """Render a sortable index of every category's recent trend and budget status.
 
@@ -1918,6 +1920,7 @@ def categories_index(
     stale link, a hand-edited URL) falls back to the default rather than
     404ing.
     """
+    account_id = resolve_account(request, account_id)
     resolved_type = txn_type if txn_type in ("income", "expense") else "expense"
     type_enum = TransactionType(resolved_type)
     resolved_sort = sort if sort in _CATEGORY_INDEX_SORTS else "growth"
@@ -2013,7 +2016,7 @@ def _sort_by_change(breakdown: list[CategoryTotal]) -> list[CategoryTotal]:
 
 @router.get("/{year:int}", response_class=HTMLResponse)
 def year_detail(
-    request: Request, year: int, account_id: str = "", sort: str = "total"
+    request: Request, year: int, account_id: str | None = None, sort: str = "total"
 ) -> HTMLResponse:
     """Render one year's monthly breakdown and income/expense category drill-down.
 
@@ -2031,6 +2034,7 @@ def year_detail(
     "total" rather than 404ing, same "UI toggle state, not a hard
     error" treatment as the categories index page's own ``sort``.
     """
+    account_id = resolve_account(request, account_id)
     resolved_sort = sort if sort in _CATEGORY_BREAKDOWN_SORTS else "total"
     accounts = read_accounts()
     transactions = _filter_by_account(read_ledger(), account_id)
@@ -2196,9 +2200,10 @@ def _adjacent_month(year: int, month: int, delta: int) -> tuple[int, int]:
 
 @router.get("/{year:int}/{month:int}", response_class=HTMLResponse)
 def month_detail(
-    request: Request, year: int, month: int, account_id: str = ""
+    request: Request, year: int, month: int, account_id: str | None = None
 ) -> HTMLResponse:
     """Render one month's spending breakdown and income/expense category breakdown."""
+    account_id = resolve_account(request, account_id)
     if not 1 <= month <= 12:
         raise HTTPException(status_code=404, detail="Invalid month")
 
@@ -2368,7 +2373,7 @@ def category_detail(
     request: Request,
     txn_type: TransactionType,
     category: str,
-    account_id: str = "",
+    account_id: str | None = None,
     subcategories: list[str] = Query(default=[]),
 ) -> HTMLResponse:
     """Render one category's full, all-time trend, year rollup, and subcategory shares.
@@ -2388,6 +2393,7 @@ def category_detail(
     ``/reports/{year}``'s and ``/reports/{year}/{month}``'s own
     trend-links.
     """
+    account_id = resolve_account(request, account_id)
     return _category_detail_response(
         request, txn_type, category, account_id, None, None, subcategories
     )
@@ -2399,7 +2405,7 @@ def category_detail_year(
     year: int,
     txn_type: TransactionType,
     category: str,
-    account_id: str = "",
+    account_id: str | None = None,
     subcategories: list[str] = Query(default=[]),
 ) -> HTMLResponse:
     """Render one category's stats scoped to one year — see ``category_detail``.
@@ -2414,6 +2420,7 @@ def category_detail_year(
     all-time regardless — a "View all-time stats" link is always one
     click away.
     """
+    account_id = resolve_account(request, account_id)
     return _category_detail_response(
         request, txn_type, category, account_id, year, None, subcategories
     )
@@ -2426,7 +2433,7 @@ def category_detail_month(
     month: int,
     txn_type: TransactionType,
     category: str,
-    account_id: str = "",
+    account_id: str | None = None,
     subcategories: list[str] = Query(default=[]),
 ) -> HTMLResponse:
     """Render one category's stats scoped to one month — see ``category_detail``.
@@ -2436,6 +2443,7 @@ def category_detail_month(
     single-month trend chart would just be one bar), with the hero
     tiles anchored to this exact month instead of December.
     """
+    account_id = resolve_account(request, account_id)
     if not 1 <= month <= 12:
         raise HTTPException(status_code=404, detail="Invalid month")
     return _category_detail_response(
@@ -2449,7 +2457,7 @@ def subcategory_detail(
     txn_type: TransactionType,
     category: str,
     subcategory: str,
-    account_id: str = "",
+    account_id: str | None = None,
 ) -> HTMLResponse:
     """Render one subcategory's full, all-time trend and year rollup.
 
@@ -2466,6 +2474,7 @@ def subcategory_detail(
     dedicated ``reports/subcategory.html`` template (no such sections)
     renders instead of ``reports/category.html``.
     """
+    account_id = resolve_account(request, account_id)
     return _category_detail_response(
         request, txn_type, category, account_id, None, None, [], subcategory=subcategory
     )
@@ -2478,9 +2487,10 @@ def subcategory_detail_year(
     txn_type: TransactionType,
     category: str,
     subcategory: str,
-    account_id: str = "",
+    account_id: str | None = None,
 ) -> HTMLResponse:
     """Render one subcategory's stats scoped to a year — see ``subcategory_detail``."""
+    account_id = resolve_account(request, account_id)
     return _category_detail_response(
         request, txn_type, category, account_id, year, None, [], subcategory=subcategory
     )
@@ -2494,9 +2504,10 @@ def subcategory_detail_month(
     txn_type: TransactionType,
     category: str,
     subcategory: str,
-    account_id: str = "",
+    account_id: str | None = None,
 ) -> HTMLResponse:
     """Render one subcategory's stats scoped to a month — see ``subcategory_detail``."""
+    account_id = resolve_account(request, account_id)
     if not 1 <= month <= 12:
         raise HTTPException(status_code=404, detail="Invalid month")
     return _category_detail_response(
