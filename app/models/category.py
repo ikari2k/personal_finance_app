@@ -39,23 +39,36 @@ dedicated Monthly Budgets page), not implemented yet.
 
 from typing import TypedDict
 
+# Values of a ``bucket`` field, for the 50/30/20 report. Expense entries use
+# "" (unclassified) / "need" / "want"; a subcategory's "" means "inherit the
+# parent category's bucket". Income categories use "" (counts as income) /
+# "excluded" (left out of the report's income base); income subcategories
+# have no bucket of their own.
+BUCKET_NEED = "need"
+BUCKET_WANT = "want"
+BUCKET_EXCLUDED = "excluded"
+EXPENSE_BUCKETS: frozenset[str] = frozenset({"", BUCKET_NEED, BUCKET_WANT})
+INCOME_BUCKETS: frozenset[str] = frozenset({"", BUCKET_EXCLUDED})
+
 
 class SubcategoryEntry(TypedDict):
-    """One subcategory: its icon and its own optional monthly budget."""
+    """One subcategory: its icon, optional monthly budget and bucket."""
 
     icon: str
     budget: str
+    bucket: str
 
 
 class CategoryEntry(TypedDict):
     """One category.
 
-    Carries its icon, its own optional monthly budget, and its
-    subcategory → ``SubcategoryEntry`` mapping.
+    Carries its icon, its own optional monthly budget, its 50/30/20
+    ``bucket``, and its subcategory → ``SubcategoryEntry`` mapping.
     """
 
     icon: str
     budget: str
+    bucket: str
     subcategories: dict[str, SubcategoryEntry]
 
 

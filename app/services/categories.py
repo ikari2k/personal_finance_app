@@ -18,7 +18,13 @@ same kind of reference.
 
 from decimal import Decimal
 
-from app.models.category import VALID_ICONS, CategoriesByType, CategoryEntry
+from app.models.category import (
+    EXPENSE_BUCKETS,
+    INCOME_BUCKETS,
+    VALID_ICONS,
+    CategoriesByType,
+    CategoryEntry,
+)
 from app.models.transaction import TransactionType
 
 
@@ -36,6 +42,22 @@ def _tree(categories: CategoriesByType, txn_type: TransactionType) -> dict:
 def _validate_icon(icon: str) -> None:
     if icon and icon not in VALID_ICONS:
         raise ValueError(f"unknown icon '{icon}'")
+
+
+def _validate_bucket(txn_type: TransactionType, bucket: str, *, sub: bool) -> str:
+    """Validate a 50/30/20 ``bucket`` for ``txn_type`` and return it.
+
+    Expense entries accept ``""``/``"need"``/``"want"``; income categories
+    accept ``""``/``"excluded"``. Income subcategories have no bucket of
+    their own, so only ``""`` is valid for them. Raises ``ValueError``
+    otherwise.
+    """
+    allowed = EXPENSE_BUCKETS if txn_type is TransactionType.EXPENSE else INCOME_BUCKETS
+    if sub and txn_type is TransactionType.INCOME:
+        allowed = frozenset({""})
+    if bucket not in allowed:
+        raise ValueError(f"invalid bucket '{bucket}'")
+    return bucket
 
 
 def _budget_str(txn_type: TransactionType, budget: Decimal | None) -> str:
@@ -118,11 +140,13 @@ def add_category(
     name: str,
     icon: str = "",
     budget: Decimal | None = None,
+    bucket: str = "",
 ) -> CategoriesByType:
     """Return ``categories`` with a new category added to ``txn_type``'s tree.
 
     Raises ``ValueError`` if ``name`` is blank, already exists in that
-    tree, ``icon`` isn't a known icon key, or ``budget`` is negative.
+    tree, ``icon`` isn't a known icon key, ``budget`` is negative, or
+    ``bucket`` isn't valid for ``txn_type``.
     """
     name = name.strip()
     if not name:
@@ -134,6 +158,7 @@ def add_category(
     tree[name] = {
         "icon": icon,
         "budget": _budget_str(txn_type, budget),
+        "bucket": _validate_bucket(txn_type, bucket, sub=False),
         "subcategories": {},
     }
     return _with_tree(categories, txn_type, tree)
@@ -147,13 +172,15 @@ def update_category(
     name: str,
     icon: str = "",
     budget: Decimal | None = None,
+    bucket: str | None = None,
 ) -> CategoriesByType:
     """Return ``categories`` with ``current_name`` renamed/re-iconed/re-budgeted.
 
-    Keeps ``current_name``'s subcategories under the new name. Raises
-    ``ValueError`` if ``current_name`` doesn't exist, ``name`` is blank, a
+    Keeps ``current_name``'s subcategories under the new name. Unlike
+    ``budget``, omitting ``bucket`` (``None``) keeps the current value.
+    Raises ``ValueError`` if ``current_name`` doesn't exist, ``name`` is blank, a
     *different* category already uses ``name``, ``icon`` isn't a known
-    icon key, or ``budget`` is negative.
+    icon key, ``budget`` is negative, or ``bucket`` isn't valid.
     """
     name = name.strip()
     if not name:
@@ -167,6 +194,8 @@ def update_category(
     entry = tree.pop(current_name)
     entry["icon"] = icon
     entry["budget"] = _budget_str(txn_type, budget)
+    if bucket is not None:
+        entry["bucket"] = _validate_bucket(txn_type, bucket, sub=False)
     tree[name] = entry
     return _with_tree(categories, txn_type, tree)
 
@@ -193,12 +222,13 @@ def add_subcategory(
     name: str,
     icon: str = "",
     budget: Decimal | None = None,
+    bucket: str = "",
 ) -> CategoriesByType:
     """Return ``categories`` with a new subcategory added under ``category_name``.
 
     Raises ``ValueError`` if ``category_name`` doesn't exist, ``name`` is
     blank or already exists under that category, ``icon`` isn't a known
-    icon key, or ``budget`` is negative.
+    icon key, ``budget`` is negative, or ``bucket`` isn't valid.
     """
     name = name.strip()
     if not name:
@@ -210,7 +240,11 @@ def add_subcategory(
     if name in subcategories:
         raise ValueError(f"subcategory '{name}' already exists")
     _validate_icon(icon)
-    subcategories[name] = {"icon": icon, "budget": _budget_str(txn_type, budget)}
+    subcategories[name] = {
+        "icon": icon,
+        "budget": _budget_str(txn_type, budget),
+        "bucket": _validate_bucket(txn_type, bucket, sub=True),
+    }
     tree[category_name] = {**tree[category_name], "subcategories": subcategories}
     return _with_tree(categories, txn_type, tree)
 
@@ -224,12 +258,16 @@ def update_subcategory(
     name: str,
     icon: str = "",
     budget: Decimal | None = None,
+    bucket: str | None = None,
 ) -> CategoriesByType:
     """Return ``categories`` with a subcategory renamed/re-iconed/re-budgeted.
 
+    Unlike ``budget``, omitting ``bucket`` (``None``) keeps the current value.
+
     Raises ``ValueError`` if ``category_name`` or ``current_name`` doesn't
     exist, ``name`` is blank, a *different* subcategory already uses
-    ``name``, ``icon`` isn't a known icon key, or ``budget`` is negative.
+    ``name``, ``icon`` isn't a known icon key, ``budget`` is negative, or
+    ``bucket`` isn't valid.
     """
     name = name.strip()
     if not name:
@@ -243,8 +281,16 @@ def update_subcategory(
     if name != current_name and name in subcategories:
         raise ValueError(f"subcategory '{name}' already exists")
     _validate_icon(icon)
-    del subcategories[current_name]
-    subcategories[name] = {"icon": icon, "budget": _budget_str(txn_type, budget)}
+    current_bucket = subcategories.pop(current_name).get("bucket", "")
+    subcategories[name] = {
+        "icon": icon,
+        "budget": _budget_str(txn_type, budget),
+        "bucket": (
+            current_bucket
+            if bucket is None
+            else _validate_bucket(txn_type, bucket, sub=True)
+        ),
+    }
     tree[category_name] = {**tree[category_name], "subcategories": subcategories}
     return _with_tree(categories, txn_type, tree)
 

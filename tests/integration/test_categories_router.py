@@ -97,13 +97,21 @@ def test_create_category_appears_in_tree(client):
     assert "Groceries" in response.text
     assert read_categories(config.CATEGORIES_PATH) == {
         "income": {},
-        "expense": {"Groceries": {"icon": "cart", "budget": "", "subcategories": {}}},
+        "expense": {
+            "Groceries": {
+                "icon": "cart",
+                "budget": "",
+                "bucket": "",
+                "subcategories": {},
+            }
+        },
     }
 
 
 def test_create_category_accepts_budget(client):
     response = client.post(
-        "/categories/expense", data={"name": "Groceries", "budget": "400.00"}
+        "/categories/expense",
+        data={"name": "Groceries", "budget": "400.00", "bucket": ""},
     )
 
     assert response.status_code == 200
@@ -113,7 +121,7 @@ def test_create_category_accepts_budget(client):
 
 def test_create_category_rejects_budget_for_income(client):
     response = client.post(
-        "/categories/income", data={"name": "Salary", "budget": "100"}
+        "/categories/income", data={"name": "Salary", "budget": "100", "bucket": ""}
     )
 
     assert response.status_code == 200
@@ -136,14 +144,16 @@ def test_new_expense_category_form_shows_budget_field(client):
 
 
 def test_category_list_flags_when_subcategory_budgets_exceed_category(client):
-    client.post("/categories/expense", data={"name": "Groceries", "budget": "100"})
     client.post(
-        "/categories/expense/Groceries/subcategories",
-        data={"name": "Supermarket", "budget": "50"},
+        "/categories/expense", data={"name": "Groceries", "budget": "100", "bucket": ""}
     )
     client.post(
         "/categories/expense/Groceries/subcategories",
-        data={"name": "Farmers Market", "budget": "75"},
+        data={"name": "Supermarket", "budget": "50", "bucket": ""},
+    )
+    client.post(
+        "/categories/expense/Groceries/subcategories",
+        data={"name": "Farmers Market", "budget": "75", "bucket": ""},
     )
 
     response = client.get("/categories")
@@ -153,10 +163,12 @@ def test_category_list_flags_when_subcategory_budgets_exceed_category(client):
 
 
 def test_category_list_does_not_flag_when_subcategory_budgets_fit(client):
-    client.post("/categories/expense", data={"name": "Groceries", "budget": "100"})
+    client.post(
+        "/categories/expense", data={"name": "Groceries", "budget": "100", "bucket": ""}
+    )
     client.post(
         "/categories/expense/Groceries/subcategories",
-        data={"name": "Supermarket", "budget": "50"},
+        data={"name": "Supermarket", "budget": "50", "bucket": ""},
     )
 
     response = client.get("/categories")
@@ -274,7 +286,7 @@ def test_add_subcategory_appears_under_category(client):
     assert "Supermarket" in response.text
     result = read_categories(config.CATEGORIES_PATH)
     assert result["expense"]["Groceries"]["subcategories"] == {
-        "Supermarket": {"icon": "store", "budget": ""}
+        "Supermarket": {"icon": "store", "budget": "", "bucket": ""}
     }
 
 
@@ -283,7 +295,7 @@ def test_add_subcategory_accepts_budget(client):
 
     response = client.post(
         "/categories/expense/Groceries/subcategories",
-        data={"name": "Supermarket", "budget": "150"},
+        data={"name": "Supermarket", "budget": "150", "bucket": ""},
     )
 
     assert response.status_code == 200
@@ -318,7 +330,7 @@ def test_update_subcategory_renames_and_reicons(client):
     assert response.status_code == 200
     result = read_categories(config.CATEGORIES_PATH)
     assert result["expense"]["Groceries"]["subcategories"] == {
-        "Store": {"icon": "store", "budget": ""}
+        "Store": {"icon": "store", "budget": "", "bucket": ""}
     }
 
 
@@ -431,7 +443,9 @@ def test_edit_category_form_suggests_budget_when_none_set(client):
 
 
 def test_edit_category_form_no_suggestion_when_budget_already_set(client):
-    client.post("/categories/expense", data={"name": "Groceries", "budget": "50"})
+    client.post(
+        "/categories/expense", data={"name": "Groceries", "budget": "50", "bucket": ""}
+    )
     write_ledger(_monthly_expenses("Groceries"), config.LEDGER_PATH)
 
     response = client.get("/categories/expense/Groceries/edit")

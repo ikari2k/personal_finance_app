@@ -14,27 +14,39 @@ def test_write_then_read_round_trips_categories(tmp_path):
     path = tmp_path / "categories.toml"
     categories = {
         "income": {
-            "Salary": {"icon": "banknote", "budget": "", "subcategories": {}},
-            "Freelance": {"icon": "", "budget": "", "subcategories": {}},
+            "Salary": {
+                "icon": "banknote",
+                "budget": "",
+                "bucket": "",
+                "subcategories": {},
+            },
+            "Freelance": {"icon": "", "budget": "", "bucket": "", "subcategories": {}},
         },
         "expense": {
             "Groceries": {
                 "icon": "cart",
                 "budget": "400.00",
+                "bucket": "",
                 "subcategories": {
-                    "Supermarket": {"icon": "store", "budget": "300.00"},
-                    "Restaurants": {"icon": "", "budget": ""},
+                    "Supermarket": {"icon": "store", "budget": "300.00", "bucket": ""},
+                    "Restaurants": {"icon": "", "budget": "", "bucket": ""},
                 },
             },
             "Utilities": {
                 "icon": "",
                 "budget": "",
+                "bucket": "",
                 "subcategories": {
-                    "Electric": {"icon": "", "budget": ""},
-                    "Water": {"icon": "", "budget": ""},
+                    "Electric": {"icon": "", "budget": "", "bucket": ""},
+                    "Water": {"icon": "", "budget": "", "bucket": ""},
                 },
             },
-            "Miscellaneous": {"icon": "", "budget": "", "subcategories": {}},
+            "Miscellaneous": {
+                "icon": "",
+                "budget": "",
+                "bucket": "",
+                "subcategories": {},
+            },
         },
     }
 
@@ -46,12 +58,17 @@ def test_write_then_read_round_trips_categories(tmp_path):
 def test_income_and_expense_trees_stay_independent(tmp_path):
     path = tmp_path / "categories.toml"
     categories = {
-        "income": {"Salary": {"icon": "", "budget": "", "subcategories": {}}},
+        "income": {
+            "Salary": {"icon": "", "budget": "", "bucket": "", "subcategories": {}}
+        },
         "expense": {
             "Groceries": {
                 "icon": "",
                 "budget": "",
-                "subcategories": {"Supermarket": {"icon": "", "budget": ""}},
+                "bucket": "",
+                "subcategories": {
+                    "Supermarket": {"icon": "", "budget": "", "bucket": ""}
+                },
             }
         },
     }
@@ -78,14 +95,17 @@ def test_read_categories_upgrades_pre_icon_flat_list_format(tmp_path):
     result = read_categories(path)
 
     assert result == {
-        "income": {"Salary": {"icon": "", "budget": "", "subcategories": {}}},
+        "income": {
+            "Salary": {"icon": "", "budget": "", "bucket": "", "subcategories": {}}
+        },
         "expense": {
             "Groceries": {
                 "icon": "",
                 "budget": "",
+                "bucket": "",
                 "subcategories": {
-                    "Supermarket": {"icon": "", "budget": ""},
-                    "Farmers Market": {"icon": "", "budget": ""},
+                    "Supermarket": {"icon": "", "budget": "", "bucket": ""},
+                    "Farmers Market": {"icon": "", "budget": "", "bucket": ""},
                 },
             }
         },
@@ -115,9 +135,10 @@ def test_read_categories_upgrades_pre_budget_flat_icon_subcategory_format(tmp_pa
             "Groceries": {
                 "icon": "cart",
                 "budget": "",
+                "bucket": "",
                 "subcategories": {
-                    "Supermarket": {"icon": "store", "budget": ""},
-                    "Restaurants": {"icon": "", "budget": ""},
+                    "Supermarket": {"icon": "store", "budget": "", "bucket": ""},
+                    "Restaurants": {"icon": "", "budget": "", "bucket": ""},
                 },
             }
         },

@@ -21,7 +21,14 @@ def test_add_category_adds_entry_with_icon():
     result = add_category({}, TransactionType.EXPENSE, "Groceries", "cart")
 
     assert result == {
-        "expense": {"Groceries": {"icon": "cart", "budget": "", "subcategories": {}}}
+        "expense": {
+            "Groceries": {
+                "icon": "cart",
+                "budget": "",
+                "bucket": "",
+                "subcategories": {},
+            }
+        }
     }
 
 
@@ -29,7 +36,9 @@ def test_add_category_defaults_to_no_icon():
     result = add_category({}, TransactionType.EXPENSE, "Groceries")
 
     assert result == {
-        "expense": {"Groceries": {"icon": "", "budget": "", "subcategories": {}}}
+        "expense": {
+            "Groceries": {"icon": "", "budget": "", "bucket": "", "subcategories": {}}
+        }
     }
 
 
@@ -39,7 +48,14 @@ def test_add_category_accepts_budget():
     )
 
     assert result == {
-        "expense": {"Groceries": {"icon": "", "budget": "500.00", "subcategories": {}}}
+        "expense": {
+            "Groceries": {
+                "icon": "",
+                "budget": "500.00",
+                "bucket": "",
+                "subcategories": {},
+            }
+        }
     }
 
 
@@ -60,7 +76,9 @@ def test_add_category_rejects_blank_name():
 
 def test_add_category_rejects_duplicate_name():
     existing = {
-        "expense": {"Groceries": {"icon": "", "budget": "", "subcategories": {}}}
+        "expense": {
+            "Groceries": {"icon": "", "budget": "", "bucket": "", "subcategories": {}}
+        }
     }
 
     with pytest.raises(ValueError):
@@ -91,7 +109,10 @@ def test_update_category_renames_and_reicons_keeping_subcategories():
             "Groceries": {
                 "icon": "cart",
                 "budget": "",
-                "subcategories": {"Supermarket": {"icon": "store", "budget": ""}},
+                "bucket": "",
+                "subcategories": {
+                    "Supermarket": {"icon": "store", "budget": "", "bucket": ""}
+                },
             }
         }
     }
@@ -105,7 +126,10 @@ def test_update_category_renames_and_reicons_keeping_subcategories():
             "Food": {
                 "icon": "utensils",
                 "budget": "",
-                "subcategories": {"Supermarket": {"icon": "store", "budget": ""}},
+                "bucket": "",
+                "subcategories": {
+                    "Supermarket": {"icon": "store", "budget": "", "bucket": ""}
+                },
             }
         }
     }
@@ -113,7 +137,9 @@ def test_update_category_renames_and_reicons_keeping_subcategories():
 
 def test_update_category_accepts_budget():
     existing = {
-        "expense": {"Groceries": {"icon": "", "budget": "", "subcategories": {}}}
+        "expense": {
+            "Groceries": {"icon": "", "budget": "", "bucket": "", "subcategories": {}}
+        }
     }
 
     result = update_category(
@@ -125,13 +151,22 @@ def test_update_category_accepts_budget():
     )
 
     assert result == {
-        "expense": {"Groceries": {"icon": "", "budget": "300", "subcategories": {}}}
+        "expense": {
+            "Groceries": {
+                "icon": "",
+                "budget": "300",
+                "bucket": "",
+                "subcategories": {},
+            }
+        }
     }
 
 
 def test_update_category_rejects_negative_budget():
     existing = {
-        "expense": {"Groceries": {"icon": "", "budget": "", "subcategories": {}}}
+        "expense": {
+            "Groceries": {"icon": "", "budget": "", "bucket": "", "subcategories": {}}
+        }
     }
 
     with pytest.raises(ValueError):
@@ -145,7 +180,11 @@ def test_update_category_rejects_negative_budget():
 
 
 def test_update_category_rejects_budget_for_income():
-    existing = {"income": {"Salary": {"icon": "", "budget": "", "subcategories": {}}}}
+    existing = {
+        "income": {
+            "Salary": {"icon": "", "budget": "", "bucket": "", "subcategories": {}}
+        }
+    }
 
     with pytest.raises(ValueError):
         update_category(
@@ -165,8 +204,8 @@ def test_update_category_rejects_unknown_current_name():
 def test_update_category_rejects_renaming_onto_a_different_existing_category():
     existing = {
         "expense": {
-            "Groceries": {"icon": "", "budget": "", "subcategories": {}},
-            "Housing": {"icon": "", "budget": "", "subcategories": {}},
+            "Groceries": {"icon": "", "budget": "", "bucket": "", "subcategories": {}},
+            "Housing": {"icon": "", "budget": "", "bucket": "", "subcategories": {}},
         }
     }
 
@@ -176,7 +215,9 @@ def test_update_category_rejects_renaming_onto_a_different_existing_category():
 
 def test_update_category_allows_keeping_the_same_name():
     existing = {
-        "expense": {"Groceries": {"icon": "", "budget": "", "subcategories": {}}}
+        "expense": {
+            "Groceries": {"icon": "", "budget": "", "bucket": "", "subcategories": {}}
+        }
     }
 
     result = update_category(
@@ -184,7 +225,14 @@ def test_update_category_allows_keeping_the_same_name():
     )
 
     assert result == {
-        "expense": {"Groceries": {"icon": "cart", "budget": "", "subcategories": {}}}
+        "expense": {
+            "Groceries": {
+                "icon": "cart",
+                "budget": "",
+                "bucket": "",
+                "subcategories": {},
+            }
+        }
     }
 
 
@@ -194,7 +242,10 @@ def test_delete_category_removes_it_and_its_subcategories():
             "Groceries": {
                 "icon": "",
                 "budget": "",
-                "subcategories": {"Supermarket": {"icon": "", "budget": ""}},
+                "bucket": "",
+                "subcategories": {
+                    "Supermarket": {"icon": "", "budget": "", "bucket": ""}
+                },
             }
         }
     }
@@ -211,7 +262,9 @@ def test_delete_category_rejects_unknown_name():
 
 def test_add_subcategory_adds_entry_with_icon():
     existing = {
-        "expense": {"Groceries": {"icon": "", "budget": "", "subcategories": {}}}
+        "expense": {
+            "Groceries": {"icon": "", "budget": "", "bucket": "", "subcategories": {}}
+        }
     }
 
     result = add_subcategory(
@@ -223,7 +276,10 @@ def test_add_subcategory_adds_entry_with_icon():
             "Groceries": {
                 "icon": "",
                 "budget": "",
-                "subcategories": {"Supermarket": {"icon": "store", "budget": ""}},
+                "bucket": "",
+                "subcategories": {
+                    "Supermarket": {"icon": "store", "budget": "", "bucket": ""}
+                },
             }
         }
     }
@@ -231,7 +287,9 @@ def test_add_subcategory_adds_entry_with_icon():
 
 def test_add_subcategory_accepts_budget():
     existing = {
-        "expense": {"Groceries": {"icon": "", "budget": "", "subcategories": {}}}
+        "expense": {
+            "Groceries": {"icon": "", "budget": "", "bucket": "", "subcategories": {}}
+        }
     }
 
     result = add_subcategory(
@@ -247,7 +305,10 @@ def test_add_subcategory_accepts_budget():
             "Groceries": {
                 "icon": "",
                 "budget": "",
-                "subcategories": {"Supermarket": {"icon": "", "budget": "150"}},
+                "bucket": "",
+                "subcategories": {
+                    "Supermarket": {"icon": "", "budget": "150", "bucket": ""}
+                },
             }
         }
     }
@@ -255,7 +316,9 @@ def test_add_subcategory_accepts_budget():
 
 def test_add_subcategory_rejects_negative_budget():
     existing = {
-        "expense": {"Groceries": {"icon": "", "budget": "", "subcategories": {}}}
+        "expense": {
+            "Groceries": {"icon": "", "budget": "", "bucket": "", "subcategories": {}}
+        }
     }
 
     with pytest.raises(ValueError):
@@ -269,7 +332,11 @@ def test_add_subcategory_rejects_negative_budget():
 
 
 def test_add_subcategory_rejects_budget_for_income():
-    existing = {"income": {"Salary": {"icon": "", "budget": "", "subcategories": {}}}}
+    existing = {
+        "income": {
+            "Salary": {"icon": "", "budget": "", "bucket": "", "subcategories": {}}
+        }
+    }
 
     with pytest.raises(ValueError):
         add_subcategory(
@@ -292,7 +359,10 @@ def test_add_subcategory_rejects_duplicate_name():
             "Groceries": {
                 "icon": "",
                 "budget": "",
-                "subcategories": {"Supermarket": {"icon": "", "budget": ""}},
+                "bucket": "",
+                "subcategories": {
+                    "Supermarket": {"icon": "", "budget": "", "bucket": ""}
+                },
             }
         }
     }
@@ -303,7 +373,9 @@ def test_add_subcategory_rejects_duplicate_name():
 
 def test_add_subcategory_rejects_unknown_icon():
     existing = {
-        "expense": {"Groceries": {"icon": "", "budget": "", "subcategories": {}}}
+        "expense": {
+            "Groceries": {"icon": "", "budget": "", "bucket": "", "subcategories": {}}
+        }
     }
 
     with pytest.raises(ValueError):
@@ -318,7 +390,10 @@ def test_update_subcategory_renames_and_reicons():
             "Groceries": {
                 "icon": "",
                 "budget": "",
-                "subcategories": {"Supermarket": {"icon": "", "budget": ""}},
+                "bucket": "",
+                "subcategories": {
+                    "Supermarket": {"icon": "", "budget": "", "bucket": ""}
+                },
             }
         }
     }
@@ -337,7 +412,10 @@ def test_update_subcategory_renames_and_reicons():
             "Groceries": {
                 "icon": "",
                 "budget": "",
-                "subcategories": {"Store": {"icon": "store", "budget": ""}},
+                "bucket": "",
+                "subcategories": {
+                    "Store": {"icon": "store", "budget": "", "bucket": ""}
+                },
             }
         }
     }
@@ -349,7 +427,10 @@ def test_update_subcategory_accepts_budget():
             "Groceries": {
                 "icon": "",
                 "budget": "",
-                "subcategories": {"Supermarket": {"icon": "", "budget": ""}},
+                "bucket": "",
+                "subcategories": {
+                    "Supermarket": {"icon": "", "budget": "", "bucket": ""}
+                },
             }
         }
     }
@@ -368,7 +449,10 @@ def test_update_subcategory_accepts_budget():
             "Groceries": {
                 "icon": "",
                 "budget": "",
-                "subcategories": {"Supermarket": {"icon": "", "budget": "75"}},
+                "bucket": "",
+                "subcategories": {
+                    "Supermarket": {"icon": "", "budget": "75", "bucket": ""}
+                },
             }
         }
     }
@@ -380,7 +464,10 @@ def test_update_subcategory_rejects_negative_budget():
             "Groceries": {
                 "icon": "",
                 "budget": "",
-                "subcategories": {"Supermarket": {"icon": "", "budget": ""}},
+                "bucket": "",
+                "subcategories": {
+                    "Supermarket": {"icon": "", "budget": "", "bucket": ""}
+                },
             }
         }
     }
@@ -398,7 +485,9 @@ def test_update_subcategory_rejects_negative_budget():
 
 def test_update_subcategory_rejects_unknown_current_name():
     existing = {
-        "expense": {"Groceries": {"icon": "", "budget": "", "subcategories": {}}}
+        "expense": {
+            "Groceries": {"icon": "", "budget": "", "bucket": "", "subcategories": {}}
+        }
     }
 
     with pytest.raises(ValueError):
@@ -413,9 +502,10 @@ def test_delete_subcategory_removes_it():
             "Groceries": {
                 "icon": "",
                 "budget": "",
+                "bucket": "",
                 "subcategories": {
-                    "Supermarket": {"icon": "", "budget": ""},
-                    "Farmers Market": {"icon": "", "budget": ""},
+                    "Supermarket": {"icon": "", "budget": "", "bucket": ""},
+                    "Farmers Market": {"icon": "", "budget": "", "bucket": ""},
                 },
             }
         }
@@ -430,7 +520,10 @@ def test_delete_subcategory_removes_it():
             "Groceries": {
                 "icon": "",
                 "budget": "",
-                "subcategories": {"Farmers Market": {"icon": "", "budget": ""}},
+                "bucket": "",
+                "subcategories": {
+                    "Farmers Market": {"icon": "", "budget": "", "bucket": ""}
+                },
             }
         }
     }
@@ -438,7 +531,9 @@ def test_delete_subcategory_removes_it():
 
 def test_delete_subcategory_rejects_unknown_name():
     existing = {
-        "expense": {"Groceries": {"icon": "", "budget": "", "subcategories": {}}}
+        "expense": {
+            "Groceries": {"icon": "", "budget": "", "bucket": "", "subcategories": {}}
+        }
     }
 
     with pytest.raises(ValueError):
@@ -449,10 +544,11 @@ def test_subcategories_exceed_category_budget_when_sum_is_greater():
     entry = {
         "icon": "",
         "budget": "100",
+        "bucket": "",
         "subcategories": {
-            "A": {"icon": "", "budget": "50"},
-            "B": {"icon": "", "budget": "30"},
-            "C": {"icon": "", "budget": "45"},
+            "A": {"icon": "", "budget": "50", "bucket": ""},
+            "B": {"icon": "", "budget": "30", "bucket": ""},
+            "C": {"icon": "", "budget": "45", "bucket": ""},
         },
     }
 
@@ -463,9 +559,10 @@ def test_subcategories_exceed_category_budget_when_sum_is_within():
     entry = {
         "icon": "",
         "budget": "100",
+        "bucket": "",
         "subcategories": {
-            "A": {"icon": "", "budget": "50"},
-            "B": {"icon": "", "budget": "30"},
+            "A": {"icon": "", "budget": "50", "bucket": ""},
+            "B": {"icon": "", "budget": "30", "bucket": ""},
         },
     }
 
@@ -476,7 +573,8 @@ def test_subcategories_exceed_category_budget_ignores_unbudgeted_subcategories()
     entry = {
         "icon": "",
         "budget": "10",
-        "subcategories": {"A": {"icon": "", "budget": ""}},
+        "bucket": "",
+        "subcategories": {"A": {"icon": "", "budget": "", "bucket": ""}},
     }
 
     assert subcategories_exceed_category_budget(entry) is False
@@ -486,7 +584,8 @@ def test_subcategories_exceed_category_budget_false_when_category_has_no_budget(
     entry = {
         "icon": "",
         "budget": "",
-        "subcategories": {"A": {"icon": "", "budget": "999"}},
+        "bucket": "",
+        "subcategories": {"A": {"icon": "", "budget": "999", "bucket": ""}},
     }
 
     assert subcategories_exceed_category_budget(entry) is False
@@ -497,7 +596,8 @@ _TREE = {
         "Groceries": {
             "icon": "",
             "budget": "",
-            "subcategories": {"Supermarket": {"icon": "", "budget": ""}},
+            "bucket": "",
+            "subcategories": {"Supermarket": {"icon": "", "budget": "", "bucket": ""}},
         }
     }
 }
@@ -527,3 +627,79 @@ def test_category_pair_exists_false_for_unknown_subcategory():
 
 def test_category_pair_exists_false_for_wrong_type():
     assert category_pair_exists(_TREE, TransactionType.INCOME, "Groceries", "") is False
+
+
+def _tree_with_buckets():
+    cats = {"income": {}, "expense": {}}
+    cats = add_category(cats, TransactionType.EXPENSE, "Food", bucket="need")
+    return add_subcategory(
+        cats, TransactionType.EXPENSE, "Food", "Restaurants", bucket="want"
+    )
+
+
+def test_add_category_and_subcategory_store_bucket():
+    cats = _tree_with_buckets()
+    assert cats["expense"]["Food"]["bucket"] == "need"
+    assert cats["expense"]["Food"]["subcategories"]["Restaurants"]["bucket"] == "want"
+
+
+def test_bucket_defaults_to_unclassified():
+    cats = add_category({"income": {}, "expense": {}}, TransactionType.EXPENSE, "X")
+    assert cats["expense"]["X"]["bucket"] == ""
+
+
+def test_update_category_without_bucket_keeps_it():
+    cats = update_category(
+        _tree_with_buckets(),
+        TransactionType.EXPENSE,
+        "Food",
+        name="Eating",
+        icon="cart",
+    )
+    assert cats["expense"]["Eating"]["bucket"] == "need"
+
+
+def test_update_category_with_empty_bucket_clears_it():
+    cats = update_category(
+        _tree_with_buckets(), TransactionType.EXPENSE, "Food", name="Food", bucket=""
+    )
+    assert cats["expense"]["Food"]["bucket"] == ""
+
+
+def test_update_subcategory_without_bucket_keeps_it_through_rename():
+    cats = update_subcategory(
+        _tree_with_buckets(),
+        TransactionType.EXPENSE,
+        "Food",
+        "Restaurants",
+        name="Dining",
+    )
+    assert cats["expense"]["Food"]["subcategories"]["Dining"]["bucket"] == "want"
+
+
+def test_invalid_bucket_rejected():
+    with pytest.raises(ValueError, match="bucket"):
+        add_category(
+            {"income": {}, "expense": {}},
+            TransactionType.EXPENSE,
+            "X",
+            bucket="excluded",
+        )
+    with pytest.raises(ValueError, match="bucket"):
+        add_category(
+            {"income": {}, "expense": {}}, TransactionType.INCOME, "X", bucket="need"
+        )
+
+
+def test_income_category_can_be_excluded_but_not_its_subcategories():
+    cats = add_category(
+        {"income": {}, "expense": {}},
+        TransactionType.INCOME,
+        "Refunds",
+        bucket="excluded",
+    )
+    assert cats["income"]["Refunds"]["bucket"] == "excluded"
+    with pytest.raises(ValueError, match="bucket"):
+        add_subcategory(
+            cats, TransactionType.INCOME, "Refunds", "Tax", bucket="excluded"
+        )

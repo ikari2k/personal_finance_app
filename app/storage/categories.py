@@ -26,12 +26,14 @@ def _normalize_subcategory(raw: str | dict[str, object]) -> SubcategoryEntry:
     persists the upgraded shape.
     """
     if isinstance(raw, str):
-        return {"icon": raw, "budget": ""}
+        return {"icon": raw, "budget": "", "bucket": ""}
     icon = raw.get("icon", "")
     budget = raw.get("budget", "")
+    bucket = raw.get("bucket", "")
     return {
         "icon": icon if isinstance(icon, str) else "",
         "budget": budget if isinstance(budget, str) else "",
+        "bucket": bucket if isinstance(bucket, str) else "",
     }
 
 
@@ -49,14 +51,19 @@ def _normalize_entry(raw: list[str] | dict[str, object]) -> CategoryEntry:
         return {
             "icon": "",
             "budget": "",
-            "subcategories": {name: {"icon": "", "budget": ""} for name in raw},
+            "bucket": "",
+            "subcategories": {
+                name: {"icon": "", "budget": "", "bucket": ""} for name in raw
+            },
         }
     icon = raw.get("icon", "")
     budget = raw.get("budget", "")
+    bucket = raw.get("bucket", "")
     subcategories = raw.get("subcategories", {})
     return {
         "icon": icon if isinstance(icon, str) else "",
         "budget": budget if isinstance(budget, str) else "",
+        "bucket": bucket if isinstance(bucket, str) else "",
         "subcategories": (
             {name: _normalize_subcategory(sub) for name, sub in subcategories.items()}
             if isinstance(subcategories, dict)
