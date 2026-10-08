@@ -3,6 +3,7 @@
 {% from "reports/_account_filter.html" import account_filter %}
 {% from "_breadcrumb.html" import breadcrumb %}
 {% from "_scope_bar.html" import period_stepper %}
+{% from "_section_index.html" import section_index %}
 {% from "_icons.html" import txn_link_icon %}
 {% block title %}{{ year }} — Reports — Finance Tracker{% endblock %}
 {% block content %}
@@ -18,13 +19,12 @@
   {{ account_filter(accounts, account_id) }}
   <p><a class="cat-cta-link" href="{{ year_txn_link }}">All {{ year }} transactions &rsaquo;</a></p>
 
-  <nav class="section-index" aria-label="On this page">
-    <a href="#overview">Overview</a>
-    <a href="#months">Months</a>
-    <a href="#categories">Categories</a>
-    <a href="#month-by-month" onclick="document.getElementById('month-by-month').open = true">Month by month</a>
-    {% if expense_treemap_pair %}<a href="#spending">Spending breakdown</a>{% endif %}
-  </nav>
+  {{ section_index([
+    {"id": "overview", "label": "Overview"},
+    {"id": "months", "label": "Months"},
+    {"id": "categories", "label": "Categories"},
+    {"id": "month-by-month", "label": "Month by month", "open": true}]
+    + ([{"id": "spending", "label": "Spending breakdown"}] if expense_treemap_pair else [])) }}
 
   <div class="dash-grid" id="overview" data-section style="margin-bottom: 1.5rem;">
     <div class="dash-widget dash-widget-bordered dash-span-3">

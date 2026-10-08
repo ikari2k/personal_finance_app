@@ -170,3 +170,10 @@ def test_unclassified_row_hidden_when_zero(client):
 
     assert "br-swatch-unclassified" in month_panel("2026-03")
     assert "br-swatch-unclassified" not in month_panel("2026-05")
+
+
+def test_page_has_non_sticky_section_index(client):
+    text = client.get("/reports/budget-rule").text
+
+    assert 'class="section-index static"' in text
+    assert 'id="breakdown"' in text and 'id="trend"' in text

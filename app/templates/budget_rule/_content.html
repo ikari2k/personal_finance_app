@@ -1,7 +1,9 @@
 {% from "budget_rule/_bar.html" import split_bar, rule_table %}
 {% from "_scope_bar.html" import period_stepper %}
+{% from "_section_index.html" import section_index %}
 <div id="budget-rule-content" {% if oob %}hx-swap-oob="true"{% endif %}>
-  <div class="view-options br-controls">
+  {{ section_index([{"id": "breakdown", "label": "Breakdown"}, {"id": "trend", "label": "Trend"}], sticky=false) }}
+  <div class="view-options br-controls" id="breakdown" data-section>
     {{ period_stepper(period) }}
     <div class="cat-scope-toggle br-tabs" role="group" aria-label="Period">
       {% for p in periods %}
@@ -35,7 +37,7 @@
     </section>
   {% endfor %}
 
-  <h2>Trend</h2>
+  <h2 id="trend" data-section>Trend</h2>
   <p class="muted">Share of income per month, up to {{ label }}. Savings below zero (net withdrawals) hangs below the axis.</p>
   {% if trend %}
     <svg viewBox="0 0 {{ trend.width }} {{ trend.height }}" class="br-trend" role="img"

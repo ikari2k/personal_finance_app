@@ -1,0 +1,11 @@
+{# "On this page" jump links for long pages. `items` is a list of dicts with
+   id, label and optional open (true when the target is a <details> that should
+   unfold on click). Targets carry `data-section` so anchors land below the
+   sticky nav. `sticky=false` for pages that already have a sticky header row. #}
+{% macro section_index(items, sticky=true) %}
+  <nav class="section-index{{ '' if sticky else ' static' }}" aria-label="On this page">
+    {% for item in items %}
+      <a href="#{{ item.id }}"{% if item.open %} onclick="document.getElementById('{{ item.id }}').open = true"{% endif %}>{{ item.label }}</a>
+    {% endfor %}
+  </nav>
+{% endmacro %}

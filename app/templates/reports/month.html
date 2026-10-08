@@ -3,6 +3,7 @@
 {% from "reports/_account_filter.html" import account_filter %}
 {% from "_breadcrumb.html" import breadcrumb %}
 {% from "_scope_bar.html" import period_stepper %}
+{% from "_section_index.html" import section_index %}
 {% from "_category_icons.html" import category_icon %}
 {% block title %}{{ label }} — Reports — Finance Tracker{% endblock %}
 {% block content %}
@@ -15,7 +16,14 @@
   {{ account_filter(accounts, account_id) }}
   <p><a class="cat-cta-link" href="{{ month_txn_link }}">All {{ label }} transactions &rsaquo;</a></p>
 
-  <div class="dash-grid" style="margin-bottom: 1.5rem;">
+  {{ section_index([
+    {"id": "overview", "label": "Overview"},
+    {"id": "budget-rule", "label": "50/30/20 rule"}]
+    + ([{"id": "movers", "label": "Biggest movers"}] if movers else [])
+    + ([{"id": "spending", "label": "Spending breakdown"}] if expense_treemap_pair else [])
+    + [{"id": "categories", "label": "Categories"}]) }}
+
+  <div class="dash-grid" id="overview" data-section style="margin-bottom: 1.5rem;">
     <div class="dash-widget dash-widget-bordered dash-span-3">
       <div class="dash-widget-head"><span class="dash-widget-title">Income</span></div>
       <div class="cat-stat-number">{{ month_stats.income_total|money }}</div>
@@ -72,7 +80,7 @@
   {% include "budget_rule/_month.html" %}
 
   {% if movers %}
-    <h2 style="margin-bottom: 0.15rem;">Biggest movers this month</h2>
+    <h2 id="movers" data-section style="margin-bottom: 0.15rem;">Biggest movers this month</h2>
     <p class="muted" style="margin-top: 0;">Expense categories with the largest change vs. {{ prev_label }}.</p>
     <div class="table-scroll">
       <table>
@@ -98,10 +106,14 @@
     </div>
   {% endif %}
 
-  {% set treemap_caption = "Every expense category in " ~ label ~ "." %}
-  {% include "reports/_treemap.html" %}
+  {% if expense_treemap_pair %}
+    <div id="spending" data-section>
+      {% set treemap_caption = "Every expense category in " ~ label ~ "." %}
+      {% include "reports/_treemap.html" %}
+    </div>
+  {% endif %}
 
-  <div class="report-columns">
+  <div class="report-columns" id="categories" data-section>
     <div>
       <h2>Income by category</h2>
       {{ breakdown_table(income_breakdown, income_config, "income", date_from, date_to, account_id, year=year, month=month) }}

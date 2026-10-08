@@ -1661,3 +1661,15 @@ def test_year_report_has_section_index_with_folded_matrix(client):
     assert 'href="#month-by-month"' in text
     # The big month-by-month matrices start folded (no `open` attribute).
     assert '<details class="report-fold" id="month-by-month" data-section>' in text
+
+
+def test_month_report_has_section_index_matching_its_sections(client):
+    text = client.get("/reports/2026/3").text
+
+    nav = text.split('class="section-index"')[1].split("</nav>")[0]
+    assert 'href="#overview"' in nav and 'href="#budget-rule"' in nav
+    assert 'href="#categories"' in nav
+    for anchor in ("overview", "budget-rule", "categories"):
+        assert f'id="{anchor}"' in text
+    # No expenses in this (empty) month: no dead links to missing sections.
+    assert 'href="#spending"' not in nav and 'href="#movers"' not in nav

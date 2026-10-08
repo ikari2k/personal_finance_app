@@ -1,7 +1,7 @@
 {# This and last month's 50/30/20 breakdown for /reports/{year}/{month}. Expects
    `rule_months` (app.routers.budget_rule.month_pair), `rule_link`. #}
 {% from "budget_rule/_bar.html" import split_bar, rule_table %}
-<div class="dash-widget-head" style="margin-bottom: 0.15rem;">
+<div class="dash-widget-head" id="budget-rule" data-section style="margin-bottom: 0.15rem;">
   <h2 style="margin: 0;">50/30/20 rule</h2>
   <a class="table-link" href="{{ rule_link }}">Full report &rsaquo;</a>
 </div>

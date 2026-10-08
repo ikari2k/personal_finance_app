@@ -2618,6 +2618,7 @@ body > header nav .nav-manage {
 }
 .section-index a:hover { color: var(--pico-color); }
 [data-section] { scroll-margin-top: calc(var(--nav-h) + 3.5rem); }
+.section-index.static { position: static; }
 
 /* A section that starts folded (a display preference, client-side only):
  * the summary carries the section's own heading. */
