@@ -301,6 +301,7 @@ def _content_context(month_key: str, today: date) -> dict:
         "year": year,
         "month": month,
         "month_key": selected,
+        "current_key": f"{today.year:04d}-{today.month:02d}",
         "label": f"{calendar.month_name[month]} {year}",
         "targets": targets,
         "periods": periods,

@@ -145,3 +145,17 @@ def test_rolling_window_excludes_older_months(client):
     panel6 = text.split('data-panel="r6"')[1].split("</section>")[0]
     assert "No income in this period" in panel3
     assert "No income in this period" not in panel6
+
+
+def test_month_navigation_controls(client):
+    _seed()
+
+    past = client.get("/reports/budget-rule?month=2026-03").text
+    assert 'name="month"' in past and 'value="2026-03"' in past
+    assert "Back to current month" in past
+    assert "Previous month: February 2026" in past
+    assert "Next month: April 2026" in past
+
+    current = client.get("/reports/budget-rule").text
+    assert "Back to current month" not in current
+    assert 'class="br-step disabled"' in current

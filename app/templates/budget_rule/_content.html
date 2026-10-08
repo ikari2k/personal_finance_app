@@ -1,26 +1,33 @@
 <div id="budget-rule-content" {% if oob %}hx-swap-oob="true"{% endif %}>
-  <div class="period-nav">
-    <a href="/reports/budget-rule?month={{ prev_key }}" class="period-nav-prev">&larr; {{ prev_label }}</a>
-    <h2 style="margin: 0;">{{ label }}</h2>
-    {% if next_key %}
-      <a href="/reports/budget-rule?month={{ next_key }}" class="period-nav-next">{{ next_label }} &rarr;</a>
-    {% else %}
-      <span class="period-nav-next muted"></span>
-    {% endif %}
+  <div class="view-options br-controls">
+    <div class="br-month-nav">
+      <a class="br-step" href="/reports/budget-rule?month={{ prev_key }}"
+         aria-label="Previous month: {{ prev_label }}" title="{{ prev_label }}">&lsaquo;</a>
+      <form method="get" action="/reports/budget-rule" class="br-month-form">
+        <input type="month" name="month" value="{{ month_key }}" max="{{ current_key }}"
+               aria-label="Month" onchange="if (this.value) this.form.submit()">
+      </form>
+      {% if next_key %}
+        <a class="br-step" href="/reports/budget-rule?month={{ next_key }}"
+           aria-label="Next month: {{ next_label }}" title="{{ next_label }}">&rsaquo;</a>
+      {% else %}
+        <span class="br-step disabled" aria-hidden="true">&rsaquo;</span>
+      {% endif %}
+      {% if month_key != current_key %}
+        <a class="br-today" href="/reports/budget-rule">Back to current month</a>
+      {% endif %}
+    </div>
+    <div class="cat-scope-toggle br-tabs" role="group" aria-label="Period">
+      {% for p in periods %}
+        <button type="button" class="br-tab" aria-pressed="{{ 'true' if loop.first else 'false' }}"
+                onclick="var t = this; t.parentNode.querySelectorAll('button').forEach(function (b) { b.setAttribute('aria-pressed', b === t ? 'true' : 'false'); }); document.querySelectorAll('.br-panel').forEach(function (d) { d.hidden = d.dataset.panel !== '{{ p.key }}'; });">{{ p.tab }}</button>
+      {% endfor %}
+    </div>
   </div>
-  <p class="muted">
+  <p class="muted br-caption">
     Targets: Needs {{ targets.needs }}% &middot; Wants {{ targets.wants }}% &middot; Savings {{ targets.savings }}%
     of income. Savings is net transfers into savings accounts; excluded income categories don't count as income.
   </p>
-
-  <div role="group" class="br-tabs">
-    {% for p in periods %}
-      <button type="button" class="{{ '' if loop.first else 'secondary outline' }}"
-              onclick="var t = this; t.parentNode.querySelectorAll('button').forEach(function (b) { b.className = b === t ? '' : 'secondary outline'; }); document.querySelectorAll('.br-panel').forEach(function (d) { d.hidden = d.dataset.panel !== '{{ p.key }}'; });">
-        {{ p.tab }}
-      </button>
-    {% endfor %}
-  </div>
 
   {% for p in periods %}
     <section class="br-panel" data-panel="{{ p.key }}" {{ 'hidden' if not loop.first }}>
