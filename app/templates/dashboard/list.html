@@ -1,7 +1,9 @@
 {% extends "base.html" %}
+{% from "_scope_bar.html" import global_scope with context %}
 {% from "budget_rule/_bar.html" import compact_rows %}
 {% from "_category_icons.html" import category_icon %}
 {% block title %}Dashboard — Finance Tracker{% endblock %}
+{% block scope %}{{ global_scope(accounts, account_id) }}{% endblock %}
 {% block content %}
   <div class="page-header-row">
     <h1>Dashboard</h1>
@@ -254,7 +256,7 @@
         <span class="dash-widget-title">50/30/20 &middot; Last 6 months</span>
         <a class="dash-widget-link" href="/reports/budget-rule">Full report &rsaquo;</a>
       </div>
-      <p class="dash-widget-caption">Share of income per month, newest first; the current month is still in progress.</p>
+      <p class="dash-widget-caption">Share of income per month, newest first; the current month is still in progress.{% if budget_rule.all_accounts_note %} Always across all accounts.{% endif %}</p>
       {{ compact_rows(budget_rule.months, "No income.") }}
       {% if budget_rule.unclassified_count %}
         <p class="dash-widget-caption">

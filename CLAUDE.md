@@ -170,6 +170,13 @@ tests/unit/     tmp_path-isolated; tests/integration/  TestClient, conftest redi
   `routers.scope.resolve_account`) — absent param = remembered value, `account_id=` = all
   accounts. The bar's form carries every other query param as hidden fields. Don't hand-roll
   prev/next links or account selects in a page body; use `period_stepper`/`global_scope`.
+  The Dashboard follows the account (its 50/30/20 widget and transfer nudge always use all
+  accounts). The month is the `scope_month` cookie, recorded when a month report or
+  `/reports/budget-rule?month=` is visited; Transactions turns it into a date range *once* per
+  change (`scope_month_applied` marker), then its own date filters win. `?scope_month=` on
+  `/transactions` applies a month explicitly. The Transactions bar mirrors the list's real
+  range (an exact calendar month = stepper, anything else = empty picker) and is refreshed
+  out-of-band after HTMX filter changes.
 - **Pico classless**: all page content sits inside `<header><nav>` / `<main>` per `base.html`; no
   bare `<body>` children. Prefer Pico elements/variables over new CSS. Font via
   `--pico-font-family` in `style.css`.

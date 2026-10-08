@@ -31,6 +31,7 @@ from app.models.account import ACCOUNT_TYPE_LABELS, AccountType
 from app.models.transaction import TransactionType
 from app.routers.budget_rule import recent_months
 from app.routers.reports import _category_config, _ring_geometry
+from app.routers.scope import resolve_account
 from app.services.aggregation import (
     UNCATEGORIZED,
     category_all_time_monthly_average,
@@ -189,11 +190,22 @@ def _svg_net_worth_sparkline(values: list[Decimal]) -> str:
 
 
 @router.get("/dashboard", response_class=HTMLResponse)
-def dashboard(request: Request) -> HTMLResponse:
-    """Render the dashboard: net worth, this month, accounts, budgets, activity."""
-    accounts = read_accounts()
-    ledger = read_ledger()
+def dashboard(request: Request, account_id: str | None = None) -> HTMLResponse:
+    """Render the dashboard: net worth, this month, accounts, budgets, activity.
+
+    Follows the shared account choice (see ``routers.scope``): with one
+    account picked, every widget is computed from just that account's rows.
+    The 50/30/20 widget and the transfer-candidate nudge still use all
+    accounts, since savings and transfers are cross-account by nature.
+    """
+    all_accounts = read_accounts()
+    full_ledger = read_ledger()
     categories = read_categories()
+    account_id = resolve_account(request, account_id)
+    if account_id and not any(a.id == account_id for a in all_accounts):
+        account_id = ""  # a remembered account that no longer exists
+    accounts = [a for a in all_accounts if not account_id or a.id == account_id]
+    ledger = [t for t in full_ledger if not account_id or t.account_id == account_id]
     balances = all_balances(accounts, ledger)
 
     # --- net worth + sparkline ---
@@ -374,9 +386,9 @@ def dashboard(request: Request) -> HTMLResponse:
         for t in ledger
         if t.category == UNCATEGORIZED and t.type is not TransactionType.TRANSFER
     )
-    transfer_candidate_count = len(find_transfer_matches(ledger, accounts)) + len(
-        find_orphan_transfer_candidates(ledger, accounts)
-    )
+    transfer_candidate_count = len(
+        find_transfer_matches(full_ledger, all_accounts)
+    ) + len(find_orphan_transfer_candidates(full_ledger, all_accounts))
 
     income_config = _category_config(categories, TransactionType.INCOME)
     expense_config = _category_config(categories, TransactionType.EXPENSE)
@@ -430,7 +442,10 @@ def dashboard(request: Request) -> HTMLResponse:
         )
 
     budget_rule_widget = {
-        "months": recent_months(ledger, categories, accounts, today.year, today.month),
+        "months": recent_months(
+            full_ledger, categories, all_accounts, today.year, today.month
+        ),
+        "all_accounts_note": bool(account_id),
         "unclassified_count": count_unclassified_expense_categories(categories),
     }
 
@@ -439,6 +454,8 @@ def dashboard(request: Request) -> HTMLResponse:
         "dashboard/list.html",
         {
             "budget_rule": budget_rule_widget,
+            "accounts": all_accounts,
+            "account_id": account_id,
             "as_of": today,
             "current_net_worth": current_net_worth,
             "net_worth_delta": net_worth_delta,

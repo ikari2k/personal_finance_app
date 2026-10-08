@@ -457,3 +457,27 @@ def test_dashboard_compares_against_same_day_last_month(client, monkeypatch):
     text = client.get("/dashboard").text
 
     assert "50.0% vs this day last month" in text
+
+
+def test_dashboard_follows_the_shared_account(client):
+    _create_account(client, account_id="chk", starting_balance="1000.00")
+    _create_account(client, account_id="sav", starting_balance="5000.00")
+
+    all_text = client.get("/dashboard").text
+    one = client.get("/dashboard?account_id=sav").text
+
+    assert "6,000.00" in all_text  # net worth across both
+    assert "5,000.00" in one and "6,000.00" not in one
+    assert '<option value="sav" selected>' in one
+    # ...and the choice is remembered for the next plain visit.
+    assert '<option value="sav" selected>' in client.get("/dashboard").text
+
+
+def test_dashboard_ignores_a_remembered_account_that_no_longer_exists(client):
+    _create_account(client, account_id="chk", starting_balance="1000.00")
+    client.get("/dashboard?account_id=ghost")
+
+    response = client.get("/dashboard")
+
+    assert response.status_code == 200
+    assert "1,000.00" in response.text
