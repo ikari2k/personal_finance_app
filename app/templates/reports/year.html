@@ -6,9 +6,9 @@
 {% from "_section_index.html" import section_index %}
 {% from "_icons.html" import txn_link_icon %}
 {% block title %}{{ year }} — Reports — Finance Tracker{% endblock %}
+{% block crumbs %}{{ breadcrumb(breadcrumbs) }}{% endblock %}
 {% block scope %}{{ global_scope(accounts, account_id) }}{% endblock %}
 {% block content %}
-  {{ breadcrumb(breadcrumbs) }}
   {% set year_qs = [] %}
   {% if account_id %}{% set _ = year_qs.append('account_id=' + account_id) %}{% endif %}
   {% if sort != 'total' %}{% set _ = year_qs.append('sort=' + sort) %}{% endif %}

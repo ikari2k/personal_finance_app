@@ -5,6 +5,7 @@
 {% from "_section_index.html" import section_index %}
 {% from "_category_icons.html" import category_icon %}
 {% block title %}{{ label }} — Reports — Finance Tracker{% endblock %}
+{% block crumbs %}{{ breadcrumb(breadcrumbs) }}{% endblock %}
 {% block scope %}
   {% set acct_qs = '?account_id=' + account_id if account_id else '' %}
   {{ global_scope(accounts, account_id, {
@@ -13,7 +14,6 @@
     "label": label}) }}
 {% endblock %}
 {% block content %}
-  {{ breadcrumb(breadcrumbs) }}
   <h1>{{ label }}</h1>
   <p><a class="cat-cta-link" href="{{ month_txn_link }}">All {{ label }} transactions &rsaquo;</a></p>
 

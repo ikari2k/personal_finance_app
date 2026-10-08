@@ -2670,5 +2670,17 @@ body > header nav .nav-manage {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  margin: 0 0 0 auto;
+  margin: 0;
+}
+.scope-account label { margin: 0; }
+/* With a month stepper on the left, the account select sits at the far right;
+ * alone (Dashboard) it stays left so the band isn't an empty strip. */
+.period-stepper + .scope-account { margin-left: auto; }
+
+/* Big figure: a sans with tabular digits reads cleaner than mono's
+ * full-width comma/period at this size. */
+.dash-hero-number {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  letter-spacing: -0.02em;
 }

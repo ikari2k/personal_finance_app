@@ -14,9 +14,9 @@
     <span class="muted">—</span>
   {% endif %}
 {% endmacro %}
+{% block crumbs %}{{ breadcrumb(breadcrumbs) }}{% endblock %}
 {% block scope %}{{ global_scope(accounts, account_id) }}{% endblock %}
 {% block content %}
-  {{ breadcrumb(breadcrumbs) }}
   <h1>Categories</h1>
   <p class="muted" style="margin-top: 0;">
     Every {{ txn_type }} category's recent trend and budget status in one place — sort by

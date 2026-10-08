@@ -33,6 +33,7 @@
       </nav>
     </header>
     <main>
+      {% block crumbs %}{% endblock %}
       {% block scope %}{% endblock %}
       {% block content %}{% endblock %}
       <div id="toast-container"></div>

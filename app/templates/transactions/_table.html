@@ -180,7 +180,8 @@
 
 {% from "_scope_bar.html" import global_scope with context %}
 {# Account is owned by the page-level scope bar, so it is not a "filter" here. #}
-{% set narrowing = category or subcategory or txn_type or search or date_from or date_to %}
+{% set month_in_bar = scope_period is defined and scope_period.prev_url and date_from and date_to %}
+{% set narrowing = category or subcategory or txn_type or search or ((date_from or date_to) and not month_in_bar) %}
 <div id="transactions-table-wrapper" {% if oob %}hx-swap-oob="true"{% endif %}>
   <div class="view-options">
     {#
@@ -339,7 +340,9 @@
       {% endif %}
       {% if txn_type %}{{ filter_chip(txn_type|capitalize, ['txn_type'], chip_base) }}{% endif %}
       {% if search %}{{ filter_chip('“' ~ search ~ '”', ['search'], chip_base) }}{% endif %}
-      {% if date_from and date_to %}
+      {% if date_from and date_to and scope_period is defined and scope_period.prev_url %}
+        {# An exact calendar month is already shown (and steppable) in the scope bar. #}
+      {% elif date_from and date_to %}
         {{ filter_chip(date_from ~ ' – ' ~ date_to, ['date_from', 'date_to'], chip_base) }}
       {% elif date_from %}
         {{ filter_chip('From ' ~ date_from, ['date_from'], chip_base) }}

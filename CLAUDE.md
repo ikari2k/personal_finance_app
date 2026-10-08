@@ -163,7 +163,7 @@ tests/unit/     tmp_path-isolated; tests/integration/  TestClient, conftest redi
   *up to the same day*.
 - **Nav and the scope bar**: the header is sticky (`--nav-h`; `.page-header-row` sticks beneath
   it) with the current page marked `aria-current="page"`. Dashboard, Transactions and Reports
-  fill `{% block scope %}` in `base.html` with `global_scope(accounts, account_id[, period])`
+  fill `{% block scope %}` in `base.html` (breadcrumbs go in `{% block crumbs %}`, above it) with `global_scope(accounts, account_id[, period])`
   (`_scope_bar.html`, import *with context*): an optional month stepper plus the account select.
   The account is one sticky cookie (`account_id`, written by Transactions and, via middleware,
   by Reports/Dashboard URLs carrying `account_id`; report routes resolve it with

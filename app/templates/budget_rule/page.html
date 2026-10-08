@@ -2,9 +2,9 @@
 {% from "_breadcrumb.html" import breadcrumb %}
 {% from "_scope_bar.html" import global_scope with context %}
 {% block title %}50/30/20 — Reports — Finance Tracker{% endblock %}
+{% block crumbs %}{{ breadcrumb(breadcrumbs) }}{% endblock %}
 {% block scope %}{{ global_scope(none, "", period) }}{% endblock %}
 {% block content %}
-  {{ breadcrumb(breadcrumbs) }}
   <div class="page-header-row">
     <h1>50/30/20 rule</h1>
     <div class="cta-row">

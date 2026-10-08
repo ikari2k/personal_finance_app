@@ -3,6 +3,7 @@
 {% from "_scope_bar.html" import global_scope with context %}
 {% from "_breadcrumb.html" import breadcrumb %}
 {% block title %}{{ subcategory }} — {{ category }} — Reports — Finance Tracker{% endblock %}
+{% block crumbs %}{{ breadcrumb(breadcrumbs) }}{% endblock %}
 {% block scope %}{{ global_scope(accounts, account_id) }}{% endblock %}
 {% block content %}
   {#
@@ -25,7 +26,6 @@
     {% set period_txn_link = txn_link %}
     {% set period_label = "" %}
   {% endif %}
-  {{ breadcrumb(breadcrumbs) }}
   {% if has_data and scope_month %}
     <p class="muted">
       Showing {{ current_month_label }}.
