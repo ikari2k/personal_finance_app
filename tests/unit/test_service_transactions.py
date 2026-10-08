@@ -54,7 +54,10 @@ def test_ensure_category_adds_new_category_and_subcategory():
             "Groceries": {
                 "icon": "",
                 "budget": "",
-                "subcategories": {"Supermarket": {"icon": "", "budget": ""}},
+                "bucket": "",
+                "subcategories": {
+                    "Supermarket": {"icon": "", "budget": "", "bucket": ""}
+                },
             }
         }
     }
@@ -66,7 +69,10 @@ def test_ensure_category_does_not_duplicate_existing_subcategory():
             "Groceries": {
                 "icon": "cart",
                 "budget": "",
-                "subcategories": {"Supermarket": {"icon": "store", "budget": ""}},
+                "bucket": "",
+                "subcategories": {
+                    "Supermarket": {"icon": "store", "budget": "", "bucket": ""}
+                },
             }
         }
     }
@@ -84,7 +90,10 @@ def test_ensure_category_does_not_mutate_the_input():
             "Groceries": {
                 "icon": "",
                 "budget": "",
-                "subcategories": {"Supermarket": {"icon": "", "budget": ""}},
+                "bucket": "",
+                "subcategories": {
+                    "Supermarket": {"icon": "", "budget": "", "bucket": ""}
+                },
             }
         }
     }
@@ -96,7 +105,10 @@ def test_ensure_category_does_not_mutate_the_input():
             "Groceries": {
                 "icon": "",
                 "budget": "",
-                "subcategories": {"Supermarket": {"icon": "", "budget": ""}},
+                "bucket": "",
+                "subcategories": {
+                    "Supermarket": {"icon": "", "budget": "", "bucket": ""}
+                },
             }
         }
     }
@@ -106,7 +118,9 @@ def test_ensure_category_skips_blank_subcategory():
     result = ensure_category({}, TransactionType.EXPENSE, "Groceries", "")
 
     assert result == {
-        "expense": {"Groceries": {"icon": "", "budget": "", "subcategories": {}}}
+        "expense": {
+            "Groceries": {"icon": "", "budget": "", "bucket": "", "subcategories": {}}
+        }
     }
 
 
@@ -116,7 +130,10 @@ def test_ensure_category_keeps_income_and_expense_trees_separate():
             "Groceries": {
                 "icon": "",
                 "budget": "",
-                "subcategories": {"Supermarket": {"icon": "", "budget": ""}},
+                "bucket": "",
+                "subcategories": {
+                    "Supermarket": {"icon": "", "budget": "", "bucket": ""}
+                },
             }
         }
     }
@@ -128,10 +145,15 @@ def test_ensure_category_keeps_income_and_expense_trees_separate():
             "Groceries": {
                 "icon": "",
                 "budget": "",
-                "subcategories": {"Supermarket": {"icon": "", "budget": ""}},
+                "bucket": "",
+                "subcategories": {
+                    "Supermarket": {"icon": "", "budget": "", "bucket": ""}
+                },
             }
         },
-        "income": {"Salary": {"icon": "", "budget": "", "subcategories": {}}},
+        "income": {
+            "Salary": {"icon": "", "budget": "", "bucket": "", "subcategories": {}}
+        },
     }
 
 
@@ -1020,3 +1042,45 @@ def test_convert_to_transfer_rejects_same_account_as_counterpart():
         convert_to_transfer(
             [expense], ["chk", "sav"], "a", counterpart_account_id="chk"
         )
+
+
+def test_ensure_category_preserves_buckets_on_existing_entries():
+    categories = {
+        "income": {},
+        "expense": {
+            "Food": {
+                "icon": "cart",
+                "budget": "300",
+                "bucket": "need",
+                "subcategories": {
+                    "Cafes": {"icon": "", "budget": "", "bucket": "want"}
+                },
+            }
+        },
+    }
+
+    result = ensure_category(categories, TransactionType.EXPENSE, "Food", "Bakery")
+
+    food = result["expense"]["Food"]
+    assert (food["icon"], food["budget"], food["bucket"]) == ("cart", "300", "need")
+    assert food["subcategories"]["Cafes"]["bucket"] == "want"
+    assert food["subcategories"]["Bakery"] == {"icon": "", "budget": "", "bucket": ""}
+
+
+def test_ensure_category_adding_a_new_category_keeps_other_buckets():
+    categories = {
+        "income": {
+            "Refunds": {
+                "icon": "",
+                "budget": "",
+                "bucket": "excluded",
+                "subcategories": {},
+            }
+        },
+        "expense": {},
+    }
+
+    result = ensure_category(categories, TransactionType.EXPENSE, "Fun", "")
+
+    assert result["income"]["Refunds"]["bucket"] == "excluded"
+    assert result["expense"]["Fun"]["bucket"] == ""

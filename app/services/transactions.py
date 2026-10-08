@@ -35,21 +35,22 @@ def ensure_category(
     """
     if txn_type is TransactionType.TRANSFER:
         raise ValueError("transfers do not use the managed category tree")
+    # Copy every field of each existing entry (icon, budget, bucket, ...) so
+    # adding one category never drops a setting stored on another — this
+    # runs on every transaction entry, import, and bulk reclassification.
     updated = {
-        bucket: {
-            name: {
-                "icon": entry["icon"],
-                "budget": entry["budget"],
-                "subcategories": dict(entry["subcategories"]),
-            }
+        tree_name: {
+            name: {**entry, "subcategories": dict(entry["subcategories"])}
             for name, entry in tree.items()
         }
-        for bucket, tree in categories.items()
+        for tree_name, tree in categories.items()
     }
     tree = updated.setdefault(txn_type.value, {})
-    entry = tree.setdefault(category, {"icon": "", "budget": "", "subcategories": {}})
+    entry = tree.setdefault(
+        category, {"icon": "", "budget": "", "bucket": "", "subcategories": {}}
+    )
     if subcategory and subcategory not in entry["subcategories"]:
-        entry["subcategories"][subcategory] = {"icon": "", "budget": ""}
+        entry["subcategories"][subcategory] = {"icon": "", "budget": "", "bucket": ""}
     return updated
 
 

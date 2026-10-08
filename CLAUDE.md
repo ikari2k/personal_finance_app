@@ -120,6 +120,11 @@ tests/unit/     tmp_path-isolated; tests/integration/  TestClient, conftest redi
 
 ## Gotchas worth remembering
 
+- **Never rebuild a category/subcategory entry field-by-field.** `ensure_category` runs on every
+  transaction entry, import and bulk reclassification and rewrites `categories.toml`; it once
+  rebuilt entries from `icon`/`budget` only and silently wiped every category-level `bucket`
+  (the user's 50/30/20 classification). Copy the whole entry (`{**entry, ...}`) and add a
+  regression test whenever an entry gains a field.
 - `services.categories.update_subcategory`/`update_category`: omitting `budget` means "clear the
   budget" (it once silently wiped one during an icon-only edit). Always carry the current budget.
 - `MonthlyTotal.expense_total` is **signed (negative)**. Use `net_total` directly; `abs()` only
