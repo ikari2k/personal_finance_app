@@ -18,6 +18,10 @@ account, no cloud, no bank integrations, and no network access beyond `localhost
 - **Transfer detection** — finds imported rows that are really transfers between your accounts.
 - **Dashboard & reports** — net worth, monthly/yearly income and expense, category drill-downs,
   budget utilization, month-end spending forecast, and suggested budgets.
+- **50/30/20 rule** — tag expense categories as needs or wants (bulk page at
+  `/categories/classify`), and see each month's needs/wants/savings as a share of income against
+  editable targets, plus a 12-month trend and a dashboard widget. Savings is net transfers into
+  savings accounts.
 
 ## Screenshots
 
@@ -85,7 +89,8 @@ uv run uvicorn app.main:app --reload
 | `data/ledger.csv` | Every transaction, one row each |
 | `data/import_history.toml` | Log of past CSV imports |
 | `config/accounts.toml` | Accounts |
-| `config/categories.toml` | Categories, subcategories, icons, budgets |
+| `config/categories.toml` | Categories, subcategories, icons, budgets, needs/wants tags |
+| `config/budget_rule.toml` | 50/30/20 target percentages |
 | `config/rules.toml` | Auto-categorization rules |
 | `config/import_mappings/` | Saved per-bank CSV column mappings |
 
