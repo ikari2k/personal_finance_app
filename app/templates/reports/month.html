@@ -2,19 +2,16 @@
 {% from "reports/_category_breakdown.html" import breakdown_table, expense_month_breakdown_table %}
 {% from "reports/_account_filter.html" import account_filter %}
 {% from "_breadcrumb.html" import breadcrumb %}
+{% from "_scope_bar.html" import period_stepper %}
 {% from "_category_icons.html" import category_icon %}
 {% block title %}{{ label }} — Reports — Finance Tracker{% endblock %}
 {% block content %}
   {{ breadcrumb(breadcrumbs) }}
-  <div class="period-nav">
-    <a href="/reports/{{ prev_year }}/{{ prev_month }}{{ '?account_id=' + account_id if account_id }}" class="period-nav-prev">
-      &larr; {{ prev_label }}
-    </a>
-    <h1>{{ label }}</h1>
-    <a href="/reports/{{ next_year }}/{{ next_month }}{{ '?account_id=' + account_id if account_id }}" class="period-nav-next">
-      {{ next_label }} &rarr;
-    </a>
-  </div>
+  {% set acct_qs = '?account_id=' + account_id if account_id else '' %}
+  {{ period_stepper({
+    "prev_url": "/reports/" ~ prev_year ~ "/" ~ prev_month ~ acct_qs, "prev_label": prev_label,
+    "next_url": "/reports/" ~ next_year ~ "/" ~ next_month ~ acct_qs, "next_label": next_label,
+    "label": label, "heading": true}) }}
   {{ account_filter(accounts, account_id) }}
   <p><a class="cat-cta-link" href="{{ month_txn_link }}">All {{ label }} transactions &rsaquo;</a></p>
 

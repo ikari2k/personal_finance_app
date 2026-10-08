@@ -146,6 +146,10 @@ tests/unit/     tmp_path-isolated; tests/integration/  TestClient, conftest redi
   buttons are only `.btn-income/-expense/-transfer` and a form's one submit; `.secondary`,
   `.outline`, `.btn-outline` all render as an outline (classless Pico has no such classes).
   Tokens live at the top of `style.css`; add new sizes/colors there, not inline.
+- **Nav and period/account controls**: the header is sticky (`--nav-h`; `.page-header-row`
+  sticks beneath it) with the current page marked `aria-current="page"`. Report pages share
+  `_scope_bar.html`: `period_stepper` (‹ label ›, optional month picker) and `scope_bar`
+  (account select band) — reuse them instead of hand-rolling prev/next links.
 - **Pico classless**: all page content sits inside `<header><nav>` / `<main>` per `base.html`; no
   bare `<body>` children. Prefer Pico elements/variables over new CSS. Font via
   `--pico-font-family` in `style.css`.

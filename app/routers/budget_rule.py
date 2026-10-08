@@ -426,14 +426,26 @@ def _content_context(month_key: str, today: date) -> dict:
         "targets": targets,
         "periods": periods,
         "trend": _trend_chart(series),
-        "prev_key": f"{prev_year:04d}-{prev_month:02d}",
-        "prev_label": f"{calendar.month_name[prev_month]} {prev_year}",
-        "next_key": (
-            f"{next_year:04d}-{next_month:02d}"
-            if (next_year, next_month) <= (today.year, today.month)
-            else None
-        ),
-        "next_label": f"{calendar.month_name[next_month]} {next_year}",
+        "period": {
+            "prev_url": f"/reports/budget-rule?month={prev_year:04d}-{prev_month:02d}",
+            "prev_label": f"{calendar.month_name[prev_month]} {prev_year}",
+            "next_url": (
+                f"/reports/budget-rule?month={next_year:04d}-{next_month:02d}"
+                if (next_year, next_month) <= (today.year, today.month)
+                else None
+            ),
+            "next_label": f"{calendar.month_name[next_month]} {next_year}",
+            "picker": {
+                "key": selected,
+                "max": f"{today.year:04d}-{today.month:02d}",
+                "action": "/reports/budget-rule",
+            },
+            "today_url": (
+                "/reports/budget-rule"
+                if selected != f"{today.year:04d}-{today.month:02d}"
+                else None
+            ),
+        },
     }
 
 

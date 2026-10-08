@@ -50,6 +50,7 @@
   /* One control height for every select, input, date field and button in a
    * toolbar/header/dialog footer, so rows of mixed controls line up. */
   --control-h: 2.25rem;
+  --nav-h: 3.25rem;
   --pico-form-element-spacing-vertical: 0.45rem;
   --pico-form-element-spacing-horizontal: 0.75rem;
   /* Semantic entity colors — the identity of a transaction type, used for
@@ -518,7 +519,7 @@ button.btn-transfer {
  */
 .page-header-row {
   position: sticky;
-  top: 0;
+  top: var(--nav-h);
   z-index: 5;
   background: var(--pico-background-color);
   display: flex;
@@ -1393,25 +1394,6 @@ fieldset legend {
  * drill-down (adjacent year), same layout either way. Wraps to a
  * stacked layout at phone width rather than squeezing three items onto
  * one line, same reasoning as every other flex-wrap row in this file. */
-.period-nav {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  flex-wrap: wrap;
-}
-
-.period-nav h1 {
-  flex: 1 1 auto;
-  margin: 0;
-  text-align: center;
-}
-
-.period-nav-prev,
-.period-nav-next {
-  flex: 0 0 auto;
-  white-space: nowrap;
-}
-
 .subcategory-row td.indent {
   padding-left: 1.5rem;
   color: var(--pico-muted-color);
@@ -2413,24 +2395,35 @@ fieldset legend {
   text-decoration: none;
   text-align: center;
 }
+.period-title {
+  margin: 0;
+  font-size: var(--text-xl);
+  min-width: 11rem;
+  text-align: center;
+}
+.period-label {
+  min-width: 8rem;
+  text-align: center;
+  font-weight: 600;
+}
 .br-controls {
   justify-content: space-between;
   gap: 0.75rem 1.5rem;
 }
-.br-month-nav {
+.period-stepper {
   display: flex;
   align-items: center;
   gap: 0.4rem;
 }
-.br-month-form { margin: 0; }
-.br-month-nav input[type="month"] {
+.period-picker { margin: 0; }
+.period-picker input[type="month"] {
   margin: 0;
   width: auto;
   height: 2.25rem;
   padding: 0 0.6rem;
   font-size: 0.9rem;
 }
-.br-step {
+.period-stepper .step {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2442,9 +2435,9 @@ fieldset legend {
   line-height: 1;
   text-decoration: none;
 }
-.br-step:hover { background: rgba(127, 127, 127, 0.15); }
-.br-step.disabled { opacity: 0.35; pointer-events: none; }
-.br-today { font-size: 0.8rem; margin-left: 0.4rem; white-space: nowrap; }
+.period-stepper .step:hover { background: rgba(127, 127, 127, 0.15); }
+.period-stepper .step.disabled { opacity: 0.35; pointer-events: none; }
+.period-today { font-size: 0.8rem; margin-left: 0.4rem; white-space: nowrap; }
 .br-tabs {
   width: auto;
   margin-bottom: 0;
@@ -2548,4 +2541,54 @@ form > button[type="submit"] {
   padding-top: 0;
   padding-bottom: 0;
   font-size: var(--text-sm);
+}
+
+
+/* Main navigation: always visible, current page marked, daily destinations
+ * (Dashboard/Transactions/Reports) set apart from the setup pages. */
+body > header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  padding-block: 0;
+  background: var(--pico-background-color);
+  border-bottom: var(--pico-border-width) solid var(--pico-muted-border-color);
+}
+body > header nav {
+  min-height: var(--nav-h);
+  align-items: center;
+  gap: 1.5rem;
+  justify-content: flex-start;
+}
+body > header nav ul:first-child { margin-right: auto; }
+body > header nav a {
+  text-decoration: none;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--pico-muted-color);
+  padding: 0.35rem 0.6rem;
+  border-radius: var(--pico-border-radius);
+}
+body > header nav a:hover { color: var(--pico-color); background: rgba(127, 127, 127, 0.12); }
+body > header nav a[aria-current="page"] {
+  color: var(--pico-color);
+  font-weight: 700;
+  box-shadow: inset 0 -2px 0 var(--pico-primary);
+  border-radius: 0;
+}
+body > header nav a.brand {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--pico-color);
+  padding-left: 0;
+  letter-spacing: -0.01em;
+}
+body > header nav .nav-main a { color: var(--pico-color); }
+body > header nav .nav-manage {
+  padding-left: 1.25rem;
+  border-left: var(--pico-border-width) solid var(--pico-muted-border-color);
+}
+@media (max-width: 52rem) {
+  body > header nav { flex-wrap: wrap; gap: 0.25rem 1rem; padding-block: 0.4rem; }
+  body > header nav .nav-manage { padding-left: 0; border-left: 0; }
 }

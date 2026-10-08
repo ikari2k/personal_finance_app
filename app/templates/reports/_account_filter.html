@@ -1,21 +1,8 @@
+{% from "_scope_bar.html" import scope_bar %}
+{# Kept as a thin wrapper so every report page that already calls
+   account_filter() picks up the shared scope bar. A plain GET form, not
+   htmx: picking an account reshapes the whole page, and the empty action
+   resubmits to the current path with account_id as the only query param. #}
 {% macro account_filter(accounts, account_id) %}
-  {#
-    A plain GET form, not htmx — unlike the transactions list's toolbar,
-    picking an account here has to reshape the whole page (chart +
-    every table), not swap one fragment, so a full navigation is simpler
-    than teaching every report route to also render a partial. The empty
-    `action` resubmits to the current path, replacing account_id as the
-    page's only query param.
-  #}
-  <form method="get" class="view-options">
-    <span class="view-options-label">Account</span>
-    <select name="account_id" onchange="this.form.submit()">
-      <option value="" {{ 'selected' if not account_id }}>All accounts</option>
-      {% for account in accounts %}
-        <option value="{{ account.id }}" {{ 'selected' if account.id == account_id }}>
-          {{ account.name }}
-        </option>
-      {% endfor %}
-    </select>
-  </form>
+  {{ scope_bar(accounts, account_id) }}
 {% endmacro %}

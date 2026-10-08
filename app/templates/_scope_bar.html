@@ -1,0 +1,48 @@
+{# Shared period/account controls for report pages.
+
+   period_stepper(p): ‹ label › — `p` is a dict with prev_url, prev_label,
+   next_url (None disables the arrow), next_label, and either `picker`
+   ({key, max, action}: a month input that jumps straight to a month),
+   `heading` (render the label as the page's <h1>), or neither (plain label);
+   optional today_url adds a "Back to current month" link.
+
+   scope_bar(accounts, account_id): the muted band every report page shares;
+   its caller block (if any) is appended after the account select. #}
+{% macro period_stepper(p) %}
+  <div class="period-stepper">
+    <a class="step" href="{{ p.prev_url }}" aria-label="Previous: {{ p.prev_label }}" title="{{ p.prev_label }}">&lsaquo;</a>
+    {% if p.picker %}
+      <form method="get" action="{{ p.picker.action }}" class="period-picker">
+        <input type="month" name="month" value="{{ p.picker.key }}" max="{{ p.picker.max }}"
+               aria-label="Month" onchange="if (this.value) this.form.submit()">
+      </form>
+    {% elif p.heading %}
+      <h1 class="period-title">{{ p.label }}</h1>
+    {% else %}
+      <span class="period-label">{{ p.label }}</span>
+    {% endif %}
+    {% if p.next_url %}
+      <a class="step" href="{{ p.next_url }}" aria-label="Next: {{ p.next_label }}" title="{{ p.next_label }}">&rsaquo;</a>
+    {% else %}
+      <span class="step disabled" aria-hidden="true">&rsaquo;</span>
+    {% endif %}
+    {% if p.today_url %}<a class="period-today" href="{{ p.today_url }}">Back to current month</a>{% endif %}
+  </div>
+{% endmacro %}
+
+{% macro scope_bar(accounts, account_id) %}
+  <div class="view-options scope-bar">
+    {% if accounts is not none %}
+      <form method="get" class="scope-account">
+        <span class="view-options-label">Account</span>
+        <select name="account_id" onchange="this.form.submit()">
+          <option value="" {{ 'selected' if not account_id }}>All accounts</option>
+          {% for account in accounts %}
+            <option value="{{ account.id }}" {{ 'selected' if account.id == account_id }}>{{ account.name }}</option>
+          {% endfor %}
+        </select>
+      </form>
+    {% endif %}
+    {% if caller %}{{ caller() }}{% endif %}
+  </div>
+{% endmacro %}

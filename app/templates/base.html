@@ -10,19 +10,25 @@
   </head>
   <body hx-on:toast="const t = document.createElement('div'); t.className = 'toast'; t.textContent = event.detail.value; const c = document.getElementById('toast-container'); c.appendChild(t); requestAnimationFrame(() => t.classList.add('show')); setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 200); }, 3000);"
         hx-on::confirm="if (!event.detail.question) return; event.preventDefault(); document.getElementById('confirm-dialog-message').textContent = event.detail.question; document.getElementById('confirm-dialog-confirm').onclick = function () { document.getElementById('confirm-dialog').close(); event.detail.issueRequest(true); }; document.getElementById('confirm-dialog').showModal();">
+    {% set path = request.url.path %}
+    {% macro nav_link(href, label) %}
+      <li><a href="{{ href }}"{% if path == href or path.startswith(href ~ '/') %} aria-current="page"{% endif %}>{{ label }}</a></li>
+    {% endmacro %}
     <header>
-      <nav>
+      <nav aria-label="Main">
         <ul>
-          <li><strong>Finance Tracker</strong></li>
+          <li><a class="brand" href="/dashboard">Finance Tracker</a></li>
         </ul>
-        <ul>
-          <li><a href="/dashboard">Dashboard</a></li>
-          <li><a href="/accounts">Accounts</a></li>
-          <li><a href="/transactions">Transactions</a></li>
-          <li><a href="/categories">Categories</a></li>
-          <li><a href="/import">Import</a></li>
-          <li><a href="/rules">Rules</a></li>
-          <li><a href="/reports">Reports</a></li>
+        <ul class="nav-main">
+          {{ nav_link("/dashboard", "Dashboard") }}
+          {{ nav_link("/transactions", "Transactions") }}
+          {{ nav_link("/reports", "Reports") }}
+        </ul>
+        <ul class="nav-manage" aria-label="Manage">
+          {{ nav_link("/accounts", "Accounts") }}
+          {{ nav_link("/categories", "Categories") }}
+          {{ nav_link("/rules", "Rules") }}
+          {{ nav_link("/import", "Import") }}
         </ul>
       </nav>
     </header>

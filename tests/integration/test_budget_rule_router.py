@@ -153,12 +153,12 @@ def test_month_navigation_controls(client):
     past = client.get("/reports/budget-rule?month=2026-03").text
     assert 'name="month"' in past and 'value="2026-03"' in past
     assert "Back to current month" in past
-    assert "Previous month: February 2026" in past
-    assert "Next month: April 2026" in past
+    assert "Previous: February 2026" in past
+    assert "Next: April 2026" in past
 
     current = client.get("/reports/budget-rule").text
     assert "Back to current month" not in current
-    assert 'class="br-step disabled"' in current
+    assert 'class="step disabled"' in current
 
 
 def test_unclassified_row_hidden_when_zero(client):
