@@ -1,6 +1,6 @@
 {# Rolling 3/6/12-month 50/30/20 summary for /reports. Expects `rule_windows`
    (app.routers.budget_rule.rolling_summaries), `rule_targets`, `rule_to_label`. #}
-{% from "budget_rule/_bar.html" import split_bar %}
+{% from "budget_rule/_bar.html" import compact_rows %}
 <div class="dash-widget-head" style="margin-bottom: 0.15rem;">
   <h2 style="margin: 0;">50/30/20 rule</h2>
   <a class="table-link" href="/reports/budget-rule">Full report &rsaquo;</a>
@@ -10,23 +10,7 @@
   Dashed lines mark the Needs ({{ rule_targets.needs }}%) and Needs + Wants
   ({{ rule_targets.needs + rule_targets.wants }}%) targets.
 </p>
-<div class="br-rolling">
-  {% for w in rule_windows %}
-    <div class="br-rolling-row">
-      <span class="br-rolling-label">{{ w.label }}</span>
-      {% if w.bar %}
-        {{ split_bar(w.bar, w.label ~ ": needs, wants and savings as a share of income") }}
-        <span class="br-rolling-figures">
-          {% for r in w.rows if r.key != 'unclassified' %}
-            <span><span class="chart-legend-swatch br-swatch-{{ r.key }}"></span>{{ r.label[0] }} {{ "%.0f"|format(r.pct) }}%</span>
-          {% endfor %}
-        </span>
-      {% else %}
-        <span class="muted br-rolling-none">No income in this window.</span>
-      {% endif %}
-    </div>
-  {% endfor %}
-</div>
+{{ compact_rows(rule_windows, "No income in this window.") }}
 <p class="chart-legend">
   <span class="chart-legend-swatch br-swatch-needs"></span> Needs
   <span class="chart-legend-swatch br-swatch-wants"></span> Wants

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "budget_rule/_bar.html" import split_bar %}
+{% from "budget_rule/_bar.html" import compact_rows %}
 {% from "_category_icons.html" import category_icon %}
 {% block title %}Dashboard — Finance Tracker{% endblock %}
 {% block content %}
@@ -251,20 +251,10 @@
 
     <div class="dash-widget dash-widget-bordered dash-span-12">
       <div class="dash-widget-head">
-        <span class="dash-widget-title">50/30/20 &middot; This month</span>
-        <a class="dash-widget-link" href="/reports/budget-rule">Details &rsaquo;</a>
+        <span class="dash-widget-title">50/30/20 &middot; This and last month</span>
+        <a class="dash-widget-link" href="/reports/budget-rule">Full report &rsaquo;</a>
       </div>
-      {% if budget_rule.bar %}
-        {{ split_bar(budget_rule.bar, "This month's needs, wants and savings as a share of income") }}
-        <p class="dash-widget-caption">
-          {% for r in budget_rule.rows if r.key != 'unclassified' %}
-            <span class="chart-legend-swatch br-swatch-{{ r.key }}"></span>
-            {{ r.label }} {{ "%.1f"|format(r.pct) }}% of {{ r.target }}%{{ " · " if not loop.last }}
-          {% endfor %}
-        </p>
-      {% else %}
-        <p class="dash-all-clear">No income recorded this month yet, so there are no shares to show.</p>
-      {% endif %}
+      {{ compact_rows(budget_rule.months, "No income yet.") }}
       {% if budget_rule.unclassified_count %}
         <p class="dash-widget-caption">
           {{ budget_rule.unclassified_count }} expense categor{{ "y" if budget_rule.unclassified_count == 1 else "ies" }}

@@ -282,16 +282,44 @@ def month_summary(
     accounts: list,
     year: int,
     month: int,
+    *,
+    compact: bool = False,
 ) -> dict:
-    """Full-size summary of one calendar month, for the monthly report page."""
-    return period_summary(
-        transactions,
-        categories,
-        accounts,
-        read_targets(),
-        date(year, month, 1),
-        date(year, month, calendar.monthrange(year, month)[1]),
-    )
+    """Summary of one calendar month, labelled and linked to its full report."""
+    return {
+        "label": f"{calendar.month_name[month]} {year}",
+        "link": f"/reports/budget-rule?month={year:04d}-{month:02d}",
+        **period_summary(
+            transactions,
+            categories,
+            accounts,
+            read_targets(),
+            date(year, month, 1),
+            date(year, month, calendar.monthrange(year, month)[1]),
+            compact=compact,
+        ),
+    }
+
+
+def month_pair(
+    transactions: list,
+    categories: CategoriesByType,
+    accounts: list,
+    year: int,
+    month: int,
+    *,
+    compact: bool = False,
+) -> list[dict]:
+    """Summaries of ``year``-``month`` and the month before it, in that order.
+
+    Shown together because pay often lands late in the month, which makes
+    the current month alone look overspent until it does.
+    """
+    previous_year, previous_month = _shift_month(year, month, -1)
+    return [
+        month_summary(transactions, categories, accounts, y, m, compact=compact)
+        for y, m in ((year, month), (previous_year, previous_month))
+    ]
 
 
 def rolling_summaries(

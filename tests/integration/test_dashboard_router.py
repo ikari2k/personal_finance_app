@@ -395,4 +395,10 @@ def test_dashboard_shows_budget_rule_widget(client):
 
     assert response.status_code == 200
     assert "50/30/20" in response.text
-    assert "No income recorded this month yet" in response.text
+    assert "No income yet" in response.text
+
+
+def test_dashboard_budget_rule_widget_shows_this_and_last_month(client):
+    text = client.get("/").text
+
+    assert "This month" in text and "Last month" in text

@@ -1644,3 +1644,10 @@ def test_month_report_shows_budget_rule_breakdown(client):
     assert response.status_code == 200
     assert "50/30/20 rule" in response.text
     assert "/reports/budget-rule?month=2026-03" in response.text
+
+
+def test_month_report_shows_previous_month_too(client):
+    text = client.get("/reports/2026/3").text
+
+    assert "February 2026" in text and "March 2026" in text
+    assert "/reports/budget-rule?month=2026-02" in text

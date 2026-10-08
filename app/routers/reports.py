@@ -28,7 +28,7 @@ from fastapi.responses import HTMLResponse
 from app.models.category import CategoriesByType
 from app.models.transaction import TransactionType
 from app.routers import breadcrumbs
-from app.routers.budget_rule import month_summary, rolling_summaries
+from app.routers.budget_rule import month_pair, rolling_summaries
 from app.services.aggregation import (
     CategoryMonthPoint,
     CategoryTotal,
@@ -2329,8 +2329,7 @@ def month_detail(
         request,
         "reports/month.html",
         {
-            "rule_month": month_summary(ledger, categories, accounts, year, month),
-            "rule_label": f"{month_name[month]} {year}",
+            "rule_months": month_pair(ledger, categories, accounts, year, month),
             "rule_link": f"/reports/budget-rule?month={year:04d}-{month:02d}",
             "year": year,
             "month": month,
