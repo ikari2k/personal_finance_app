@@ -23,14 +23,14 @@
 
   <div class="dash-hero">
     <div class="dash-hero-figure">
-      <span class="dash-eyebrow">Net worth</span>
+      <span class="dash-eyebrow">Net worth &middot; {{ currency }}</span>
       <div class="dash-hero-number {{ 'amount-negative' if current_net_worth < 0 else 'amount-positive' }}">
-        {{ "%.2f"|format(current_net_worth) }}
+        {{ current_net_worth|money }}
       </div>
       {% if net_worth_delta is not none %}
         <div class="dash-hero-delta {{ 'up' if net_worth_delta >= 0 else 'down' }}">
           {{ '▲' if net_worth_delta >= 0 else '▼' }}
-          {{ "%.2f"|format(net_worth_delta) }}
+          {{ net_worth_delta|money }}
           <span class="muted">vs last month{% if net_worth_delta_pct is not none %} &middot; {{ "%.1f"|format(net_worth_delta_pct) }}%{% endif %}</span>
         </div>
       {% endif %}
@@ -58,7 +58,7 @@
           <span class="dash-stat-label">Income</span>
         </span>
         <span class="dash-stat-main">
-          <span class="dash-stat-value">{{ "%.2f"|format(income_total) }}</span>
+          <span class="dash-stat-value">{{ income_total|money }}</span>
           {% if income_delta_pct is not none %}
             <span class="dash-stat-delta {{ 'up' if income_delta_pct >= 0 else 'down' }}">
               {{ '▲' if income_delta_pct >= 0 else '▼' }} {{ "%.1f"|format(income_delta_pct|abs) }}% vs last month
@@ -72,7 +72,7 @@
           <span class="dash-stat-label">Expense</span>
         </span>
         <span class="dash-stat-main">
-          <span class="dash-stat-value">{{ "%.2f"|format(expense_total) }}</span>
+          <span class="dash-stat-value">{{ expense_total|money }}</span>
           {% if expense_delta_pct is not none %}
             <span class="dash-stat-delta {{ 'down' if expense_delta_pct >= 0 else 'up' }}">
               {{ '▲' if expense_delta_pct >= 0 else '▼' }} {{ "%.1f"|format(expense_delta_pct|abs) }}% vs last month
@@ -80,14 +80,14 @@
           {% endif %}
           {% if expense_forecast %}
             <span class="dash-stat-forecast" title="{{ 'Spent so far plus the typical remainder of earlier months' if expense_forecast.method == 'history' else 'Straight-line pace (not enough history yet)' }}">
-              On pace for ~{{ "%.2f"|format(expense_forecast.projected) }}
+              On pace for ~{{ expense_forecast.projected|money }}
             </span>
           {% endif %}
         </span>
       </div>
       <div class="dash-net-line">
         <span class="dash-stat-label">Net</span>
-        <span class="dash-net-value {{ 'amount-negative' if net_total < 0 else 'amount-positive' }}">{{ "%.2f"|format(net_total) }}</span>
+        <span class="dash-net-value {{ 'amount-negative' if net_total < 0 else 'amount-positive' }}">{{ net_total|money }}</span>
       </div>
     </div>
 
@@ -105,7 +105,7 @@
               <span class="dash-account-type">{{ account_type_labels[account.account_type] }}</span>
             </span>
             <span class="dash-account-balance {{ 'amount-negative' if balances[account.id] < 0 else 'amount-positive' }}">
-              {{ "%.2f"|format(balances[account.id]) }}
+              {{ balances[account.id]|money }}
             </span>
           </div>
         {% else %}
@@ -155,7 +155,7 @@
           <div class="dash-rolling-avg-tile">
             <span class="dash-rolling-avg-label">{{ row.days }} days</span>
             {% if row.value is not none %}
-              <span class="dash-rolling-avg-value">{{ "%.2f"|format(row.value) }}<span class="dash-rolling-avg-unit">/mo</span></span>
+              <span class="dash-rolling-avg-value">{{ row.value|money }}<span class="dash-rolling-avg-unit">/mo</span></span>
             {% else %}
               <span class="dash-rolling-avg-value muted">—</span>
             {% endif %}
@@ -191,7 +191,7 @@
           </span>
           <span class="dash-budget-main">
             <span class="dash-budget-name">{{ row.name }}</span>
-            <span class="dash-budget-figures">{{ "%.2f"|format(row.amount) }} / {{ "%.2f"|format(row.budget) }}</span>
+            <span class="dash-budget-figures">{{ row.amount|money }} / {{ row.budget|money }}</span>
           </span>
           <span class="dash-budget-pct utilization-{{ row.ring.tier }}">{{ row.ring.pct_label }}</span>
         </div>
@@ -225,7 +225,7 @@
             <span class="dash-cat-bar-track">
               <span class="dash-cat-bar-fill {{ fill_class }}" style="width: {{ (value / max_value * 100) if max_value else 0 }}%"></span>
             </span>
-            <span class="dash-cat-line-amount">{{ "%.2f"|format(value) }}</span>
+            <span class="dash-cat-line-amount">{{ value|money }}</span>
             <span class="dash-cat-line-delta {{ ('down' if pct >= 0 else 'up') if pct is not none else '' }}" title="This month vs {{ label|lower }}">
               {%- if pct is not none %}{{ '▲' if pct >= 0 else '▼' }} {{ "%.0f"|format(pct|abs) }}%{% endif -%}
             </span>
@@ -291,7 +291,7 @@
                     </span>
                   </td>
                   <td class="dash-txn-desc"{% if txn.notes %} title="Original description: {{ txn.description }}"{% endif %}>{{ txn.notes or txn.description or row.account_name }}</td>
-                  <td class="dash-txn-amount amount-negative">{{ "%.2f"|format(txn.amount) }}</td>
+                  <td class="dash-txn-amount">{{ txn.amount|money }}</td>
                 </tr>
               {% endfor %}
             </tbody>
@@ -335,8 +335,8 @@
                       </td>
                     {% endif %}
                     <td class="dash-txn-desc"{% if txn.notes %} title="Original description: {{ txn.description }}"{% endif %}>{{ txn.notes or txn.description or row.account_name }}</td>
-                    <td class="dash-txn-amount {{ 'dash-amount-transfer' if txn.type.value == 'transfer' else ('amount-negative' if txn.amount < 0 else 'amount-positive') }}">
-                      {{ "%.2f"|format(txn.amount) }}
+                    <td class="dash-txn-amount {{ 'dash-amount-transfer' if txn.type.value == 'transfer' else ('amount-positive' if txn.type.value == 'income' else '') }}">
+                      {{ txn.amount|money }}
                     </td>
                   </tr>
                 {% endfor %}

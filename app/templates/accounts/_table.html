@@ -56,10 +56,10 @@
           <td>{{ account.number }}</td>
           <td>{{ account.description }}</td>
           <td class="{{ 'amount-negative' if account.starting_balance < 0 else 'amount-positive' }}">
-            {{ "%.2f"|format(account.starting_balance) }}
+            {{ account.starting_balance|money }}
           </td>
           <td class="{{ 'amount-negative' if balance < 0 else 'amount-positive' }}">
-            {{ "%.2f"|format(balance) }}
+            {{ balance|money }}
           </td>
         </tr>
       {% else %}
@@ -72,7 +72,7 @@
         <tr>
           <td colspan="6">Total</td>
           <td class="{{ 'amount-negative' if total < 0 else 'amount-positive' }}">
-            {{ "%.2f"|format(total) }}
+            {{ total|money }}
           </td>
         </tr>
       </tfoot>

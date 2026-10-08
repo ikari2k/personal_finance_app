@@ -34,7 +34,7 @@
                   {{ category_icon('trending-up') }}
                 </a>
               </td>
-              <td>{{ "%.2f"|format(cat.total) }}</td>
+              <td>{{ cat.total|money }}</td>
               <td>{{ cat.count }}</td>
               {% if delta_label %}
                 <td>
@@ -42,7 +42,7 @@
                     {% set rising = cat.yoy_delta >= 0 %}
                     {% set good = (rising and txn_type == "income") or (not rising and txn_type == "expense") %}
                     <span class="{{ 'amount-positive' if good else 'amount-negative' }}">
-                      {{ '+' if rising else '' }}{{ "%.2f"|format(cat.yoy_delta) }}
+                      {{ '+' if rising else '' }}{{ cat.yoy_delta|money }}
                     </span>
                   {% else %}
                     —
@@ -59,7 +59,7 @@
                   {% endif %}
                   <a class="table-link" href="{{ _txn_link(txn_type, cat.name, sub.name, date_from, date_to, account_id) }}">{{ sub.name }}</a>
                 </td>
-                <td>{{ "%.2f"|format(sub.total) }}</td>
+                <td>{{ sub.total|money }}</td>
                 <td>{{ sub.count }}</td>
                 {% if delta_label %}<td></td>{% endif %}
               </tr>
@@ -105,12 +105,12 @@
                   {{ category_icon('trending-up') }}
                 </a>
               </td>
-              <td>{{ "%.2f"|format(cat.total) }}</td>
+              <td>{{ cat.total|money }}</td>
               <td>{{ cat.count }}</td>
               <td>{{ budget_ring_cell(cat.ring) }}</td>
               <td>{{ mom_delta_cell(cat.delta) }}</td>
               {% if show_projected %}
-                <td>{% if cat.projected is not none %}~{{ "%.2f"|format(cat.projected) }}{% else %}<span class="muted">—</span>{% endif %}</td>
+                <td>{% if cat.projected is not none %}~{{ cat.projected|money }}{% else %}<span class="muted">—</span>{% endif %}</td>
               {% endif %}
             </tr>
             {% for sub in cat.subcategories %}
@@ -121,7 +121,7 @@
                   {% endif %}
                   <a class="table-link" href="{{ _txn_link('expense', cat.name, sub.name, date_from, date_to, account_id) }}">{{ sub.name }}</a>
                 </td>
-                <td>{{ "%.2f"|format(sub.total) }}</td>
+                <td>{{ sub.total|money }}</td>
                 <td>{{ sub.count }}</td>
                 <td>{{ budget_ring_cell(sub.ring) }}</td>
                 <td>{{ mom_delta_cell(sub.delta) }}</td>
@@ -166,7 +166,7 @@
 {% macro mom_delta_cell(delta) %}
   {% if delta is not none %}
     <span class="{{ 'amount-negative' if delta >= 0 else 'amount-positive' }}">
-      {{ '+' if delta >= 0 else '' }}{{ "%.2f"|format(delta) }}
+      {{ '+' if delta >= 0 else '' }}{{ delta|money }}
     </span>
   {% else %}
     <span class="muted">—</span>
@@ -200,7 +200,7 @@
                 {% set bounds = month_bounds[cell.key] %}
                 <td class="budget-cell{{ ' month-extreme-' + cell.extreme if cell.extreme }}">
                   <span class="budget-cell-row">
-                    <a class="table-link budget-amount" href="{{ _txn_link(txn_type, row.category, row_subcategory, bounds[0], bounds[1], account_id) }}">{{ "%.2f"|format(cell.amount) if cell.amount else "—" }}</a>
+                    <a class="table-link budget-amount" href="{{ _txn_link(txn_type, row.category, row_subcategory, bounds[0], bounds[1], account_id) }}">{{ cell.amount|money if cell.amount else "—" }}</a>
                     {% if cell.extreme %}
                       <span class="month-extreme-badge" title="{{ row.name }}&#8217;s {{ 'highest' if cell.extreme == 'max' else 'lowest' }} month this year">{{ '▲' if cell.extreme == 'max' else '▼' }}</span>
                     {% endif %}
@@ -220,9 +220,9 @@
                   </span>
                 </td>
               {% endfor %}
-              <td>{{ "%.2f"|format(row.total) }}</td>
-              <td class="muted">{{ "%.2f"|format(row.avg) }}</td>
-              <td class="muted">{{ "%.2f"|format(row.median) }}</td>
+              <td>{{ row.total|money }}</td>
+              <td class="muted">{{ row.avg|money }}</td>
+              <td class="muted">{{ row.median|money }}</td>
             </tr>
           {% endfor %}
         </tbody>

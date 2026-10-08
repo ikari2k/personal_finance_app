@@ -25,7 +25,7 @@ def test_create_account_appears_in_table(client):
 
     assert response.status_code == 200
     assert "Checking" in response.text
-    assert "1000.00" in response.text
+    assert "1,000.00" in response.text
 
 
 def test_create_account_rejects_duplicate_id(client):

@@ -29,7 +29,7 @@
                   {{ accounts[match.to_account_id].name if match.to_account_id in accounts else match.to_account_id }}
                   {% if match.to_description %} — {{ match.to_description }}{% endif %}
                 </td>
-                <td>{{ "%.2f"|format(match.amount) }}</td>
+                <td>{{ match.amount|money }}</td>
               </tr>
             {% endfor %}
           </tbody>
@@ -63,7 +63,7 @@
                 <td>
                   {{ accounts[candidate.counterparty_account_id].name if candidate.counterparty_account_id in accounts else candidate.counterparty_account_id }}
                 </td>
-                <td>{{ "%.2f"|format(candidate.amount|abs) }}</td>
+                <td>{{ (candidate.amount|abs)|money }}</td>
               </tr>
             {% endfor %}
           </tbody>

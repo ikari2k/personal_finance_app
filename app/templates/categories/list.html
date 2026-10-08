@@ -29,7 +29,7 @@
             <tr>
               <td>{{ row.description }}</td>
               <td>{{ row.count }}</td>
-              <td>{{ "%.2f"|format(row.total) }}</td>
+              <td>{{ row.total|money }}</td>
             </tr>
           {% endfor %}
         </tbody>

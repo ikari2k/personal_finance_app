@@ -21,31 +21,31 @@
   <div class="dash-grid" style="margin-bottom: 1.5rem;">
     <div class="dash-widget dash-widget-bordered dash-span-3">
       <div class="dash-widget-head"><span class="dash-widget-title">Income</span></div>
-      <div class="cat-stat-number">{{ "%.2f"|format(year_stats.income_total) }}</div>
+      <div class="cat-stat-number">{{ year_stats.income_total|money }}</div>
       {% if year_stats.income_delta is not none %}
         <div class="cat-stat-delta {{ 'up' if year_stats.income_delta >= 0 else 'down' }}">
-          {{ '▲' if year_stats.income_delta >= 0 else '▼' }} {{ '+' if year_stats.income_delta >= 0 else '' }}{{ "%.2f"|format(year_stats.income_delta) }}
+          {{ '▲' if year_stats.income_delta >= 0 else '▼' }} {{ '+' if year_stats.income_delta >= 0 else '' }}{{ year_stats.income_delta|money }}
           <span class="muted">vs {{ year - 1 }}</span>
         </div>
       {% endif %}
     </div>
     <div class="dash-widget dash-widget-bordered dash-span-3">
       <div class="dash-widget-head"><span class="dash-widget-title">Expenses</span></div>
-      <div class="cat-stat-number">{{ "%.2f"|format(year_stats.expense_total|abs) }}</div>
+      <div class="cat-stat-number">{{ (year_stats.expense_total|abs)|money }}</div>
       {% if year_stats.expense_delta is not none %}
         {% set expense_rising = year_stats.expense_delta < 0 %}
         <div class="cat-stat-delta {{ 'down' if expense_rising else 'up' }}">
-          {{ '▲' if expense_rising else '▼' }} {{ "%.2f"|format(year_stats.expense_delta|abs) }}
+          {{ '▲' if expense_rising else '▼' }} {{ (year_stats.expense_delta|abs)|money }}
           <span class="muted">vs {{ year - 1 }}</span>
         </div>
       {% endif %}
     </div>
     <div class="dash-widget dash-widget-bordered dash-span-3">
       <div class="dash-widget-head"><span class="dash-widget-title">Net</span></div>
-      <div class="cat-stat-number {{ 'amount-negative' if year_stats.net_total < 0 else 'amount-positive' }}">{{ "%.2f"|format(year_stats.net_total) }}</div>
+      <div class="cat-stat-number {{ 'amount-negative' if year_stats.net_total < 0 else 'amount-positive' }}">{{ year_stats.net_total|money }}</div>
       {% if year_stats.net_delta is not none %}
         <div class="cat-stat-delta {{ 'up' if year_stats.net_delta >= 0 else 'down' }}">
-          {{ '▲' if year_stats.net_delta >= 0 else '▼' }} {{ '+' if year_stats.net_delta >= 0 else '' }}{{ "%.2f"|format(year_stats.net_delta) }}
+          {{ '▲' if year_stats.net_delta >= 0 else '▼' }} {{ '+' if year_stats.net_delta >= 0 else '' }}{{ year_stats.net_delta|money }}
           <span class="muted">vs {{ year - 1 }}</span>
         </div>
       {% endif %}
@@ -86,16 +86,16 @@
                 <a href="/reports/{{ year }}/{{ (m.key.split('-')[1])|int }}{{ '?account_id=' + account_id if account_id }}">{{ m.label }}</a>
                 {{ txn_link_icon(month_txn_links[m.key], "View " + m.label + " transactions") }}
               </td>
-              <td class="amount-positive">{{ "%.2f"|format(m.income_total) }}</td>
-              <td class="amount-negative">{{ "%.2f"|format(m.expense_total) }}</td>
-              <td class="muted">{{ "%.2f"|format(m.transfer_volume) if m.transfer_volume else "—" }}</td>
+              <td class="amount-positive">{{ m.income_total|money }}</td>
+              <td class="amount-negative">{{ m.expense_total|money }}</td>
+              <td class="muted">{{ m.transfer_volume|money if m.transfer_volume else "—" }}</td>
               <td class="{{ 'amount-negative' if m.net_total < 0 else 'amount-positive' }}">
-                {{ "%.2f"|format(m.net_total) }}
+                {{ m.net_total|money }}
               </td>
               <td>
                 {% if m.mom_delta is not none %}
                   <span class="{{ 'amount-negative' if m.mom_delta < 0 else 'amount-positive' }}">
-                    {{ '+' if m.mom_delta >= 0 else '' }}{{ "%.2f"|format(m.mom_delta) }}
+                    {{ '+' if m.mom_delta >= 0 else '' }}{{ m.mom_delta|money }}
                   </span>
                 {% else %}
                   —

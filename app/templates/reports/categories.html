@@ -75,7 +75,7 @@
                   <span class="muted">new</span>
                 {% endif %}
               </td>
-              <td>{{ "%.2f"|format(row.ytd_total) }}</td>
+              <td>{{ row.ytd_total|money }}</td>
               <td class="muted">{{ "%.0f"|format(row.pct_of_total) }}%</td>
             </tr>
           {% endfor %}

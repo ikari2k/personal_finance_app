@@ -1928,3 +1928,12 @@ def test_forecast_none_with_no_data_or_nothing_spent():
         _txn(date=date(2026, 9, 1), amount=Decimal("100"), type=TransactionType.INCOME)
     ]
     assert forecast_month_end(txns, _FORECAST_TODAY) is None
+
+
+def test_money_filter_formats_with_thousands_separators():
+    from app.templating import money
+
+    assert money(Decimal("17310.8")) == "17,310.80"
+    assert money(-1500) == "-1,500.00"
+    assert money("400") == "400.00"
+    assert money(1234.5) == "1,234.50"

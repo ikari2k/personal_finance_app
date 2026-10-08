@@ -76,9 +76,9 @@ def test_dashboard_shows_this_month_income_and_expense(client):
     response = client.get("/dashboard")
 
     assert response.status_code == 200
-    assert "2000.00" in response.text
+    assert "2,000.00" in response.text
     assert "150.00" in response.text
-    assert "1850.00" in response.text  # net = 2000 - 150
+    assert "1,850.00" in response.text  # net = 2000 - 150
 
 
 def test_dashboard_shows_active_account_balance(client):
@@ -406,3 +406,10 @@ def test_dashboard_budget_rule_widget_shows_six_months(client):
 
     assert widget.count("br-rolling-row") == 6
     assert f"{date.today():%b %Y}" in widget
+
+
+def test_dashboard_shows_currency_next_to_net_worth(client):
+    assert (
+        "Net worth &middot; PLN" in client.get("/").text
+        or "Net worth · PLN" in client.get("/").text
+    )

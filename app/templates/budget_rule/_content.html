@@ -28,7 +28,7 @@
         <p class="muted">
           Biggest unclassified spend — <a href="/categories/classify">classify these</a>:
           {% for u in p.unclassified %}
-            {{ u.category }}{{ " / " ~ u.subcategory if u.subcategory }} ({{ "%.2f"|format(u.total) }}){{ ", " if not loop.last }}
+            {{ u.category }}{{ " / " ~ u.subcategory if u.subcategory }} ({{ u.total|money }}){{ ", " if not loop.last }}
           {% endfor %}
         </p>
       {% endif %}

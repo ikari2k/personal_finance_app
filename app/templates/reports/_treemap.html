@@ -25,9 +25,9 @@
        class="treemap-svg" id="{{ svg_id }}" role="img" aria-label="Expense categories by transaction count and share of spend">
     {% for box in chart.boxes %}
       <a class="treemap-box-link" href="{{ box.link }}"
-         aria-label="{{ box.name }}: {{ '%.2f'|format(box.total) }}, {{ '%.1f'|format(box.pct) }}% of expenses, {{ box.count }} transaction{{ 's' if box.count != 1 else '' }} ({{ '%.1f'|format(box.txn_pct) }}% of all transactions) — view transactions"
+         aria-label="{{ box.name }}: {{ box.total|money }}, {{ '%.1f'|format(box.pct) }}% of expenses, {{ box.count }} transaction{{ 's' if box.count != 1 else '' }} ({{ '%.1f'|format(box.txn_pct) }}% of all transactions) — view transactions"
          data-tooltip-title="{{ box.name }}"
-         data-tooltip-amount="{{ '%.2f'|format(box.total) }} &middot; {{ '%.1f'|format(box.pct) }}% of expenses"
+         data-tooltip-amount="{{ box.total|money }} &middot; {{ '%.1f'|format(box.pct) }}% of expenses"
          data-tooltip-count="{{ box.count }} transaction{{ 's' if box.count != 1 else '' }} &middot; {{ '%.1f'|format(box.txn_pct) }}% of all transactions">
         <g class="{{ 'treemap-text-light' if box.light_text }}">
           <rect x="{{ box.x }}" y="{{ box.y }}" width="{{ box.w }}" height="{{ box.h }}"

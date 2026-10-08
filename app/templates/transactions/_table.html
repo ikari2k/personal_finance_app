@@ -119,8 +119,8 @@
              hx-post="/transactions/{{ txn.id }}/notes" hx-trigger="change"
              hx-target="closest tr" hx-swap="outerHTML" name="notes">
     </td>
-    <td class="{{ 'amount-negative' if txn.amount < 0 else 'amount-positive' }}">
-      {{ "%.2f"|format(txn.amount) }}
+    <td class="{{ 'amount-positive' if txn.type.value == 'income' else '' }}">
+      {{ txn.amount|money }}
     </td>
   </tr>
 {% endmacro %}
@@ -158,7 +158,7 @@
             {{ group.type.value|capitalize }}
             <span class="txn-count">({{ group.transactions|length }})</span>
           </span>
-          <span>{{ "%.2f"|format(group.subtotal) }}</span>
+          <span>{{ group.subtotal|money }}</span>
         </div>
         <table>
           {{ txn_colgroup(show_account) }}
@@ -336,7 +336,7 @@
             <span class="txn-count">({{ month.transactions|length }})</span>
           </span>
           <span class="{{ 'amount-negative' if month.net_total < 0 else 'amount-positive' }}">
-            {{ "%.2f"|format(month.net_total) }}
+            {{ month.net_total|money }}
           </span>
         </summary>
         {{ month_body(month, by_type, accounts, not account_id, categories) }}
@@ -345,7 +345,7 @@
       <div class="flat-net-total">
         <span>Net total <span class="txn-count">({{ month.transactions|length }})</span></span>
         <span class="{{ 'amount-negative' if month.net_total < 0 else 'amount-positive' }}">
-          {{ "%.2f"|format(month.net_total) }}
+          {{ month.net_total|money }}
         </span>
       </div>
       {{ month_body(month, by_type, accounts, not account_id, categories) }}

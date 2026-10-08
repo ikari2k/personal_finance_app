@@ -10,15 +10,15 @@
   <div class="dash-grid" style="margin-bottom: 1.5rem;">
     <div class="dash-widget dash-widget-bordered dash-span-3">
       <div class="dash-widget-head"><span class="dash-widget-title">Income &middot; All time</span></div>
-      <div class="cat-stat-number">{{ "%.2f"|format(all_time_stats.income_total) }}</div>
+      <div class="cat-stat-number">{{ all_time_stats.income_total|money }}</div>
     </div>
     <div class="dash-widget dash-widget-bordered dash-span-3">
       <div class="dash-widget-head"><span class="dash-widget-title">Expenses &middot; All time</span></div>
-      <div class="cat-stat-number">{{ "%.2f"|format(all_time_stats.expense_total|abs) }}</div>
+      <div class="cat-stat-number">{{ (all_time_stats.expense_total|abs)|money }}</div>
     </div>
     <div class="dash-widget dash-widget-bordered dash-span-3">
       <div class="dash-widget-head"><span class="dash-widget-title">Net &middot; All time</span></div>
-      <div class="cat-stat-number {{ 'amount-negative' if all_time_stats.net_total < 0 else 'amount-positive' }}">{{ "%.2f"|format(all_time_stats.net_total) }}</div>
+      <div class="cat-stat-number {{ 'amount-negative' if all_time_stats.net_total < 0 else 'amount-positive' }}">{{ all_time_stats.net_total|money }}</div>
     </div>
     <div class="dash-widget dash-widget-bordered dash-span-3">
       <div class="dash-widget-head"><span class="dash-widget-title">Savings rate &middot; All time</span></div>
@@ -60,7 +60,7 @@
                 {% if icon %}<span class="cat-cell-icon cat-cell-icon-expense">{{ category_icon(icon) }}</span>{% endif %}
                 <a class="table-link" href="{{ c.link }}">{{ c.name }}</a>
               </td>
-              <td>{{ "%.2f"|format(c.total) }}</td>
+              <td>{{ c.total|money }}</td>
               <td class="muted">{{ "%.0f"|format(c.pct) }}%</td>
               <td class="muted">{{ c.count }}</td>
             </tr>
@@ -94,18 +94,18 @@
                 {% if y.year == current_year %}<span class="muted">(in progress)</span>{% endif %}
                 {{ txn_link_icon(year_txn_links[y.year], "View " + y.year|string + " transactions") }}
               </td>
-              <td class="amount-positive">{{ "%.2f"|format(y.income_total) }}</td>
-              <td class="amount-negative">{{ "%.2f"|format(y.expense_total) }}</td>
-              <td class="muted">{{ "%.2f"|format(y.transfer_volume) if y.transfer_volume else "—" }}</td>
+              <td class="amount-positive">{{ y.income_total|money }}</td>
+              <td class="amount-negative">{{ y.expense_total|money }}</td>
+              <td class="muted">{{ y.transfer_volume|money if y.transfer_volume else "—" }}</td>
               <td class="{{ 'amount-negative' if y.net_total < 0 else 'amount-positive' }}">
-                {{ "%.2f"|format(y.net_total) }}
+                {{ y.net_total|money }}
               </td>
-              <td>{{ "%.2f"|format(stats.avg_per_month) }}</td>
+              <td>{{ stats.avg_per_month|money }}</td>
               <td>{{ "%.1f"|format(stats.savings_rate) + "%" if stats.savings_rate is not none else "—" }}</td>
               <td>
                 {% if y.yoy_delta is not none %}
                   <span class="{{ 'amount-negative' if y.yoy_delta < 0 else 'amount-positive' }}">
-                    {{ '+' if y.yoy_delta >= 0 else '' }}{{ "%.2f"|format(y.yoy_delta) }}
+                    {{ '+' if y.yoy_delta >= 0 else '' }}{{ y.yoy_delta|money }}
                   </span>
                 {% else %}
                   —

@@ -54,7 +54,7 @@
           <span class="type-pill type-pill-{{ txn_type.value }}">{{ txn_type.value }}</span>
           <span class="muted">{{ category }}</span>
           {% if config.budget %}
-            <span class="budget-pill">{{ "%.2f"|format(config.budget) }}/mo</span>
+            <span class="budget-pill">{{ config.budget|money }}/mo</span>
           {% endif %}
         </div>
       </div>
@@ -68,18 +68,18 @@
       <div class="dash-grid" style="margin-top: 1.25rem;">
         <div class="dash-widget dash-widget-bordered dash-span-3">
           <div class="dash-widget-head"><span class="dash-widget-title">{{ scope_year }} total</span></div>
-          <div class="cat-stat-number">{{ "%.2f"|format(year_stats.total) }}</div>
+          <div class="cat-stat-number">{{ year_stats.total|money }}</div>
           <div class="cat-stat-sub">{{ year_stats.count }} transaction{{ "s" if year_stats.count != 1 else "" }}</div>
         </div>
         <div class="dash-widget dash-widget-bordered dash-span-3">
           <div class="dash-widget-head"><span class="dash-widget-title">Monthly average</span></div>
-          <div class="cat-stat-number">{{ "%.2f"|format(year_stats.avg_per_month) if year_stats.avg_per_month is not none else "—" }}</div>
-          <div class="cat-stat-sub">Median {{ "%.2f"|format(year_stats.median) if year_stats.median is not none else "—" }}</div>
+          <div class="cat-stat-number">{{ year_stats.avg_per_month|money if year_stats.avg_per_month is not none else "—" }}</div>
+          <div class="cat-stat-sub">Median {{ year_stats.median|money if year_stats.median is not none else "—" }}</div>
         </div>
         <div class="dash-widget dash-widget-bordered dash-span-3">
           <div class="dash-widget-head"><span class="dash-widget-title">Highest month</span></div>
           {% if year_stats.highest_month and year_stats.highest_month.total %}
-            <div class="cat-stat-number">{{ "%.2f"|format(year_stats.highest_month.total) }}</div>
+            <div class="cat-stat-number">{{ year_stats.highest_month.total|money }}</div>
             <div class="cat-stat-sub">{{ year_stats.highest_month.label }}</div>
           {% else %}
             <div class="cat-stat-number">0.00</div>
@@ -89,7 +89,7 @@
         <div class="dash-widget dash-widget-bordered dash-span-3">
           <div class="dash-widget-head"><span class="dash-widget-title">Lowest month</span></div>
           {% if year_stats.lowest_month %}
-            <div class="cat-stat-number">{{ "%.2f"|format(year_stats.lowest_month.total) }}</div>
+            <div class="cat-stat-number">{{ year_stats.lowest_month.total|money }}</div>
             <div class="cat-stat-sub">{{ year_stats.lowest_month.label }}</div>
           {% else %}
             <div class="cat-stat-number">—</div>
@@ -102,7 +102,7 @@
         <div class="dash-widget dash-widget-bordered">
           <div class="dash-widget-head"><span class="dash-widget-title">Avg. transaction amount</span></div>
           {% if year_stats.avg_txn is not none %}
-            <div class="cat-stat-number">{{ "%.2f"|format(year_stats.avg_txn) }}</div>
+            <div class="cat-stat-number">{{ year_stats.avg_txn|money }}</div>
             <div class="cat-stat-sub">Across {{ year_stats.count }} transaction{{ "s" if year_stats.count != 1 else "" }} in {{ scope_year }}</div>
           {% else %}
             <div class="cat-stat-number">—</div>
@@ -127,22 +127,22 @@
       <div class="dash-grid" style="margin-top: 1.25rem;">
         <div class="dash-widget dash-widget-bordered dash-span-3">
           <div class="dash-widget-head"><span class="dash-widget-title">All-time total</span></div>
-          <div class="cat-stat-number">{{ "%.2f"|format(all_time_total) }}</div>
+          <div class="cat-stat-number">{{ all_time_total|money }}</div>
           <div class="cat-stat-sub">
             {{ all_time_count }} transaction{{ "s" if all_time_count != 1 else "" }} &middot;
-            {{ "%.2f"|format(avg_per_month) }}/mo avg &middot;
+            {{ avg_per_month|money }}/mo avg &middot;
             {{ first_month_label }}&ndash;{{ last_month_label }}
           </div>
         </div>
 
         <div class="dash-widget dash-widget-bordered dash-span-3">
           <div class="dash-widget-head"><span class="dash-widget-title">{{ year_tile_label }}</span></div>
-          <div class="cat-stat-number">{{ "%.2f"|format(this_year_total) }}</div>
+          <div class="cat-stat-number">{{ this_year_total|money }}</div>
           {% if ytd_delta is not none %}
             {% set rising = ytd_delta >= 0 %}
             {% set good = (rising and txn_type.value == "income") or (not rising and txn_type.value == "expense") %}
             <div class="cat-stat-delta {{ 'up' if good else 'down' }}">
-              {{ '▲' if rising else '▼' }} {{ '+' if rising else '' }}{{ "%.2f"|format(ytd_delta) }}
+              {{ '▲' if rising else '▼' }} {{ '+' if rising else '' }}{{ ytd_delta|money }}
               <span class="muted">vs same months last year</span>
             </div>
           {% endif %}
@@ -164,11 +164,11 @@
               </span>
               <span>
                 <span class="cat-month-pct utilization-{{ current_month_ring.tier }}">{{ current_month_ring.pct_label }}</span>
-                <span class="cat-month-figures">{{ "%.2f"|format(current_month_point.total) }} / {{ "%.2f"|format(config.budget) }} budget</span>
+                <span class="cat-month-figures">{{ current_month_point.total|money }} / {{ config.budget|money }} budget</span>
               </span>
             </div>
           {% else %}
-            <div class="cat-stat-number">{{ "%.2f"|format(current_month_point.total) if current_month_point else "0.00" }}</div>
+            <div class="cat-stat-number">{{ current_month_point.total|money if current_month_point else "0.00" }}</div>
             <div class="cat-stat-sub">No budget set for this subcategory</div>
           {% endif %}
         </div>
@@ -176,7 +176,7 @@
         <div class="dash-widget dash-widget-bordered dash-span-3">
           <div class="dash-widget-head"><span class="dash-widget-title">Highest month</span></div>
           {% if highest_month and highest_month.total %}
-            <div class="cat-stat-number">{{ "%.2f"|format(highest_month.total) }}</div>
+            <div class="cat-stat-number">{{ highest_month.total|money }}</div>
             <div class="cat-stat-sub">{{ highest_month.label }}</div>
           {% else %}
             <div class="cat-stat-number">0.00</div>
@@ -189,12 +189,12 @@
         <div class="dash-widget dash-widget-bordered">
           <div class="dash-widget-head"><span class="dash-widget-title">Avg. transaction size</span></div>
           {% if avg_transaction_size is not none %}
-            <div class="cat-stat-number">{{ "%.2f"|format(avg_transaction_size) }}</div>
+            <div class="cat-stat-number">{{ avg_transaction_size|money }}</div>
             {% if avg_txn_delta is not none %}
               {% set rising = avg_txn_delta >= 0 %}
               {% set good = (rising and txn_type.value == "income") or (not rising and txn_type.value == "expense") %}
               <div class="cat-stat-delta {{ 'up' if good else 'down' }}">
-                {{ '▲' if rising else '▼' }} {{ '+' if rising else '' }}{{ "%.2f"|format(avg_txn_delta) }} vs last year
+                {{ '▲' if rising else '▼' }} {{ '+' if rising else '' }}{{ avg_txn_delta|money }} vs last year
                 <span class="muted">&middot; {{ "%.1f"|format(this_year_txns_per_month) }} txns/mo, vs {{ "%.1f"|format(last_year_txns_per_month) }} last year</span>
               </div>
             {% endif %}
@@ -222,18 +222,18 @@
       <div class="dash-grid" style="margin-top: 0.75rem;">
         <div class="dash-widget dash-widget-bordered dash-span-3">
           <div class="dash-widget-head"><span class="dash-widget-title">{{ current_month_label }} total</span></div>
-          <div class="cat-stat-number">{{ "%.2f"|format(month_stats.total) }}</div>
+          <div class="cat-stat-number">{{ month_stats.total|money }}</div>
           <div class="cat-stat-sub">{{ month_stats.count }} transaction{{ "s" if month_stats.count != 1 else "" }}</div>
         </div>
         <div class="dash-widget dash-widget-bordered dash-span-3">
           <div class="dash-widget-head"><span class="dash-widget-title">Transaction average</span></div>
-          <div class="cat-stat-number">{{ "%.2f"|format(month_stats.avg_txn) if month_stats.avg_txn is not none else "—" }}</div>
-          <div class="cat-stat-sub">Median {{ "%.2f"|format(month_stats.median_txn) if month_stats.median_txn is not none else "—" }}</div>
+          <div class="cat-stat-number">{{ month_stats.avg_txn|money if month_stats.avg_txn is not none else "—" }}</div>
+          <div class="cat-stat-sub">Median {{ month_stats.median_txn|money if month_stats.median_txn is not none else "—" }}</div>
         </div>
         <div class="dash-widget dash-widget-bordered dash-span-3">
           <div class="dash-widget-head"><span class="dash-widget-title">Transaction range</span></div>
           {% if month_stats.min_txn is not none %}
-            <div class="cat-stat-number">{{ "%.2f"|format(month_stats.min_txn) }}&ndash;{{ "%.2f"|format(month_stats.max_txn) }}</div>
+            <div class="cat-stat-number">{{ month_stats.min_txn|money }}&ndash;{{ month_stats.max_txn|money }}</div>
             <div class="cat-stat-sub">Smallest to largest this month</div>
           {% else %}
             <div class="cat-stat-number">—</div>
@@ -256,7 +256,7 @@
               </span>
               <span>
                 <span class="cat-month-pct utilization-{{ month_stats.budget_ring.tier }}">{{ month_stats.budget_ring.pct_label }}</span>
-                <span class="cat-month-figures">{{ "%.2f"|format(month_stats.total) }} / {{ "%.2f"|format(config.budget) }} budget</span>
+                <span class="cat-month-figures">{{ month_stats.total|money }} / {{ config.budget|money }} budget</span>
               </span>
             </div>
           {% else %}
@@ -284,7 +284,7 @@
                   <tr>
                     <td>{{ t.date.strftime("%b %-d, %Y") }}</td>
                     <td class="dash-txn-desc"{% if t.notes %} title="Original description: {{ t.description }}"{% endif %}>{{ t.notes or t.description or row.account_name }}</td>
-                    <td class="dash-txn-amount {{ 'amount-negative' if t.amount < 0 else 'amount-positive' }}">{{ "%.2f"|format(t.amount) }}</td>
+                    <td class="dash-txn-amount {{ 'amount-negative' if t.amount < 0 else 'amount-positive' }}">{{ t.amount|money }}</td>
                   </tr>
                 {% endfor %}
               </tbody>
@@ -310,7 +310,7 @@
         <p class="chart-legend">
           <span class="chart-legend-swatch bar-{{ txn_type.value }}"></span> {{ subcategory }}
           {% if config.budget %}
-            <span class="chart-legend-line"></span> Budget ({{ "%.2f"|format(config.budget) }}/mo)
+            <span class="chart-legend-line"></span> Budget ({{ config.budget|money }}/mo)
           {% endif %}
         </p>
         {% include "reports/_category_chart.html" %}
@@ -332,7 +332,7 @@
               {% for m in monthly %}
                 <tr>
                   <td>{{ m.label }}</td>
-                  <td>{{ "%.2f"|format(m.total) }}</td>
+                  <td>{{ m.total|money }}</td>
                   {% if config.budget %}
                     <td class="{{ 'amount-negative' if m.total > config.budget else 'amount-positive' }}">
                       {{ "%.0f"|format(m.total / config.budget * 100) }}%
@@ -361,8 +361,8 @@
                     <a class="table-link" href="/reports/subcategory/{{ y.year }}?txn_type={{ txn_type.value }}&category={{ category | urlencode }}&subcategory={{ subcategory | urlencode }}{{ '&account_id=' + account_id if account_id }}">{{ y.year }}</a>
                     {% if y.year == this_year %}<span class="muted">(in progress)</span>{% endif %}
                   </td>
-                  <td>{{ "%.2f"|format(y.total) }}</td>
-                  <td>{{ "%.2f"|format(y.total / (current_month if y.year == this_year else 12)) }}</td>
+                  <td>{{ y.total|money }}</td>
+                  <td>{{ (y.total / (current_month if y.year == this_year else 12))|money }}</td>
                   <td>{{ y.count }}</td>
                   <td>
                     {% if y.year == this_year %}
@@ -371,7 +371,7 @@
                       {% set rising = y.yoy_delta >= 0 %}
                       {% set good = (rising and txn_type.value == "income") or (not rising and txn_type.value == "expense") %}
                       <span class="{{ 'amount-positive' if good else 'amount-negative' }}">
-                        {{ '+' if rising else '' }}{{ "%.2f"|format(y.yoy_delta) }}
+                        {{ '+' if rising else '' }}{{ y.yoy_delta|money }}
                       </span>
                     {% else %}
                       <span class="muted">&mdash;</span>
@@ -394,14 +394,14 @@
                     <td>
                       <a class="table-link" href="/reports/subcategory/{{ scope_year }}/{{ m.month }}?txn_type={{ txn_type.value }}&category={{ category | urlencode }}&subcategory={{ subcategory | urlencode }}{{ '&account_id=' + account_id if account_id }}">{{ m.label }}</a>
                     </td>
-                    <td>{{ "%.2f"|format(m.total) }}</td>
+                    <td>{{ m.total|money }}</td>
                     <td>{{ m.count }}</td>
                     <td>
                       {% if m.delta is not none %}
                         {% set rising = m.delta >= 0 %}
                         {% set good = (rising and txn_type.value == "income") or (not rising and txn_type.value == "expense") %}
                         <span class="{{ 'amount-positive' if good else 'amount-negative' }}">
-                          {{ '+' if rising else '' }}{{ "%.2f"|format(m.delta) }}
+                          {{ '+' if rising else '' }}{{ m.delta|money }}
                         </span>
                       {% else %}
                         <span class="muted">&mdash;</span>

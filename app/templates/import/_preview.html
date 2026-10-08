@@ -30,7 +30,7 @@
             <td>{{ txn.description }}</td>
             <td>{{ txn.category }}{% if txn.subcategory %} / {{ txn.subcategory }}{% endif %}</td>
             <td class="{{ 'amount-negative' if txn.amount < 0 else 'amount-positive' }}">
-              {{ "%.2f"|format(txn.amount) }}
+              {{ txn.amount|money }}
             </td>
           </tr>
         {% endfor %}

@@ -19,7 +19,7 @@
                {{ 'checked' if item.visible }} onchange="this.form.submit()">
         <span class="pie-legend-swatch {{ item.css_class }}"></span>
         <span class="pie-legend-label">{{ item.name }}</span>
-        <span class="pie-legend-value">{{ "%.2f"|format(item.total) }}</span>
+        <span class="pie-legend-value">{{ item.total|money }}</span>
         <a class="pie-legend-only" href="?txn_type={{ txn_type.value }}&category={{ category | urlencode }}{{ '&account_id=' + account_id if account_id }}&subcategories={{ item.name | urlencode }}"
            onclick="event.preventDefault(); event.stopPropagation();
                     var mine = this.closest('label').querySelector('input[type=checkbox]');

@@ -13,7 +13,7 @@
   {% if error %}<p class="error">{{ error }}</p>{% endif %}
   <p>
     Convert this {{ transaction.type.value }} of
-    <strong>{{ "%.2f"|format(transaction.amount|abs) }}</strong>
+    <strong>{{ (transaction.amount|abs)|money }}</strong>
     on {{ transaction.date }} ({{ transaction.description or "no description" }})
     into a transfer.
   </p>

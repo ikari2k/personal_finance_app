@@ -19,6 +19,9 @@ BUDGET_RULE_PATH = CONFIG_DIR / "budget_rule.toml"
 IMPORT_MAPPINGS_DIR = CONFIG_DIR / "import_mappings"
 IMPORT_HISTORY_PATH = DATA_DIR / "import_history.toml"
 
+# Display-only: shown next to headline figures; amounts carry no currency code.
+CURRENCY = "PLN"
+
 # The app is single-user and local-only; it must never bind beyond loopback.
 SERVER_HOST = "127.0.0.1"
 SERVER_PORT = 8000

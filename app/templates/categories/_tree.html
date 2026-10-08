@@ -35,7 +35,7 @@
                   {% if budget_warnings[txn_type][name] %}
                     <span class="budget-pill-warning-icon">{{ warning_icon() }}</span>
                   {% endif %}
-                  {{ "%.2f"|format(entry.budget|float) if entry.budget else "" }}/mo
+                  {{ (entry.budget|float)|money if entry.budget else "" }}/mo
                 </span>
                 <span class="sub-count-pill{{ '' if entry.subcategories else ' empty' }}"
                       title="{{ entry.subcategories | length }} subcategor{{ 'y' if entry.subcategories | length == 1 else 'ies' }}">
@@ -60,7 +60,7 @@
                       <span class="glyph-slot sub{{ ' empty' if not sub_entry.icon }}">{{ category_icon(sub_entry.icon) }}</span>
                       <span class="sub-name">{{ sub_name }}</span>
                       {% if sub_entry.budget %}
-                        <span class="budget-pill">{{ "%.2f"|format(sub_entry.budget|float) }}/mo</span>
+                        <span class="budget-pill">{{ (sub_entry.budget|float)|money }}/mo</span>
                       {% endif %}
                     </div>
                   </div>

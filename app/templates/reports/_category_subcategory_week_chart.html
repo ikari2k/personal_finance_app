@@ -14,7 +14,7 @@
       <li class="pie-legend-item">
         <span class="pie-legend-swatch {{ item.css_class }}"></span>
         <span class="pie-legend-label">{{ item.name }}</span>
-        <span class="pie-legend-value">{{ "%.2f"|format(item.total) }}</span>
+        <span class="pie-legend-value">{{ item.total|money }}</span>
       </li>
     {% endfor %}
   </ul>

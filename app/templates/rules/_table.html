@@ -34,13 +34,13 @@
               {% if rule.min_amount is none and rule.max_amount is none %}
                 —
               {% elif rule.min_amount is not none and rule.min_amount == rule.max_amount %}
-                = {{ "%.2f"|format(rule.min_amount) }}
+                = {{ rule.min_amount|money }}
               {% elif rule.min_amount is not none and rule.max_amount is not none %}
-                {{ "%.2f"|format(rule.min_amount) }}–{{ "%.2f"|format(rule.max_amount) }}
+                {{ rule.min_amount|money }}–{{ rule.max_amount|money }}
               {% elif rule.min_amount is not none %}
-                ≥ {{ "%.2f"|format(rule.min_amount) }}
+                ≥ {{ rule.min_amount|money }}
               {% else %}
-                ≤ {{ "%.2f"|format(rule.max_amount) }}
+                ≤ {{ rule.max_amount|money }}
               {% endif %}
             </td>
             <td>{{ rule.type.value|capitalize if rule.type else '—' }}</td>
