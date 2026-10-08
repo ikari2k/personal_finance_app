@@ -72,6 +72,8 @@
     </div>
   </div>
 
+  {% include "budget_rule/_month.html" %}
+
   {% if movers %}
     <h2 style="margin-bottom: 0.15rem;">Biggest movers this month</h2>
     <p class="muted" style="margin-top: 0;">Expense categories with the largest change vs. {{ prev_label }}.</p>

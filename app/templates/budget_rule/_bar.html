@@ -1,0 +1,42 @@
+{# Stacked needs/wants/savings bar with dashed target markers. `bar` comes from
+   app.routers.budget_rule._split_bar (never None here — callers check). #}
+{% macro split_bar(bar, aria_label) %}
+  <svg viewBox="0 0 {{ bar.width }} {{ bar.height }}" class="br-bar" role="img" aria-label="{{ aria_label }}">
+    {% for seg in bar.segments %}
+      <rect x="{{ seg.x }}" y="{{ bar.bar_y }}" width="{{ seg.width }}" height="{{ bar.bar_h }}" class="br-{{ seg.key }}">
+        <title>{{ seg.label }}</title>
+      </rect>
+    {% endfor %}
+    {% for m in bar.markers %}
+      <line x1="{{ m.x }}" y1="{{ bar.marker_y1 }}" x2="{{ m.x }}" y2="{{ bar.marker_y2 }}" class="br-marker"/>
+      {% if bar.label_y is not none %}
+        <text x="{{ m.x }}" y="{{ bar.label_y }}" text-anchor="middle" class="br-marker-label">{{ m.label }}</text>
+      {% endif %}
+    {% endfor %}
+  </svg>
+{% endmacro %}
+
+{% macro rule_table(p) %}
+  <div class="table-scroll">
+    <table class="breakdown-table">
+      <thead>
+        <tr><th>Bucket</th><th>Amount</th><th>% of income</th><th>Target</th><th>Delta</th><th></th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Income</td><td>{{ "%.2f"|format(p.split.income) }}</td><td></td><td></td><td></td><td></td>
+        </tr>
+        {% for r in p.rows %}
+          <tr>
+            <td><span class="chart-legend-swatch br-swatch-{{ r.key }}"></span> {{ r.label }}</td>
+            <td>{{ "%.2f"|format(r.amount) }}</td>
+            <td>{{ "%.1f"|format(r.pct) ~ "%" if r.pct is not none else "—" }}</td>
+            <td>{{ r.target ~ "%" if r.target is not none else "" }}</td>
+            <td>{{ ("%+.1f"|format(r.delta) ~ " pts") if r.delta is not none else "" }}</td>
+            <td class="{{ 'amount-negative' if r.status in ('over target', 'below target') else 'muted' }}">{{ r.status }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endmacro %}

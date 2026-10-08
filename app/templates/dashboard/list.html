@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "budget_rule/_bar.html" import split_bar %}
 {% from "_category_icons.html" import category_icon %}
 {% block title %}Dashboard — Finance Tracker{% endblock %}
 {% block content %}
@@ -254,18 +255,7 @@
         <a class="dash-widget-link" href="/reports/budget-rule">Details &rsaquo;</a>
       </div>
       {% if budget_rule.bar %}
-        <svg viewBox="0 0 {{ budget_rule.bar.width }} 64" class="br-bar" role="img"
-             aria-label="This month's needs, wants and savings as a share of income">
-          {% for seg in budget_rule.bar.segments %}
-            <rect x="{{ seg.x }}" y="12" width="{{ seg.width }}" height="28" class="br-{{ seg.key }}">
-              <title>{{ seg.label }}</title>
-            </rect>
-          {% endfor %}
-          {% for m in budget_rule.bar.markers %}
-            <line x1="{{ m.x }}" y1="6" x2="{{ m.x }}" y2="46" class="br-marker"/>
-            <text x="{{ m.x }}" y="60" text-anchor="middle" class="br-marker-label">{{ m.label }}</text>
-          {% endfor %}
-        </svg>
+        {{ split_bar(budget_rule.bar, "This month's needs, wants and savings as a share of income") }}
         <p class="dash-widget-caption">
           {% for r in budget_rule.rows if r.key != 'unclassified' %}
             <span class="chart-legend-swatch br-swatch-{{ r.key }}"></span>

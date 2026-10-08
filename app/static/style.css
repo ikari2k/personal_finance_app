@@ -2416,3 +2416,25 @@ fieldset legend {
   color: var(--pico-primary-inverse);
 }
 .br-caption { font-size: 0.85rem; margin: 0 0 1rem; }
+.br-rolling { margin: 0.75rem 0 0.5rem; }
+.br-rolling-row {
+  display: grid;
+  grid-template-columns: 8rem 1fr auto;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.4rem;
+}
+.br-rolling-label { font-size: 0.85rem; font-weight: 600; }
+.br-rolling-figures {
+  display: flex;
+  gap: 0.75rem;
+  font-size: 0.8rem;
+  color: var(--pico-muted-color);
+  white-space: nowrap;
+}
+.br-rolling-figures .chart-legend-swatch { margin-left: 0; margin-right: 0.25rem; }
+.br-rolling-none { grid-column: 2 / -1; }
+@media (max-width: 40rem) {
+  .br-rolling-row { grid-template-columns: 1fr; gap: 0.15rem; }
+  .br-rolling-none { grid-column: 1; }
+}

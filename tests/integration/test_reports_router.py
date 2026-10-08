@@ -1628,3 +1628,19 @@ def test_past_month_drilldown_has_no_projection(client):
 
     assert "On pace for" not in response.text
     assert ">Projected<" not in response.text
+
+
+def test_reports_overview_shows_rolling_budget_rule(client):
+    response = client.get("/reports")
+
+    assert response.status_code == 200
+    assert "Last 3 months" in response.text and "Last 12 months" in response.text
+    assert 'href="/reports/budget-rule"' in response.text
+
+
+def test_month_report_shows_budget_rule_breakdown(client):
+    response = client.get("/reports/2026/3")
+
+    assert response.status_code == 200
+    assert "50/30/20 rule" in response.text
+    assert "/reports/budget-rule?month=2026-03" in response.text

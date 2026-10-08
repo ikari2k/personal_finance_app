@@ -28,6 +28,7 @@ from fastapi.responses import HTMLResponse
 from app.models.category import CategoriesByType
 from app.models.transaction import TransactionType
 from app.routers import breadcrumbs
+from app.routers.budget_rule import month_summary, rolling_summaries
 from app.services.aggregation import (
     CategoryMonthPoint,
     CategoryTotal,
@@ -50,6 +51,7 @@ from app.services.aggregation import (
     yearly_totals_with_yoy,
 )
 from app.storage.accounts import read_accounts
+from app.storage.budget_rule import read_targets
 from app.storage.categories import read_categories
 from app.storage.ledger import read_ledger
 from app.templating import templates
@@ -1751,7 +1753,8 @@ def reports_overview(
     resolved_dir = cat_dir if cat_dir in ("asc", "desc") else "desc"
 
     accounts = read_accounts()
-    transactions = _filter_by_account(read_ledger(), account_id)
+    ledger = read_ledger()
+    transactions = _filter_by_account(ledger, account_id)
     categories = read_categories()
     expense_config = _category_config(categories, TransactionType.EXPENSE)
     chart = _net_worth_chart(transactions, accounts, account_id)
@@ -1829,6 +1832,11 @@ def reports_overview(
         request,
         "reports/list.html",
         {
+            "rule_windows": rolling_summaries(
+                ledger, categories, accounts, today.year, today.month
+            ),
+            "rule_targets": read_targets(),
+            "rule_to_label": f"{month_name[today.month]} {today.year}",
             "years": years,
             "chart": chart,
             "accounts": accounts,
@@ -2195,7 +2203,8 @@ def month_detail(
         raise HTTPException(status_code=404, detail="Invalid month")
 
     accounts = read_accounts()
-    transactions = _filter_by_account(read_ledger(), account_id)
+    ledger = read_ledger()
+    transactions = _filter_by_account(ledger, account_id)
     categories = read_categories()
     expense_breakdown = category_totals_for_month(
         transactions, year, month, TransactionType.EXPENSE
@@ -2320,6 +2329,9 @@ def month_detail(
         request,
         "reports/month.html",
         {
+            "rule_month": month_summary(ledger, categories, accounts, year, month),
+            "rule_label": f"{month_name[month]} {year}",
+            "rule_link": f"/reports/budget-rule?month={year:04d}-{month:02d}",
             "year": year,
             "month": month,
             "accounts": accounts,

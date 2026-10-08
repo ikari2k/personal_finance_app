@@ -18,6 +18,7 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
 from app.models.budget_rule import BudgetRuleTargets
+from app.models.category import CategoriesByType
 from app.routers import breadcrumbs
 from app.routers.htmx_events import toast
 from app.services.aggregation import (
@@ -107,14 +108,17 @@ def _rows(split: BudgetRuleSplit, targets: BudgetRuleTargets) -> list[BucketRow]
     ]
 
 
-def _split_bar(split: BudgetRuleSplit, targets: BudgetRuleTargets) -> dict | None:
+def _split_bar(
+    split: BudgetRuleSplit, targets: BudgetRuleTargets, compact: bool = False
+) -> dict | None:
     """Geometry for one period's stacked bar, or ``None`` without income.
 
     Segments run Needs, Wants, Savings, Unclassified so the dashed target
     markers (Needs, Needs+Wants) line up with the bar's boundaries when
     spending matches the rule. The scale stretches past 100% when spend
     plus savings exceeds income. Negative savings draws no segment (the
-    table carries the number).
+    table carries the number). ``compact`` gives a slim bar with no marker
+    labels, for stacking several on a summary page.
     """
     if split.needs_pct is None:
         return None
@@ -144,6 +148,12 @@ def _split_bar(split: BudgetRuleSplit, targets: BudgetRuleTargets) -> dict | Non
     ]
     return {
         "width": BAR_WIDTH,
+        "height": 26 if compact else 64,
+        "bar_y": 3 if compact else 12,
+        "bar_h": 20 if compact else 28,
+        "marker_y1": 0 if compact else 6,
+        "marker_y2": 26 if compact else 46,
+        "label_y": None if compact else 60,
         "segments": segments,
         "markers": markers,
         "income_x": 100 * per_pct,
@@ -246,6 +256,70 @@ def _trend_chart(months: list[BudgetRuleMonth]) -> dict | None:
     }
 
 
+def period_summary(
+    transactions: list,
+    categories: CategoriesByType,
+    accounts: list,
+    targets: BudgetRuleTargets,
+    start: date | None,
+    end: date | None,
+    *,
+    compact: bool = False,
+) -> dict:
+    """Compute one period's split, bar geometry, table rows and unclassified spend."""
+    split = budget_rule_split(transactions, categories, accounts, start, end)
+    return {
+        "split": split,
+        "bar": _split_bar(split, targets, compact),
+        "rows": _rows(split, targets),
+        "unclassified": top_unclassified_spend(transactions, categories, start, end),
+    }
+
+
+def month_summary(
+    transactions: list,
+    categories: CategoriesByType,
+    accounts: list,
+    year: int,
+    month: int,
+) -> dict:
+    """Full-size summary of one calendar month, for the monthly report page."""
+    return period_summary(
+        transactions,
+        categories,
+        accounts,
+        read_targets(),
+        date(year, month, 1),
+        date(year, month, calendar.monthrange(year, month)[1]),
+    )
+
+
+def rolling_summaries(
+    transactions: list,
+    categories: CategoriesByType,
+    accounts: list,
+    year: int,
+    month: int,
+) -> list[dict]:
+    """Compact summaries of the last 3/6/12 months ending at ``year``-``month``."""
+    targets = read_targets()
+    end = date(year, month, calendar.monthrange(year, month)[1])
+    results = []
+    for months in ROLLING_WINDOWS:
+        first_year, first_month = _shift_month(year, month, -(months - 1))
+        summary = period_summary(
+            transactions,
+            categories,
+            accounts,
+            targets,
+            date(first_year, first_month, 1),
+            end,
+            compact=True,
+        )
+        results.append({"label": f"Last {months} months", **summary})
+    return results
+
+
 def _content_context(month_key: str, today: date) -> dict:
     """Assemble everything ``budget_rule/_content.html`` renders."""
     year, month = _parse_month(month_key, today)
@@ -274,17 +348,13 @@ def _content_context(month_key: str, today: date) -> dict:
     windows.append(("all", "All time", "All time", None))
     for key, tab, label, start in windows:
         end = month_end
-        split = budget_rule_split(transactions, categories, accounts, start, end)
         periods.append(
             {
                 "key": key,
                 "tab": tab,
                 "label": label,
-                "split": split,
-                "bar": _split_bar(split, targets),
-                "rows": _rows(split, targets),
-                "unclassified": top_unclassified_spend(
-                    transactions, categories, start, end
+                **period_summary(
+                    transactions, categories, accounts, targets, start, end
                 ),
             }
         )
