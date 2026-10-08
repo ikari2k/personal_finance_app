@@ -160,6 +160,10 @@
   white-space: nowrap;
   text-overflow: ellipsis;
   margin-bottom: 0;
+  /* Pico gives inputs a fixed height sized for its own roomy padding; with
+   * this tighter padding the text would sit at the top of that box and
+   * look misaligned against the row's other cells. */
+  height: auto;
   padding: 0.15rem 0.4rem;
   font-size: inherit;
   font-family: inherit;
@@ -184,6 +188,7 @@
   display: block;
   width: 100%;
   margin-bottom: 0;
+  height: auto;
   padding: 0.15rem 0.4rem;
   font-size: inherit;
   font-family: inherit;
@@ -754,6 +759,10 @@ button.btn-transfer {
   margin-bottom: 0.25rem;
   border-bottom-width: 2px;
   border-bottom-style: solid;
+}
+
+.type-group-header > span:last-child {
+  font-family: var(--font-mono);
 }
 
 .type-group[data-type="income"] .type-group-header {
@@ -2592,3 +2601,32 @@ body > header nav .nav-manage {
   body > header nav { flex-wrap: wrap; gap: 0.25rem 1rem; padding-block: 0.4rem; }
   body > header nav .nav-manage { padding-left: 0; border-left: 0; }
 }
+
+
+/* Long report pages: a sticky "on this page" index, and anchors that land
+ * below the sticky nav + index instead of underneath them. */
+.section-index {
+  position: sticky;
+  top: var(--nav-h);
+  z-index: 4;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  margin: 0.5rem 0 1rem;
+  padding: 0.4rem 0;
+  background: var(--pico-background-color);
+  border-bottom: var(--pico-border-width) solid var(--pico-muted-border-color);
+  font-size: var(--text-sm);
+}
+.section-index a {
+  text-decoration: none;
+  color: var(--pico-muted-color);
+  font-weight: 500;
+}
+.section-index a:hover { color: var(--pico-color); }
+[data-section] { scroll-margin-top: calc(var(--nav-h) + 3.5rem); }
+
+/* A section that starts folded (a display preference, client-side only):
+ * the summary carries the section's own heading. */
+.report-fold { margin: 1.5rem 0; }
+.report-fold > summary h2 { display: inline; margin: 0; }

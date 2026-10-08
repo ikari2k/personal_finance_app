@@ -402,8 +402,9 @@ def test_year_detail_shows_month_to_month_category_matrix(client):
     response = client.get("/reports/2026")
 
     assert response.status_code == 200
-    assert "Expense by category — month to month" in response.text
-    assert "Income by category — month to month" in response.text
+    assert "Month by month, by category" in response.text
+    assert "<h3>Expense</h3>" in response.text
+    assert "<h3>Income</h3>" in response.text
     # Jan/Feb column headers (abbreviated) plus each month's own amount,
     # including the zero-filled month with no Groceries activity.
     assert ">Jan<" in response.text
@@ -1651,3 +1652,12 @@ def test_month_report_shows_previous_month_too(client):
 
     assert "February 2026" in text and "March 2026" in text
     assert "/reports/budget-rule?month=2026-02" in text
+
+
+def test_year_report_has_section_index_with_folded_matrix(client):
+    text = client.get("/reports/2026").text
+
+    assert 'class="section-index"' in text
+    assert 'href="#month-by-month"' in text
+    # The big month-by-month matrices start folded (no `open` attribute).
+    assert '<details class="report-fold" id="month-by-month" data-section>' in text

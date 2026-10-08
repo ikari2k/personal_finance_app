@@ -137,13 +137,13 @@
 {% macro txn_colgroup(show_account) %}
   <colgroup>
     <col style="width: calc(10ch + 2rem)">
-    {% if show_account %}<col style="width: 24%">{% endif %}
+    {% if show_account %}<col style="width: 18%">{% endif %}
     {# Category gets the Account column's freed-up share too when there's
        no account filter narrowing the account column out — otherwise
        that space went entirely to Description, leaving Category no wider
        than in the account-shown case despite the extra room actually
        available, which is exactly why it kept wrapping unnecessarily. #}
-    <col style="width: {{ '26%' if show_account else '42%' }}">
+    <col style="width: {{ '32%' if show_account else '44%' }}">
     <col>
     <col style="width: calc(10ch + 2rem)">
   </colgroup>

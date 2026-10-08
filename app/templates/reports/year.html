@@ -18,7 +18,15 @@
   {{ account_filter(accounts, account_id) }}
   <p><a class="cat-cta-link" href="{{ year_txn_link }}">All {{ year }} transactions &rsaquo;</a></p>
 
-  <div class="dash-grid" style="margin-bottom: 1.5rem;">
+  <nav class="section-index" aria-label="On this page">
+    <a href="#overview">Overview</a>
+    <a href="#months">Months</a>
+    <a href="#categories">Categories</a>
+    <a href="#month-by-month" onclick="document.getElementById('month-by-month').open = true">Month by month</a>
+    {% if expense_treemap_pair %}<a href="#spending">Spending breakdown</a>{% endif %}
+  </nav>
+
+  <div class="dash-grid" id="overview" data-section style="margin-bottom: 1.5rem;">
     <div class="dash-widget dash-widget-bordered dash-span-3">
       <div class="dash-widget-head"><span class="dash-widget-title">Income</span></div>
       <div class="cat-stat-number">{{ year_stats.income_total|money }}</div>
@@ -72,7 +80,7 @@
     {% include "reports/_net_worth_chart.html" %}
   </article>
 
-  <h2>Monthly breakdown</h2>
+  <h2 id="months" data-section>Monthly breakdown</h2>
   {% if months %}
     <div class="table-scroll">
       <table>
@@ -110,6 +118,7 @@
     <p>No transactions in {{ year }}.</p>
   {% endif %}
 
+  <span id="categories" data-section></span>
   <form method="get" class="view-options">
     <span class="view-options-label">Sort by</span>
     <select name="sort" onchange="this.form.submit()">
@@ -138,15 +147,22 @@
     </div>
   </div>
 
-  <h2>Income by category — month to month</h2>
-  {{ month_matrix_table(income_month_rows, month_labels, "income", date_from, date_to, month_bounds, account_id) }}
+  <details class="report-fold" id="month-by-month" data-section>
+    <summary><h2>Month by month, by category</h2></summary>
+    <h3>Income</h3>
+    {{ month_matrix_table(income_month_rows, month_labels, "income", date_from, date_to, month_bounds, account_id) }}
 
-  <h2>Expense by category — month to month</h2>
-  <p class="chart-legend">
-    <span class="utilization-legend-ring"></span> % of category/subcategory budget used that month
-  </p>
-  {{ month_matrix_table(expense_month_rows, month_labels, "expense", date_from, date_to, month_bounds, account_id) }}
+    <h3>Expense</h3>
+    <p class="chart-legend">
+      <span class="utilization-legend-ring"></span> % of category/subcategory budget used that month
+    </p>
+    {{ month_matrix_table(expense_month_rows, month_labels, "expense", date_from, date_to, month_bounds, account_id) }}
+  </details>
 
-  {% set treemap_caption = "Every expense category in " ~ year ~ "." %}
-  {% include "reports/_treemap.html" %}
+  {% if expense_treemap_pair %}
+    <div id="spending" data-section>
+      {% set treemap_caption = "Every expense category in " ~ year ~ "." %}
+      {% include "reports/_treemap.html" %}
+    </div>
+  {% endif %}
 {% endblock %}
