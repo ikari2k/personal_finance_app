@@ -326,6 +326,41 @@
       </button>
     {% endif %}
   </div>
+  {#
+    One removable chip per active filter, so what is narrowing the list is
+    visible at a glance and each filter can be dropped on its own. Every
+    chip round-trips *all* the other current values (explicit "" for the one
+    being removed), same rule as the toolbar controls above; a category chip
+    clears its subcategory too, since the two are one combined filter.
+  #}
+  {% macro filter_chip(label, keys, base) %}
+    {% set vals = dict(base) %}
+    {% for k in keys %}{% set _ = vals.update({k: ""}) %}{% endfor %}
+    <button type="button" class="filter-chip" aria-label="Remove filter: {{ label }}"
+            hx-get="/transactions" hx-target="#transactions-table-wrapper" hx-swap="outerHTML"
+            hx-push-url="true" hx-vals='{{ vals|tojson }}'>{{ label }} <span aria-hidden="true">&times;</span></button>
+  {% endmacro %}
+  {% if any_filter_active %}
+    {% set chip_base = {"by_month": 'true' if by_month else 'false', "by_type": 'true' if by_type else 'false', "account_id": account_id, "category": category, "subcategory": subcategory, "txn_type": txn_type, "search": search, "date_from": date_from, "date_to": date_to} %}
+    <div class="filter-chips" aria-label="Active filters">
+      {% if account_id %}
+        {% set chip_account = accounts_list|selectattr('id', 'equalto', account_id)|first %}
+        {{ filter_chip(chip_account.name if chip_account else account_id, ['account_id'], chip_base) }}
+      {% endif %}
+      {% if category %}
+        {{ filter_chip(subcategory ~ ' (' ~ category ~ ')' if subcategory else category, ['category', 'subcategory'], chip_base) }}
+      {% endif %}
+      {% if txn_type %}{{ filter_chip(txn_type|capitalize, ['txn_type'], chip_base) }}{% endif %}
+      {% if search %}{{ filter_chip('“' ~ search ~ '”', ['search'], chip_base) }}{% endif %}
+      {% if date_from and date_to %}
+        {{ filter_chip(date_from ~ ' – ' ~ date_to, ['date_from', 'date_to'], chip_base) }}
+      {% elif date_from %}
+        {{ filter_chip('From ' ~ date_from, ['date_from'], chip_base) }}
+      {% elif date_to %}
+        {{ filter_chip('Until ' ~ date_to, ['date_to'], chip_base) }}
+      {% endif %}
+    </div>
+  {% endif %}
   {% if error %}<p class="error">{{ error }}</p>{% endif %}
   {% for month in months %}
     {% if by_month %}

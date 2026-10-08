@@ -1823,10 +1823,8 @@ fieldset legend {
 
 .dash-eyebrow {
   display: block;
-  font-size: 0.7rem;
+  font-size: 0.8125rem;
   font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
   color: var(--pico-muted-color);
   margin-bottom: 0.3rem;
 }
@@ -1918,10 +1916,8 @@ fieldset legend {
 }
 
 .dash-widget-title {
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
   color: var(--pico-muted-color);
 }
 
@@ -2081,10 +2077,8 @@ fieldset legend {
 .dash-budget-list { display: flex; flex-direction: column; }
 .dash-budget-group-label {
   margin: 0.6rem 0 0.1rem;
-  font-size: 0.68rem;
+  font-size: 0.78rem;
   font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
   color: var(--pico-muted-color);
 }
 
@@ -2163,9 +2157,7 @@ fieldset legend {
 .dash-txn-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
 .dash-txn-table th {
   text-align: left;
-  font-size: 0.68rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-size: 0.75rem;
   color: var(--pico-muted-color);
   font-weight: 600;
   padding: 0 0 0.4rem;
@@ -2187,10 +2179,8 @@ fieldset legend {
   padding-top: 0.75rem;
   padding-bottom: 0.3rem;
   border-bottom: none;
-  font-size: 0.7rem;
+  font-size: 0.8rem;
   font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
   color: var(--pico-muted-color);
 }
 .dash-txn-table tbody:first-of-type .dash-txn-day-row td {
@@ -2630,3 +2620,29 @@ body > header nav .nav-manage {
  * the summary carries the section's own heading. */
 .report-fold { margin: 1.5rem 0; }
 .report-fold > summary h2 { display: inline; margin: 0; }
+
+
+/* Removable chip per active filter on the transactions list. */
+.filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0 0 0.75rem;
+}
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: auto;
+  margin: 0;
+  height: 1.75rem;
+  padding: 0 0.6rem;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  border-radius: 999px;
+  background: rgba(127, 127, 127, 0.14);
+  border: var(--pico-border-width) solid var(--pico-muted-border-color);
+  --pico-color: var(--pico-color);
+  color: var(--pico-color);
+}
+.filter-chip:hover { background: rgba(127, 127, 127, 0.26); }

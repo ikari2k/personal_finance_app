@@ -1478,3 +1478,67 @@ def test_flat_net_total_shows_transaction_count(client):
 
     assert "Net total" in response.text
     assert "(4)" in response.text
+
+
+def test_active_filters_render_removable_chips(client):
+    response = client.get(
+        "/transactions?search=abc&txn_type=expense&date_from=2026-01-01"
+    )
+
+    assert response.status_code == 200
+    assert "Remove filter: Expense" in response.text
+    assert "Remove filter: “abc”" in response.text
+    assert "Remove filter: From 2026-01-01" in response.text
+    # Removing one chip must keep the others in its request values.
+    assert '"search": "abc"' in response.text
+
+
+def test_no_chips_without_filters(client):
+    assert "filter-chips" not in client.get("/transactions?search=&txn_type=").text
+
+
+def test_new_transaction_does_not_wipe_category_bucket(client):
+    from app.storage.categories import read_categories, write_categories
+
+    write_categories(
+        {
+            "income": {},
+            "expense": {
+                "Food": {
+                    "icon": "",
+                    "budget": "",
+                    "bucket": "need",
+                    "subcategories": {},
+                }
+            },
+        }
+    )
+    client.post(
+        "/accounts",
+        data={
+            "account_id": "chk",
+            "name": "Chk",
+            "number": "1",
+            "description": "",
+            "starting_balance": "0",
+            "status": "active",
+        },
+    )
+
+    client.post(
+        "/transactions",
+        data={
+            "account_id": "chk",
+            "date": "2026-03-01",
+            "type": "expense",
+            "category": "Food",
+            "subcategory": "Bakery",
+            "description": "bread",
+            "amount": "5.00",
+            "notes": "",
+        },
+    )
+
+    food = read_categories()["expense"]["Food"]
+    assert food["bucket"] == "need"
+    assert "Bakery" in food["subcategories"]
