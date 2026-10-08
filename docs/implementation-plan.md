@@ -927,7 +927,7 @@ unit-testable without touching disk. `routers/` stays thin — HTTP/HTMX glue on
   `""`/`excluded` from the income base), edited via the category dialogs and a bulk
   `/categories/classify` page. Targets live in `config/budget_rule.toml` (default 50/30/20, must sum
   to 100). `services.aggregation.budget_rule_split`/`budget_rule_monthly_series`/
-  `top_unclassified_spend` back `/reports/budget-rule` (month / year-to-date / all-time panels,
+  `top_unclassified_spend` back `/reports/budget-rule` (month / year-to-date / rolling 3-6-12-month / all-time panels,
   12-month trend, editable-targets dialog) and a dashboard widget. Savings = signed net of transfer
   legs on `account_type=savings` accounts (closed included, investment excluded); a period with no
   income shows amounts only. Debt payments are deliberately not modelled yet. *Verified*: unit

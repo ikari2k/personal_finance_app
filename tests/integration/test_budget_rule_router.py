@@ -122,3 +122,26 @@ def test_save_targets_rejects_bad_sum_and_non_numbers(client):
     )
     assert "whole numbers" in not_numbers.text
     assert read_targets().needs == 50
+
+
+def test_rolling_windows_have_tabs_and_panels(client):
+    _seed()
+
+    text = client.get("/reports/budget-rule?month=2026-03").text
+
+    for label in ("Last 3 mo", "Last 6 mo", "Last 12 mo"):
+        assert label in text
+    assert "Last 3 months to March 2026" in text
+    assert 'data-panel="r12"' in text
+
+
+def test_rolling_window_excludes_older_months(client):
+    _seed()  # all activity in March 2026
+
+    text = client.get("/reports/budget-rule?month=2026-07").text
+
+    # March is outside a 3-month window ending July, inside a 6-month one.
+    panel3 = text.split('data-panel="r3"')[1].split("</section>")[0]
+    panel6 = text.split('data-panel="r6"')[1].split("</section>")[0]
+    assert "No income in this period" in panel3
+    assert "No income in this period" not in panel6

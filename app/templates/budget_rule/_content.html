@@ -17,7 +17,7 @@
     {% for p in periods %}
       <button type="button" class="{{ '' if loop.first else 'secondary outline' }}"
               onclick="var t = this; t.parentNode.querySelectorAll('button').forEach(function (b) { b.className = b === t ? '' : 'secondary outline'; }); document.querySelectorAll('.br-panel').forEach(function (d) { d.hidden = d.dataset.panel !== '{{ p.key }}'; });">
-        {{ 'This month' if p.key == 'month' else ('Year to date' if p.key == 'ytd' else 'All time') }}
+        {{ p.tab }}
       </button>
     {% endfor %}
   </div>

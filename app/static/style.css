@@ -2352,4 +2352,4 @@ fieldset legend {
 .br-bar, .br-trend { width: 100%; height: auto; }
 .br-marker { stroke: var(--pico-muted-color); stroke-width: 1.5; stroke-dasharray: 3 3; }
 .br-marker-label { fill: var(--pico-muted-color); font-size: 11px; }
-.br-tabs { max-width: 28rem; margin-bottom: 1rem; }
+.br-tabs { max-width: 44rem; margin-bottom: 1rem; }

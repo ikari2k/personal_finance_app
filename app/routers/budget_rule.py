@@ -37,6 +37,7 @@ from app.templating import templates
 router = APIRouter(prefix="/reports/budget-rule", tags=["reports"])
 
 TREND_MONTHS = 12
+ROLLING_WINDOWS = (3, 6, 12)
 BAR_WIDTH = 600
 
 
@@ -256,15 +257,28 @@ def _content_context(month_key: str, today: date) -> dict:
     month_start = date(year, month, 1)
     month_end = date(year, month, calendar.monthrange(year, month)[1])
     periods = []
-    for key, label, start, end in (
-        ("month", f"{calendar.month_name[month]} {year}", month_start, month_end),
-        ("ytd", f"{year} year to date", date(year, 1, 1), month_end),
-        ("all", "All time", None, month_end),
-    ):
+    windows = [
+        ("month", "This month", f"{calendar.month_name[month]} {year}", month_start),
+        ("ytd", "Year to date", f"{year} year to date", date(year, 1, 1)),
+    ]
+    for months in ROLLING_WINDOWS:
+        first_year, first_month = _shift_month(year, month, -(months - 1))
+        windows.append(
+            (
+                f"r{months}",
+                f"Last {months} mo",
+                f"Last {months} months to {calendar.month_name[month]} {year}",
+                date(first_year, first_month, 1),
+            )
+        )
+    windows.append(("all", "All time", "All time", None))
+    for key, tab, label, start in windows:
+        end = month_end
         split = budget_rule_split(transactions, categories, accounts, start, end)
         periods.append(
             {
                 "key": key,
+                "tab": tab,
                 "label": label,
                 "split": split,
                 "bar": _split_bar(split, targets),

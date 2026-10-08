@@ -20,7 +20,7 @@ account, no cloud, no bank integrations, and no network access beyond `localhost
   budget utilization, month-end spending forecast, and suggested budgets.
 - **50/30/20 rule** — tag expense categories as needs or wants (bulk page at
   `/categories/classify`), and see each month's needs/wants/savings as a share of income against
-  editable targets, plus a 12-month trend and a dashboard widget. Savings is net transfers into
+  editable targets, plus rolling 3/6/12-month views, a 12-month trend and a dashboard widget. Savings is net transfers into
   savings accounts.
 
 ## Screenshots
