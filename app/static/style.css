@@ -1,5 +1,31 @@
 /* App-specific overrides layered on top of vendored pico.min.css (loaded first). */
 
+/* Instrument Sans (OFL) for labels and prose; JetBrains Mono for headline
+ * figures. Both vendored — the app never loads fonts from a CDN. The latin
+ * file carries the digits and tabular-figure feature; latin-ext adds the
+ * Polish letters. */
+@font-face {
+  font-family: "Instrument Sans Variable";
+  src: url("fonts/instrument-sans-latin.woff2") format("woff2");
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215,
+    U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Instrument Sans Variable";
+  src: url("fonts/instrument-sans-latin-ext.woff2") format("woff2");
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+    U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+    U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
 @font-face {
   font-family: "JetBrains Mono Variable";
   src: url("fonts/jetbrains-mono-variable.woff2") format("woff2");
@@ -9,9 +35,28 @@
 }
 
 :root {
-  --pico-font-family:
+  --font-sans:
+    "Instrument Sans Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono:
     "JetBrains Mono Variable", ui-monospace, "SFMono-Regular", Menlo, Consolas,
     monospace;
+  --pico-font-family: var(--font-sans);
+  /* Type scale: 13 / 15 (base) / 18 / 24 / 32px. */
+  --pico-font-size: 0.9375rem;
+  --text-sm: 0.8125rem;
+  --text-lg: 1.2rem;
+  --text-xl: 1.6rem;
+  --text-2xl: 2.13rem;
+  /* One control height for every select, input, date field and button in a
+   * toolbar/header/dialog footer, so rows of mixed controls line up. */
+  --control-h: 2.25rem;
+  --pico-form-element-spacing-vertical: 0.45rem;
+  --pico-form-element-spacing-horizontal: 0.75rem;
+  /* Semantic entity colors — the identity of a transaction type, used for
+   * buttons, chips and chart marks; never to judge an amount good or bad. */
+  --color-income: #15803d;
+  --color-expense: #b91c1c;
+  --color-transfer: #b45309;
   /* Two size tiers for the vendored category icon set (_category_icons.html),
    * shared across every place they render — the categories page's category
    * rows and the icon-picker grid use --category-icon-size (the picker is
@@ -497,8 +542,7 @@ button.btn-transfer {
 }
 
 .cta-row button {
-  padding: 0.45rem 0.9rem;
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
 }
 
 /* Grouping/account-filter controls: a visually distinct, non-sticky band
@@ -518,13 +562,17 @@ button.btn-transfer {
   width: auto;
   flex: 0 0 auto;
   margin-bottom: 0;
-  padding: 0.35rem 2rem 0.35rem 0.6rem;
-  font-size: 0.85rem;
+  height: var(--control-h);
+  padding-top: 0;
+  padding-bottom: 0;
+  font-size: var(--text-sm);
 }
 
 .view-options button {
-  padding: 0.35rem 0.75rem;
-  font-size: 0.8rem;
+  height: var(--control-h);
+  padding-top: 0;
+  padding-bottom: 0;
+  font-size: var(--text-sm);
   margin-bottom: 0;
 }
 
@@ -533,15 +581,30 @@ button.btn-transfer {
  * above it by its own top margin rather than all seven controls
  * crowding one line. */
 .view-options-secondary {
-  margin-top: 0.5rem;
+  margin-top: 0;
+}
+
+/* The dropdown row and the search/date row are one filter bar: the first
+ * band drops its bottom margin and rounding, the second continues it. */
+.view-options:has(+ .view-options-secondary) {
+  margin-bottom: 0;
+  padding-bottom: 0.3rem;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.view-options-secondary {
+  padding-top: 0.3rem;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
 }
 
 .view-options input[type="text"].search-input {
   width: 14rem;
   flex: 0 0 auto;
   margin-bottom: 0;
-  padding: 0.35rem 0.6rem 0.35rem 1.9rem;
-  font-size: 0.85rem;
+  height: var(--control-h);
+  padding: 0 0.6rem 0 1.9rem;
+  font-size: var(--text-sm);
 }
 
 /* A native <input type="search">'s own browser-drawn decorations (a
@@ -577,7 +640,8 @@ button.btn-transfer {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  padding: 0.15rem 0.5rem;
+  height: var(--control-h);
+  padding: 0 0.5rem;
   border: var(--pico-border-width) solid var(--pico-muted-border-color);
   border-radius: var(--pico-border-radius);
   background: var(--pico-background-color);
@@ -587,8 +651,9 @@ button.btn-transfer {
   width: auto;
   flex: 0 0 auto;
   margin-bottom: 0;
-  padding: 0.3rem 0.4rem;
-  font-size: 0.85rem;
+  height: calc(var(--control-h) - 0.5rem);
+  padding: 0 0.4rem;
+  font-size: var(--text-sm);
   border-color: transparent;
   background-color: transparent;
 }
@@ -599,7 +664,7 @@ button.btn-transfer {
 }
 
 .view-options-label {
-  font-size: 0.75rem;
+  font-size: var(--text-sm);
   color: var(--pico-muted-color);
   margin-right: -0.25rem;
 }
@@ -740,28 +805,6 @@ button.btn-transfer {
   width: auto;
   padding: 0.55rem 1.25rem;
   margin-bottom: 0;
-}
-
-/*
- * Pico's base button rule sets the custom property --pico-color (not just
- * the color property) to --pico-primary-inverse (white) — and its :hover
- * rule resets --pico-color to the same white on top of that. Referencing
- * --pico-color without also *setting* it just inherits that white, making
- * the label invisible in light mode. Both states must override the
- * custom property itself, same as the .btn-income/-expense/-transfer
- * pattern above.
- */
-.btn-outline {
-  background: transparent;
-  border: var(--pico-border-width) solid var(--pico-muted-border-color);
-  --pico-color: var(--pico-contrast);
-  color: var(--pico-color);
-}
-
-.btn-outline:hover {
-  background: rgba(127, 127, 127, 0.12);
-  --pico-color: var(--pico-contrast);
-  color: var(--pico-color);
 }
 
 /*
@@ -2359,10 +2402,14 @@ fieldset legend {
 .cta-row > button,
 .cta-row > [role="button"] {
   margin: 0;
-  padding: 0.45rem 0.9rem;
-  font-size: 0.85rem;
-  line-height: 1.4;
+  height: var(--control-h);
+  padding: 0 0.9rem;
+  font-size: var(--text-sm);
+  line-height: 1;
   width: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   text-decoration: none;
   text-align: center;
 }
@@ -2437,4 +2484,68 @@ fieldset legend {
 @media (max-width: 40rem) {
   .br-rolling-row { grid-template-columns: 1fr; gap: 0.15rem; }
   .br-rolling-none { grid-column: 1; }
+}
+
+
+/* ------------------------------------------------------------------
+ * Shared look for controls and figures (type + button hierarchy).
+ * ------------------------------------------------------------------ */
+
+/* Digits line up in every column and chip, in whichever face. */
+body {
+  font-variant-numeric: tabular-nums;
+}
+
+h1,
+h2,
+h3 {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* Headline figures and amount columns read as ledger entries: mono. */
+.cat-stat-number,
+.amount-positive,
+.amount-negative,
+.dash-txn-amount,
+.dash-cat-bar-amount,
+.chart-tooltip-amount {
+  font-family: var(--font-mono);
+  font-feature-settings: "zero" 1;
+}
+
+/* Button hierarchy. Solid fill is reserved for the three entry actions
+ * (.btn-income/.btn-expense/.btn-transfer) and a form's one submit; the
+ * vendored classless Pico has no .secondary/.outline, so they would
+ * otherwise render as a second solid primary. Anything secondary is an
+ * outline; navigation is a plain link. */
+button.secondary,
+[role="button"].secondary,
+button.outline,
+[role="button"].outline,
+.btn-outline {
+  background: transparent;
+  border: var(--pico-border-width) solid var(--pico-muted-border-color);
+  --pico-color: var(--pico-contrast);
+  color: var(--pico-color);
+}
+button.secondary:hover,
+[role="button"].secondary:hover,
+button.outline:hover,
+[role="button"].outline:hover,
+.btn-outline:hover {
+  background: rgba(127, 127, 127, 0.12);
+  --pico-color: var(--pico-contrast);
+  color: var(--pico-color);
+}
+
+/* Same height for the buttons that sit in a dialog footer or beside a
+ * form's fields. */
+.dialog-footer button,
+.dialog-footer [role="button"],
+form > button[type="submit"] {
+  height: var(--control-h);
+  padding-top: 0;
+  padding-bottom: 0;
+  font-size: var(--text-sm);
 }

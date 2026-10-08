@@ -140,6 +140,12 @@ tests/unit/     tmp_path-isolated; tests/integration/  TestClient, conftest redi
 
 ## UI conventions
 
+- **Type, controls, buttons**: Instrument Sans (vendored, `--font-sans`) for labels/prose,
+  JetBrains Mono (`--font-mono`) only for headline figures and amount classes; tabular numerals
+  everywhere. Every toolbar/header/dialog-footer control is `height: var(--control-h)`. Solid
+  buttons are only `.btn-income/-expense/-transfer` and a form's one submit; `.secondary`,
+  `.outline`, `.btn-outline` all render as an outline (classless Pico has no such classes).
+  Tokens live at the top of `style.css`; add new sizes/colors there, not inline.
 - **Pico classless**: all page content sits inside `<header><nav>` / `<main>` per `base.html`; no
   bare `<body>` children. Prefer Pico elements/variables over new CSS. Font via
   `--pico-font-family` in `style.css`.
