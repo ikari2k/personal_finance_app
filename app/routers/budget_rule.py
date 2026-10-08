@@ -322,6 +322,28 @@ def month_pair(
     ]
 
 
+def recent_months(
+    transactions: list,
+    categories: CategoriesByType,
+    accounts: list,
+    year: int,
+    month: int,
+    count: int = 6,
+) -> list[dict]:
+    """Compact summaries of the last ``count`` months, newest first.
+
+    Starts at ``year``-``month`` (the current month, still in progress).
+    Labels are short (``Oct 2026``) so a row's label column stays narrow.
+    """
+    summaries = []
+    for back in range(count):
+        y, m = _shift_month(year, month, -back)
+        summary = month_summary(transactions, categories, accounts, y, m, compact=True)
+        summary["label"] = f"{calendar.month_abbr[m]} {y}"
+        summaries.append(summary)
+    return summaries
+
+
 def rolling_summaries(
     transactions: list,
     categories: CategoriesByType,

@@ -251,10 +251,11 @@
 
     <div class="dash-widget dash-widget-bordered dash-span-12">
       <div class="dash-widget-head">
-        <span class="dash-widget-title">50/30/20 &middot; This and last month</span>
+        <span class="dash-widget-title">50/30/20 &middot; Last 6 months</span>
         <a class="dash-widget-link" href="/reports/budget-rule">Full report &rsaquo;</a>
       </div>
-      {{ compact_rows(budget_rule.months, "No income yet.") }}
+      <p class="dash-widget-caption">Share of income per month, newest first; the current month is still in progress.</p>
+      {{ compact_rows(budget_rule.months, "No income.") }}
       {% if budget_rule.unclassified_count %}
         <p class="dash-widget-caption">
           {{ budget_rule.unclassified_count }} expense categor{{ "y" if budget_rule.unclassified_count == 1 else "ies" }}

@@ -48,7 +48,7 @@
   <div class="br-rolling">
     {% for w in items %}
       <div class="br-rolling-row">
-        <span class="br-rolling-label">{{ w.label }}</span>
+        <span class="br-rolling-label">{% if w.link %}<a class="table-link" href="{{ w.link }}">{{ w.label }}</a>{% else %}{{ w.label }}{% endif %}</span>
         {% if w.bar %}
           {{ split_bar(w.bar, w.label ~ ": needs, wants and savings as a share of income") }}
           <span class="br-rolling-figures">

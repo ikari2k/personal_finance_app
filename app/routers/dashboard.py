@@ -29,7 +29,7 @@ from fastapi.responses import HTMLResponse
 
 from app.models.account import ACCOUNT_TYPE_LABELS, AccountType
 from app.models.transaction import TransactionType
-from app.routers.budget_rule import month_pair
+from app.routers.budget_rule import recent_months
 from app.routers.reports import _category_config, _ring_geometry
 from app.services.aggregation import (
     UNCATEGORIZED,
@@ -406,14 +406,8 @@ def dashboard(request: Request) -> HTMLResponse:
             {"date": txn_date, "label": txn_date.strftime("%a, %b %d"), "rows": rows}
         )
 
-    this_month, last_month = month_pair(
-        ledger, categories, accounts, today.year, today.month, compact=True
-    )
     budget_rule_widget = {
-        "months": [
-            {**this_month, "label": "This month"},
-            {**last_month, "label": "Last month"},
-        ],
+        "months": recent_months(ledger, categories, accounts, today.year, today.month),
         "unclassified_count": count_unclassified_expense_categories(categories),
     }
 
