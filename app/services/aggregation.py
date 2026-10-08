@@ -16,8 +16,15 @@ from datetime import date as date_
 from datetime import timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
-from app.models.account import Account
+from app.models.account import Account, AccountType
+from app.models.category import (
+    BUCKET_EXCLUDED,
+    BUCKET_NEED,
+    BUCKET_WANT,
+    CategoriesByType,
+)
 from app.models.transaction import Transaction, TransactionType
+from app.services.categories import effective_bucket
 
 TYPE_ORDER = [TransactionType.EXPENSE, TransactionType.INCOME, TransactionType.TRANSFER]
 
@@ -1451,3 +1458,167 @@ def forecast_month_end(
     if projected <= 0:
         return None
     return MonthForecast(spent_so_far=spent, projected=projected, method=method)
+
+
+@dataclass
+class BudgetRuleSplit:
+    """Where one period's income went, for the 50/30/20 report.
+
+    ``income`` counts only income rows whose category isn't flagged
+    "excluded". ``needs``/``wants``/``unclassified`` are expense *spend*
+    as positive magnitudes (refunds net against them). ``savings`` is the
+    *signed* net flow into savings-type accounts — negative when more was
+    withdrawn than deposited. Each ``*_pct`` is that amount as a share of
+    ``income`` (one decimal place), or ``None`` when ``income`` is zero or
+    negative — a percentage of no income is meaningless, so the page shows
+    amounts only.
+    """
+
+    income: Decimal
+    needs: Decimal
+    wants: Decimal
+    unclassified: Decimal
+    savings: Decimal
+    needs_pct: Decimal | None
+    wants_pct: Decimal | None
+    unclassified_pct: Decimal | None
+    savings_pct: Decimal | None
+
+
+def _share(amount: Decimal, income: Decimal) -> Decimal | None:
+    """Return ``amount`` as a percentage of ``income`` (1 dp), or ``None``."""
+    if income <= 0:
+        return None
+    return (amount / income * 100).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
+
+
+def _in_period(txn: Transaction, start: date_ | None, end: date_ | None) -> bool:
+    return (start is None or txn.date >= start) and (end is None or txn.date <= end)
+
+
+def budget_rule_split(
+    transactions: Iterable[Transaction],
+    categories: CategoriesByType,
+    accounts: Iterable[Account],
+    start: date_ | None = None,
+    end: date_ | None = None,
+) -> BudgetRuleSplit:
+    """Split the transactions in ``[start, end]`` (inclusive) into 50/30/20 buckets.
+
+    Either bound may be ``None`` for open-ended. Expenses are bucketed via
+    ``effective_bucket`` (a category missing from the tree is unclassified);
+    savings is the signed sum of transfer legs landing on accounts of type
+    ``savings``, whatever their status — closed accounts still count, and
+    transfers between two savings accounts cancel out. Investment accounts
+    are deliberately not savings.
+    """
+    income_tree = categories.get("income", {})
+    expense_tree = categories.get("expense", {})
+    savings_ids = {a.id for a in accounts if a.account_type is AccountType.SAVINGS}
+
+    income = needs = wants = unclassified = savings = Decimal("0")
+    for txn in transactions:
+        if not _in_period(txn, start, end):
+            continue
+        if txn.type is TransactionType.INCOME:
+            entry = income_tree.get(txn.category)
+            if entry is None or entry.get("bucket") != BUCKET_EXCLUDED:
+                income += txn.amount
+        elif txn.type is TransactionType.EXPENSE:
+            entry = expense_tree.get(txn.category)
+            bucket = effective_bucket(entry, txn.subcategory) if entry else ""
+            if bucket == BUCKET_NEED:
+                needs -= txn.amount
+            elif bucket == BUCKET_WANT:
+                wants -= txn.amount
+            else:
+                unclassified -= txn.amount
+        elif txn.account_id in savings_ids:
+            savings += txn.amount
+
+    return BudgetRuleSplit(
+        income=income,
+        needs=needs,
+        wants=wants,
+        unclassified=unclassified,
+        savings=savings,
+        needs_pct=_share(needs, income),
+        wants_pct=_share(wants, income),
+        unclassified_pct=_share(unclassified, income),
+        savings_pct=_share(savings, income),
+    )
+
+
+@dataclass
+class BudgetRuleMonth:
+    """One month's ``BudgetRuleSplit``, for the trend chart."""
+
+    key: str
+    label: str
+    split: BudgetRuleSplit
+
+
+def budget_rule_monthly_series(
+    transactions: Iterable[Transaction],
+    categories: CategoriesByType,
+    accounts: Iterable[Account],
+    today: date_,
+) -> list[BudgetRuleMonth]:
+    """Return a ``BudgetRuleSplit`` for every month of the ledger, oldest first.
+
+    Walks the continuous month axis shared with the category series (empty
+    months included, through the current month), so the trend lines up
+    with the other charts. Empty ledger -> empty list.
+    """
+    txns = list(transactions)
+    if not txns:
+        return []
+    accounts = list(accounts)
+    by_month: dict[str, list[Transaction]] = defaultdict(list)
+    for txn in txns:
+        by_month[f"{txn.date.year:04d}-{txn.date.month:02d}"].append(txn)
+    return [
+        BudgetRuleMonth(
+            key=key,
+            label=label,
+            split=budget_rule_split(by_month.get(key, []), categories, accounts),
+        )
+        for key, label in _full_ledger_month_range(txns, today)
+    ]
+
+
+@dataclass
+class UnclassifiedSpend:
+    """Spend in one expense category that resolves to no Need/Want bucket."""
+
+    category: str
+    subcategory: str
+    total: Decimal
+    count: int
+
+
+def top_unclassified_spend(
+    transactions: Iterable[Transaction],
+    categories: CategoriesByType,
+    start: date_ | None = None,
+    end: date_ | None = None,
+    limit: int = 5,
+) -> list[UnclassifiedSpend]:
+    """Return the biggest unclassified (category, subcategory) spends in the period.
+
+    Ranked by total spend descending, so the report's "classify these"
+    nudge points at what moves the percentages most.
+    """
+    expense_tree = categories.get("expense", {})
+    totals: dict[tuple[str, str], list] = {}
+    for txn in transactions:
+        if txn.type is not TransactionType.EXPENSE or not _in_period(txn, start, end):
+            continue
+        entry = expense_tree.get(txn.category)
+        if entry and effective_bucket(entry, txn.subcategory):
+            continue
+        bucket = totals.setdefault((txn.category, txn.subcategory), [Decimal("0"), 0])
+        bucket[0] -= txn.amount
+        bucket[1] += 1
+    ranked = sorted(totals.items(), key=lambda kv: kv[1][0], reverse=True)[:limit]
+    return [UnclassifiedSpend(c, sub, total, n) for (c, sub), (total, n) in ranked]
