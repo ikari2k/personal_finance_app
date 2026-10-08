@@ -52,7 +52,7 @@ def test_dashboard_empty_state(client):
     assert "0.00" in response.text
     assert "No active accounts." in response.text
     assert "No transactions yet." in response.text
-    assert "Nothing needs attention." in response.text
+    assert "Needs attention" not in response.text
 
 
 def test_dashboard_shows_this_month_income_and_expense(client):
@@ -413,3 +413,47 @@ def test_dashboard_shows_currency_next_to_net_worth(client):
         "Net worth &middot; PLN" in client.get("/").text
         or "Net worth · PLN" in client.get("/").text
     )
+
+
+def test_dashboard_attention_card_appears_for_uncategorized(client):
+    _create_account(client)
+    _create_transaction(
+        client,
+        date_str=date.today().isoformat(),
+        type="expense",
+        category="Uncategorized",
+        amount="5.00",
+    )
+
+    text = client.get("/dashboard").text
+
+    assert "Needs attention" in text
+    assert "1 uncategorized transaction" in text
+
+
+def test_dashboard_compares_against_same_day_last_month(client, monkeypatch):
+    import app.routers.dashboard as dashboard
+
+    class FakeDate(date):
+        @classmethod
+        def today(cls):
+            return date(2026, 3, 10)
+
+    monkeypatch.setattr(dashboard, "date", FakeDate)
+    _create_account(client)
+    for date_str, amount in (
+        ("2026-02-05", "100.00"),
+        ("2026-02-20", "900.00"),  # after "day 10": must not count
+        ("2026-03-05", "50.00"),
+    ):
+        _create_transaction(
+            client,
+            date_str=date_str,
+            type="expense",
+            category="Groceries",
+            amount=amount,
+        )
+
+    text = client.get("/dashboard").text
+
+    assert "50.0% vs this day last month" in text

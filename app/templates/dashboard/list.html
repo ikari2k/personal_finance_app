@@ -47,7 +47,7 @@
 
   <div class="dash-grid">
 
-    <div class="dash-widget dash-widget-bordered dash-span-4">
+    <div class="dash-widget dash-widget-bordered dash-span-{{ 4 if has_attention else 6 }}">
       <div class="dash-widget-head">
         <span class="dash-widget-title">This month</span>
         <a class="dash-widget-link" href="/reports/{{ as_of.year }}/{{ as_of.month }}">Reports &rsaquo;</a>
@@ -61,7 +61,7 @@
           <span class="dash-stat-value">{{ income_total|money }}</span>
           {% if income_delta_pct is not none %}
             <span class="dash-stat-delta {{ 'up' if income_delta_pct >= 0 else 'down' }}">
-              {{ '▲' if income_delta_pct >= 0 else '▼' }} {{ "%.1f"|format(income_delta_pct|abs) }}% vs last month
+              {{ '▲' if income_delta_pct >= 0 else '▼' }} {{ "%.1f"|format(income_delta_pct|abs) }}% vs this day last month
             </span>
           {% endif %}
         </span>
@@ -75,7 +75,7 @@
           <span class="dash-stat-value">{{ expense_total|money }}</span>
           {% if expense_delta_pct is not none %}
             <span class="dash-stat-delta {{ 'down' if expense_delta_pct >= 0 else 'up' }}">
-              {{ '▲' if expense_delta_pct >= 0 else '▼' }} {{ "%.1f"|format(expense_delta_pct|abs) }}% vs last month
+              {{ '▲' if expense_delta_pct >= 0 else '▼' }} {{ "%.1f"|format(expense_delta_pct|abs) }}% vs this day last month
             </span>
           {% endif %}
           {% if expense_forecast %}
@@ -91,7 +91,7 @@
       </div>
     </div>
 
-    <div class="dash-widget dash-widget-bordered dash-span-4">
+    <div class="dash-widget dash-widget-bordered dash-span-{{ 4 if has_attention else 6 }}">
       <div class="dash-widget-head">
         <span class="dash-widget-title">Accounts</span>
         <a class="dash-widget-link" href="/accounts">All &rsaquo;</a>
@@ -102,7 +102,7 @@
             <span class="dash-account-glyph">{{ category_icon(account_type_icons[account.account_type]) }}</span>
             <span>
               <span class="dash-account-name">{{ account.name }}</span>
-              <span class="dash-account-type">{{ account_type_labels[account.account_type] }}</span>
+              {% if account.account_type.value != 'other' %}<span class="dash-account-type">{{ account_type_labels[account.account_type] }}</span>{% endif %}
             </span>
             <span class="dash-account-balance {{ 'amount-negative' if balances[account.id] < 0 else 'amount-positive' }}">
               {{ balances[account.id]|money }}
@@ -114,6 +114,7 @@
       </div>
     </div>
 
+    {% if has_attention %}
     <div class="dash-widget dash-widget-bordered dash-span-4">
       <div class="dash-widget-head">
         <span class="dash-widget-title">Needs attention</span>
@@ -139,10 +140,9 @@
             </a>
           {% endif %}
         </div>
-      {% else %}
-        <p class="dash-all-clear">Nothing needs attention.</p>
       {% endif %}
     </div>
+    {% endif %}
 
     <div class="dash-widget dash-widget-bordered dash-span-12">
       <div class="dash-widget-head">

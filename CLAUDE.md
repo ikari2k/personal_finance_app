@@ -146,6 +146,11 @@ tests/unit/     tmp_path-isolated; tests/integration/  TestClient, conftest redi
   buttons are only `.btn-income/-expense/-transfer` and a form's one submit; `.secondary`,
   `.outline`, `.btn-outline` all render as an outline (classless Pico has no such classes).
   Tokens live at the top of `style.css`; add new sizes/colors there, not inline.
+- **Figures and color**: display every amount with the `|money` filter (`1,234.50`; never in a
+  form `value=`). Green/red mean income/expense *identity* (buttons, chips, charts, income
+  amounts); expense amounts in lists are plain ink. Currency (`config.CURRENCY`) shows once, on
+  the dashboard's net worth. Month-over-month deltas on the dashboard compare to last month
+  *up to the same day*.
 - **Nav and period/account controls**: the header is sticky (`--nav-h`; `.page-header-row`
   sticks beneath it) with the current page marked `aria-current="page"`. Report pages share
   `_scope_bar.html`: `period_stepper` (‹ label ›, optional month picker) and `scope_bar`

@@ -239,9 +239,32 @@ def dashboard(request: Request) -> HTMLResponse:
     # services.aggregation already gets right.
     expense_total = abs(this_month.expense_total) if this_month else Decimal("0")
     net_total = this_month.net_total if this_month else Decimal("0")
-    prev_income_total = prev_month_total.income_total if prev_month_total else None
+    # Early in the month a full-month comparison is meaningless (day 3 vs a
+    # whole last month always reads "down 90%"), so compare against last
+    # month *up to the same day*.
+    prev_to_date = [
+        t
+        for t in ledger
+        if (t.date.year, t.date.month) == (prev_year, prev_month)
+        and t.date.day <= today.day
+    ]
+    prev_income_total = (
+        sum(
+            (t.amount for t in prev_to_date if t.type is TransactionType.INCOME),
+            Decimal("0"),
+        )
+        if prev_month_total
+        else None
+    )
     prev_expense_total = (
-        abs(prev_month_total.expense_total) if prev_month_total else None
+        abs(
+            sum(
+                (t.amount for t in prev_to_date if t.type is TransactionType.EXPENSE),
+                Decimal("0"),
+            )
+        )
+        if prev_month_total
+        else None
     )
     income_delta_pct = (
         _pct_change(income_total, prev_income_total)
@@ -420,6 +443,7 @@ def dashboard(request: Request) -> HTMLResponse:
             "current_net_worth": current_net_worth,
             "net_worth_delta": net_worth_delta,
             "net_worth_delta_pct": net_worth_delta_pct,
+            "has_attention": bool(uncategorized_count or transfer_candidate_count),
             "sparkline_svg": sparkline_svg,
             "sparkline_labels": [p.label for p in sparkline_points],
             "income_total": income_total,
