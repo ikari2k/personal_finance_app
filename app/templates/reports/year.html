@@ -1,11 +1,12 @@
 {% extends "base.html" %}
 {% from "reports/_category_breakdown.html" import breakdown_table, month_matrix_table %}
-{% from "reports/_account_filter.html" import account_filter %}
+{% from "_scope_bar.html" import global_scope with context %}
 {% from "_breadcrumb.html" import breadcrumb %}
 {% from "_scope_bar.html" import period_stepper %}
 {% from "_section_index.html" import section_index %}
 {% from "_icons.html" import txn_link_icon %}
 {% block title %}{{ year }} — Reports — Finance Tracker{% endblock %}
+{% block scope %}{{ global_scope(accounts, account_id) }}{% endblock %}
 {% block content %}
   {{ breadcrumb(breadcrumbs) }}
   {% set year_qs = [] %}
@@ -16,7 +17,6 @@
     "prev_url": "/reports/" ~ (year - 1) ~ year_qs_str, "prev_label": year - 1,
     "next_url": "/reports/" ~ (year + 1) ~ year_qs_str, "next_label": year + 1,
     "label": year, "heading": true}) }}
-  {{ account_filter(accounts, account_id) }}
   <p><a class="cat-cta-link" href="{{ year_txn_link }}">All {{ year }} transactions &rsaquo;</a></p>
 
   {{ section_index([

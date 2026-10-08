@@ -178,20 +178,10 @@
   {% endif %}
 {% endmacro %}
 
+{# Account is owned by the page-level scope bar, so it is not a "filter" here. #}
+{% set narrowing = category or subcategory or txn_type or search or date_from or date_to %}
 <div id="transactions-table-wrapper" {% if oob %}hx-swap-oob="true"{% endif %}>
   <div class="view-options">
-    <span class="view-options-label">Account</span>
-    <select
-        hx-get="/transactions" hx-target="#transactions-table-wrapper" hx-swap="outerHTML"
-        hx-push-url="true" hx-trigger="change" name="account_id"
-        hx-vals='{"by_month": "{{ 'true' if by_month else 'false' }}", "by_type": "{{ 'true' if by_type else 'false' }}", "category": "{{ category }}", "subcategory": "{{ subcategory }}", "txn_type": "{{ txn_type }}", "search": "{{ search }}", "date_from": "{{ date_from }}", "date_to": "{{ date_to }}"}'>
-      <option value="" {{ 'selected' if not account_id }}>All accounts</option>
-      {% for account in accounts_list %}
-        <option value="{{ account.id }}" {{ 'selected' if account.id == account_id }}>
-          {{ account.name }}
-        </option>
-      {% endfor %}
-    </select>
     {#
       One combined select instead of separate Category/Subcategory
       dropdowns: a category's subcategories are already implied by
@@ -311,11 +301,11 @@
       cookie unchanged, since "clear filters" is about what's shown,
       not how it's grouped.
     #}
-    {% if any_filter_active %}
+    {% if narrowing %}
       <button type="button" class="secondary"
               hx-get="/transactions" hx-target="#transactions-table-wrapper" hx-swap="outerHTML"
               hx-push-url="true"
-              hx-vals='{"account_id": "", "category": "", "subcategory": "", "txn_type": "", "search": "", "date_from": "", "date_to": ""}'>
+              hx-vals='{"category": "", "subcategory": "", "txn_type": "", "search": "", "date_from": "", "date_to": ""}'>
         Clear filters
       </button>
     {% endif %}
@@ -340,13 +330,9 @@
             hx-get="/transactions" hx-target="#transactions-table-wrapper" hx-swap="outerHTML"
             hx-push-url="true" hx-vals='{{ vals|tojson }}'>{{ label }} <span aria-hidden="true">&times;</span></button>
   {% endmacro %}
-  {% if any_filter_active %}
+  {% if narrowing %}
     {% set chip_base = {"by_month": 'true' if by_month else 'false', "by_type": 'true' if by_type else 'false', "account_id": account_id, "category": category, "subcategory": subcategory, "txn_type": txn_type, "search": search, "date_from": date_from, "date_to": date_to} %}
     <div class="filter-chips" aria-label="Active filters">
-      {% if account_id %}
-        {% set chip_account = accounts_list|selectattr('id', 'equalto', account_id)|first %}
-        {{ filter_chip(chip_account.name if chip_account else account_id, ['account_id'], chip_base) }}
-      {% endif %}
       {% if category %}
         {{ filter_chip(subcategory ~ ' (' ~ category ~ ')' if subcategory else category, ['category', 'subcategory'], chip_base) }}
       {% endif %}

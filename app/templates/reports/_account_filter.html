@@ -1,8 +1,0 @@
-{% from "_scope_bar.html" import scope_bar %}
-{# Kept as a thin wrapper so every report page that already calls
-   account_filter() picks up the shared scope bar. A plain GET form, not
-   htmx: picking an account reshapes the whole page, and the empty action
-   resubmits to the current path with account_id as the only query param. #}
-{% macro account_filter(accounts, account_id) %}
-  {{ scope_bar(accounts, account_id) }}
-{% endmacro %}

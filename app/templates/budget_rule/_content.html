@@ -1,10 +1,8 @@
 {% from "budget_rule/_bar.html" import split_bar, rule_table %}
-{% from "_scope_bar.html" import period_stepper %}
 {% from "_section_index.html" import section_index %}
 <div id="budget-rule-content" {% if oob %}hx-swap-oob="true"{% endif %}>
   {{ section_index([{"id": "breakdown", "label": "Breakdown"}, {"id": "trend", "label": "Trend"}], sticky=false) }}
   <div class="view-options br-controls" id="breakdown" data-section>
-    {{ period_stepper(period) }}
     <div class="cat-scope-toggle br-tabs" role="group" aria-label="Period">
       {% for p in periods %}
         <button type="button" class="br-tab" aria-pressed="{{ 'true' if loop.first else 'false' }}"

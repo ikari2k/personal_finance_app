@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 {% from "_breadcrumb.html" import breadcrumb %}
+{% from "_scope_bar.html" import global_scope with context %}
 {% block title %}50/30/20 — Reports — Finance Tracker{% endblock %}
+{% block scope %}{{ global_scope(none, "", period) }}{% endblock %}
 {% block content %}
   {{ breadcrumb(breadcrumbs) }}
   <div class="page-header-row">

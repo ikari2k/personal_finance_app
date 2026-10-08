@@ -161,10 +161,15 @@ tests/unit/     tmp_path-isolated; tests/integration/  TestClient, conftest redi
   amounts); expense amounts in lists are plain ink. Currency (`config.CURRENCY`) shows once, on
   the dashboard's net worth. Month-over-month deltas on the dashboard compare to last month
   *up to the same day*.
-- **Nav and period/account controls**: the header is sticky (`--nav-h`; `.page-header-row`
-  sticks beneath it) with the current page marked `aria-current="page"`. Report pages share
-  `_scope_bar.html`: `period_stepper` (‹ label ›, optional month picker) and `scope_bar`
-  (account select band) — reuse them instead of hand-rolling prev/next links.
+- **Nav and the scope bar**: the header is sticky (`--nav-h`; `.page-header-row` sticks beneath
+  it) with the current page marked `aria-current="page"`. Dashboard, Transactions and Reports
+  fill `{% block scope %}` in `base.html` with `global_scope(accounts, account_id[, period])`
+  (`_scope_bar.html`, import *with context*): an optional month stepper plus the account select.
+  The account is one sticky cookie (`account_id`, written by Transactions and, via middleware,
+  by Reports/Dashboard URLs carrying `account_id`; report routes resolve it with
+  `routers.scope.resolve_account`) — absent param = remembered value, `account_id=` = all
+  accounts. The bar's form carries every other query param as hidden fields. Don't hand-roll
+  prev/next links or account selects in a page body; use `period_stepper`/`global_scope`.
 - **Pico classless**: all page content sits inside `<header><nav>` / `<main>` per `base.html`; no
   bare `<body>` children. Prefer Pico elements/variables over new CSS. Font via
   `--pico-font-family` in `style.css`.

@@ -31,5 +31,6 @@ def test_year_and_month_reports_use_shared_period_stepper(client):
     month = client.get("/reports/2026/3").text
 
     assert 'class="period-title">2026' in year and "Previous: 2025" in year
-    assert 'class="period-title">March 2026' in month and "Next: April 2026" in month
-    assert "scope-bar" in month
+    # Month report: the stepper lives in the global scope bar; h1 is plain.
+    assert "<h1>March 2026</h1>" in month and "Next: April 2026" in month
+    assert 'class="view-options scope-bar"' in month

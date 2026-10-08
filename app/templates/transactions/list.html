@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 {% from "_breadcrumb.html" import breadcrumb %}
+{% from "_scope_bar.html" import global_scope with context %}
 {% block title %}Transactions — Finance Tracker{% endblock %}
+{% block scope %}{{ global_scope(accounts_list, account_id) }}{% endblock %}
 {% block content %}
   {{ breadcrumb(breadcrumbs) }}
   <div class="page-header-row">

@@ -1,8 +1,9 @@
 {% extends "base.html" %}
 {% from "_category_icons.html" import category_icon %}
-{% from "reports/_account_filter.html" import account_filter %}
+{% from "_scope_bar.html" import global_scope with context %}
 {% from "_breadcrumb.html" import breadcrumb %}
 {% block title %}{{ category }} — Reports — Finance Tracker{% endblock %}
+{% block scope %}{{ global_scope(accounts, account_id) }}{% endblock %}
 {% block content %}
   {% set txn_link = "/transactions?txn_type=" + txn_type.value + "&category=" + (category | urlencode) + ("&account_id=" + account_id if account_id else "") %}
   {#
@@ -58,7 +59,6 @@
         </div>
       </div>
       <div class="cat-detail-actions">
-        {{ account_filter(accounts, account_id) }}
         <a class="cat-cta-link" href="{{ period_txn_link }}">All {{ category }} transactions{{ period_label }} &rsaquo;</a>
       </div>
     </div>

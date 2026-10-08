@@ -2,6 +2,7 @@
 {% from "_category_icons.html" import category_icon %}
 {% from "reports/_category_breakdown.html" import budget_ring_cell %}
 {% from "_breadcrumb.html" import breadcrumb %}
+{% from "_scope_bar.html" import global_scope with context %}
 {% block title %}Categories — Reports — Finance Tracker{% endblock %}
 {% macro sparkline_svg(spark, txn_type) %}
   {% if spark.has_data %}
@@ -13,6 +14,7 @@
     <span class="muted">—</span>
   {% endif %}
 {% endmacro %}
+{% block scope %}{{ global_scope(accounts, account_id) }}{% endblock %}
 {% block content %}
   {{ breadcrumb(breadcrumbs) }}
   <h1>Categories</h1>
@@ -32,13 +34,6 @@
       <option value="growth" {{ 'selected' if sort == 'growth' }}>Fastest growing</option>
       <option value="total" {{ 'selected' if sort == 'total' }}>Total (high to low)</option>
       <option value="budget" {{ 'selected' if sort == 'budget' }}>Budget usage</option>
-    </select>
-    <span class="view-options-label">Account</span>
-    <select name="account_id" onchange="this.form.submit()">
-      <option value="" {{ 'selected' if not account_id }}>All accounts</option>
-      {% for account in accounts %}
-        <option value="{{ account.id }}" {{ 'selected' if account.id == account_id }}>{{ account.name }}</option>
-      {% endfor %}
     </select>
   </form>
 

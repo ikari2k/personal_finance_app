@@ -6,8 +6,10 @@
    `heading` (render the label as the page's <h1>), or neither (plain label);
    optional today_url adds a "Back to current month" link.
 
-   scope_bar(accounts, account_id): the muted band every report page shares;
-   its caller block (if any) is appended after the account select. #}
+   global_scope(accounts, account_id, period): the one band under the nav on
+   Dashboard, Transactions and Reports — a month stepper (when the page has a
+   month) and the shared account select. Pass accounts=none to omit the
+   account select. Import with context (it reads `request`). #}
 {% macro period_stepper(p) %}
   <div class="period-stepper">
     <a class="step" href="{{ p.prev_url }}" aria-label="Previous: {{ p.prev_label }}" title="{{ p.prev_label }}">&lsaquo;</a>
@@ -30,12 +32,20 @@
   </div>
 {% endmacro %}
 
-{% macro scope_bar(accounts, account_id) %}
-  <div class="view-options scope-bar">
+{% macro global_scope(accounts, account_id, period=none) %}
+  <div class="view-options scope-bar" role="region" aria-label="View scope">
+    {% if period %}{{ period_stepper(period) }}{% endif %}
     {% if accounts is not none %}
+      {# A plain GET to the current path. Every other query param on the page
+         (category, sort, month, ...) rides along as a hidden field so changing
+         the account never drops what the page needs; the account itself is
+         remembered in the shared cookie (see app.routers.scope). #}
       <form method="get" class="scope-account">
-        <span class="view-options-label">Account</span>
-        <select name="account_id" onchange="this.form.submit()">
+        {% for key, value in request.query_params.multi_items() if key != 'account_id' %}
+          <input type="hidden" name="{{ key }}" value="{{ value }}">
+        {% endfor %}
+        <label class="view-options-label" for="scope-account-select">Account</label>
+        <select id="scope-account-select" name="account_id" onchange="this.form.submit()">
           <option value="" {{ 'selected' if not account_id }}>All accounts</option>
           {% for account in accounts %}
             <option value="{{ account.id }}" {{ 'selected' if account.id == account_id }}>{{ account.name }}</option>
@@ -43,6 +53,5 @@
         </select>
       </form>
     {% endif %}
-    {% if caller %}{{ caller() }}{% endif %}
   </div>
 {% endmacro %}
