@@ -1,0 +1,20 @@
+<form id="targets-form" hx-post="/reports/budget-rule/targets"
+      hx-target="#targets-dialog-content" hx-swap="innerHTML">
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <input type="hidden" name="month" value="{{ month }}">
+  <p class="muted">Share of income, in whole percent. The three must add up to 100.</p>
+  <label>Needs %
+    <input type="number" name="needs" min="0" max="100" step="1" value="{{ values.needs }}" required>
+  </label>
+  <label>Wants %
+    <input type="number" name="wants" min="0" max="100" step="1" value="{{ values.wants }}" required>
+  </label>
+  <label>Savings %
+    <input type="number" name="savings" min="0" max="100" step="1" value="{{ values.savings }}" required>
+  </label>
+  <footer class="dialog-footer">
+    <button type="button" class="btn-outline"
+            onclick="document.getElementById('targets-dialog').close()">Cancel</button>
+    <button type="submit">Save targets</button>
+  </footer>
+</form>

@@ -15,6 +15,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.routers import (
     accounts,
+    budget_rule,
     categories,
     dashboard,
     import_,
@@ -66,6 +67,7 @@ app.include_router(import_.router)
 app.include_router(transfer_detection.router)
 app.include_router(rules.router)
 app.include_router(reports.router)
+app.include_router(budget_rule.router)
 
 
 @app.exception_handler(LockError)

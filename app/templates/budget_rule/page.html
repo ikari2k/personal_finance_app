@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% from "_breadcrumb.html" import breadcrumb %}
+{% block title %}50/30/20 — Reports — Finance Tracker{% endblock %}
+{% block content %}
+  {{ breadcrumb(breadcrumbs) }}
+  <div class="page-header-row">
+    <h1>50/30/20 rule</h1>
+    <div class="cta-row">
+      <button type="button" class="secondary"
+              hx-get="/reports/budget-rule/targets/edit?month={{ month_key }}"
+              hx-target="#targets-dialog-content" hx-swap="innerHTML">Edit targets</button>
+      <a href="/categories/classify" role="button" class="secondary">Classify categories</a>
+    </div>
+  </div>
+
+  {% include "budget_rule/_content.html" %}
+
+  <dialog id="targets-dialog" hx-on:close-dialog="this.close()"
+          hx-on:click="if (event.target === this) this.close()">
+    <article>
+      <header>
+        <button aria-label="Close" rel="prev"
+                onclick="document.getElementById('targets-dialog').close()"></button>
+        <strong>50/30/20 targets</strong>
+      </header>
+      <div id="targets-dialog-content"
+           hx-on::after-swap="if (this.firstElementChild) { const d = this.closest('dialog'); if (!d.open) d.showModal(); }"></div>
+    </article>
+  </dialog>
+{% endblock %}

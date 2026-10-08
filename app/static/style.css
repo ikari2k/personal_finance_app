@@ -2339,3 +2339,17 @@ fieldset legend {
 .cat-trend-link svg { width: 0.9rem; height: 0.9rem; }
 .cat-trend-link:hover,
 .cat-trend-link:focus { color: var(--pico-color); }
+
+/* 50/30/20 report: bucket colors follow the bucket, never its rank. */
+.br-needs { fill: #3f8f4f; }
+.br-wants { fill: #4f8fe0; }
+.br-savings { fill: #e0a93b; }
+.br-unclassified { fill: #9aa0a6; }
+.br-swatch-needs { background-color: #3f8f4f; }
+.br-swatch-wants { background-color: #4f8fe0; }
+.br-swatch-savings { background-color: #e0a93b; }
+.br-swatch-unclassified { background-color: #9aa0a6; }
+.br-bar, .br-trend { width: 100%; height: auto; }
+.br-marker { stroke: var(--pico-muted-color); stroke-width: 1.5; stroke-dasharray: 3 3; }
+.br-marker-label { fill: var(--pico-muted-color); font-size: 11px; }
+.br-tabs { max-width: 28rem; margin-bottom: 1rem; }

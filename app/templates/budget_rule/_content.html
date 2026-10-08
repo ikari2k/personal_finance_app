@@ -1,0 +1,109 @@
+<div id="budget-rule-content" {% if oob %}hx-swap-oob="true"{% endif %}>
+  <div class="period-nav">
+    <a href="/reports/budget-rule?month={{ prev_key }}" class="period-nav-prev">&larr; {{ prev_label }}</a>
+    <h2 style="margin: 0;">{{ label }}</h2>
+    {% if next_key %}
+      <a href="/reports/budget-rule?month={{ next_key }}" class="period-nav-next">{{ next_label }} &rarr;</a>
+    {% else %}
+      <span class="period-nav-next muted"></span>
+    {% endif %}
+  </div>
+  <p class="muted">
+    Targets: Needs {{ targets.needs }}% &middot; Wants {{ targets.wants }}% &middot; Savings {{ targets.savings }}%
+    of income. Savings is net transfers into savings accounts; excluded income categories don't count as income.
+  </p>
+
+  <div role="group" class="br-tabs">
+    {% for p in periods %}
+      <button type="button" class="{{ '' if loop.first else 'secondary outline' }}"
+              onclick="var t = this; t.parentNode.querySelectorAll('button').forEach(function (b) { b.className = b === t ? '' : 'secondary outline'; }); document.querySelectorAll('.br-panel').forEach(function (d) { d.hidden = d.dataset.panel !== '{{ p.key }}'; });">
+        {{ 'This month' if p.key == 'month' else ('Year to date' if p.key == 'ytd' else 'All time') }}
+      </button>
+    {% endfor %}
+  </div>
+
+  {% for p in periods %}
+    <section class="br-panel" data-panel="{{ p.key }}" {{ 'hidden' if not loop.first }}>
+      <h3>{{ p.label }}</h3>
+      {% if p.bar %}
+        <svg viewBox="0 0 {{ p.bar.width }} 64" class="br-bar" role="img"
+             aria-label="Needs, wants and savings as a share of income for {{ p.label }}">
+          {% for seg in p.bar.segments %}
+            <rect x="{{ seg.x }}" y="12" width="{{ seg.width }}" height="28" class="br-{{ seg.key }}">
+              <title>{{ seg.label }}</title>
+            </rect>
+          {% endfor %}
+          {% for m in p.bar.markers %}
+            <line x1="{{ m.x }}" y1="6" x2="{{ m.x }}" y2="46" class="br-marker"/>
+            <text x="{{ m.x }}" y="60" text-anchor="middle" class="br-marker-label">{{ m.label }}</text>
+          {% endfor %}
+        </svg>
+      {% else %}
+        <p class="muted">No income in this period, so shares can't be computed — amounts only.</p>
+      {% endif %}
+      <div class="table-scroll">
+        <table class="breakdown-table">
+          <thead>
+            <tr><th>Bucket</th><th>Amount</th><th>% of income</th><th>Target</th><th>Delta</th><th></th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Income</td><td>{{ "%.2f"|format(p.split.income) }}</td><td></td><td></td><td></td><td></td>
+            </tr>
+            {% for r in p.rows %}
+              <tr>
+                <td><span class="chart-legend-swatch br-swatch-{{ r.key }}"></span> {{ r.label }}</td>
+                <td>{{ "%.2f"|format(r.amount) }}</td>
+                <td>{{ "%.1f"|format(r.pct) ~ "%" if r.pct is not none else "—" }}</td>
+                <td>{{ r.target ~ "%" if r.target is not none else "" }}</td>
+                <td>{{ ("%+.1f"|format(r.delta) ~ " pts") if r.delta is not none else "" }}</td>
+                <td class="{{ 'amount-negative' if r.status in ('over target', 'below target') else 'muted' }}">{{ r.status }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% if p.unclassified %}
+        <p class="muted">
+          Biggest unclassified spend — <a href="/categories/classify">classify these</a>:
+          {% for u in p.unclassified %}
+            {{ u.category }}{{ " / " ~ u.subcategory if u.subcategory }} ({{ "%.2f"|format(u.total) }}){{ ", " if not loop.last }}
+          {% endfor %}
+        </p>
+      {% endif %}
+    </section>
+  {% endfor %}
+
+  <h2>Trend</h2>
+  <p class="muted">Share of income per month, up to {{ label }}. Savings below zero (net withdrawals) hangs below the axis.</p>
+  {% if trend %}
+    <svg viewBox="0 0 {{ trend.width }} {{ trend.height }}" class="br-trend" role="img"
+         aria-label="Monthly needs, wants, savings and unclassified as a share of income">
+      {% for t in trend.ticks %}
+        <line x1="{{ trend.plot_left }}" y1="{{ t.y }}" x2="{{ trend.plot_right }}" y2="{{ t.y }}" class="chart-gridline"/>
+        <text x="{{ trend.plot_left - 6 }}" y="{{ t.y }}" class="chart-axis-label" text-anchor="end"
+              dominant-baseline="middle">{{ t.label }}</text>
+      {% endfor %}
+      <line x1="{{ trend.plot_left }}" y1="{{ trend.zero_y }}" x2="{{ trend.plot_right }}" y2="{{ trend.zero_y }}" class="chart-zero-line"/>
+      {% for b in trend.bars %}
+        <g>
+          <title>{{ b.title }}</title>
+          {% for s in b.segments %}
+            <rect x="{{ b.x }}" y="{{ s.y }}" width="{{ b.w }}" height="{{ s.h }}" class="br-{{ s.key }}"/>
+          {% endfor %}
+        </g>
+      {% endfor %}
+      {% for l in trend.labels %}
+        <text x="{{ l.x }}" y="{{ trend.label_y }}" class="chart-x-label" text-anchor="middle">{{ l.text }}{{ " " ~ l.year if l.year }}</text>
+      {% endfor %}
+    </svg>
+    <p class="chart-legend">
+      <span class="chart-legend-swatch br-swatch-needs"></span> Needs
+      <span class="chart-legend-swatch br-swatch-wants"></span> Wants
+      <span class="chart-legend-swatch br-swatch-savings"></span> Savings
+      <span class="chart-legend-swatch br-swatch-unclassified"></span> Unclassified
+    </p>
+  {% else %}
+    <p>No transactions yet.</p>
+  {% endif %}
+</div>
