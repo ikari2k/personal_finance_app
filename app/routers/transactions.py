@@ -10,6 +10,14 @@ from app.models.category import CategoriesByType
 from app.models.transaction import Transaction, TransactionType
 from app.routers import breadcrumbs
 from app.routers.htmx_events import toast
+from app.routers.scope import (
+    MONTH_APPLIED_COOKIE,
+    MONTH_COOKIE,
+    month_bounds,
+    month_key,
+    parse_month_key,
+    transactions_period,
+)
 from app.services.aggregation import grouped_transaction_view
 from app.services.categories import category_pair_exists
 from app.services.transactions import (
@@ -208,6 +216,7 @@ def list_transactions(
     search: str | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
+    scope_month: str | None = None,
 ) -> HTMLResponse:
     """Render the transaction list.
 
@@ -242,6 +251,27 @@ def list_transactions(
     returns a ``Response`` itself, as this one does, has that return value
     used completely as-is.
     """
+    # The scope bar's month sets the date range. An explicit ``scope_month``
+    # (stepper/picker) always applies; a month chosen on another page (the
+    # ``scope_month`` cookie) is adopted once — the first visit after it
+    # changed, when no date param is given — and after that the list's own
+    # date filters win until the scope month changes again.
+    chosen_month = parse_month_key(scope_month)
+    cookie_month = parse_month_key(request.cookies.get(MONTH_COOKIE))
+    applied_month = None
+    if chosen_month:
+        applied_month = chosen_month
+    elif (
+        cookie_month
+        and date_from is None
+        and date_to is None
+        and request.cookies.get(MONTH_APPLIED_COOKIE) != month_key(*cookie_month)
+    ):
+        applied_month = cookie_month
+    if applied_month:
+        first, last = month_bounds(*applied_month)
+        date_from, date_to = first.isoformat(), last.isoformat()
+
     cookie_by_month, cookie_by_type = _grouping_from_cookies(request)
     resolved_by_month = by_month if by_month is not None else cookie_by_month
     resolved_by_type = by_type if by_type is not None else cookie_by_type
@@ -316,6 +346,9 @@ def list_transactions(
             or resolved_date_from
             or resolved_date_to
         ),
+        "scope_period": transactions_period(
+            resolved_date_from, resolved_date_to, date.today()
+        ),
         "error": None,
     }
     template = (
@@ -353,6 +386,17 @@ def list_transactions(
     response.set_cookie(
         "date_to", resolved_date_to, max_age=STICKY_FILTER_COOKIE_MAX_AGE
     )
+    if applied_month:
+        response.set_cookie(
+            MONTH_COOKIE,
+            month_key(*applied_month),
+            max_age=STICKY_FILTER_COOKIE_MAX_AGE,
+        )
+        response.set_cookie(
+            MONTH_APPLIED_COOKIE,
+            month_key(*applied_month),
+            max_age=STICKY_FILTER_COOKIE_MAX_AGE,
+        )
     return response
 
 

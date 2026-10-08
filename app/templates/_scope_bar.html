@@ -12,10 +12,14 @@
    account select. Import with context (it reads `request`). #}
 {% macro period_stepper(p) %}
   <div class="period-stepper">
-    <a class="step" href="{{ p.prev_url }}" aria-label="Previous: {{ p.prev_label }}" title="{{ p.prev_label }}">&lsaquo;</a>
+    {% if p.prev_url %}
+      <a class="step" href="{{ p.prev_url }}" aria-label="Previous: {{ p.prev_label }}" title="{{ p.prev_label }}">&lsaquo;</a>
+    {% else %}
+      <span class="step disabled" aria-hidden="true">&lsaquo;</span>
+    {% endif %}
     {% if p.picker %}
       <form method="get" action="{{ p.picker.action }}" class="period-picker">
-        <input type="month" name="month" value="{{ p.picker.key }}" max="{{ p.picker.max }}"
+        <input type="month" name="{{ p.picker.name or 'month' }}" value="{{ p.picker.key }}" max="{{ p.picker.max }}"
                aria-label="Month" onchange="if (this.value) this.form.submit()">
       </form>
     {% elif p.heading %}

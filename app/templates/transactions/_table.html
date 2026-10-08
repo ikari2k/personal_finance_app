@@ -178,6 +178,7 @@
   {% endif %}
 {% endmacro %}
 
+{% from "_scope_bar.html" import global_scope with context %}
 {# Account is owned by the page-level scope bar, so it is not a "filter" here. #}
 {% set narrowing = category or subcategory or txn_type or search or date_from or date_to %}
 <div id="transactions-table-wrapper" {% if oob %}hx-swap-oob="true"{% endif %}>
@@ -375,3 +376,8 @@
     <p>No transactions yet.</p>
   {% endfor %}
 </div>
+{# After an HTMX filter change the page-level scope bar (outside this fragment)
+   would show a stale month, so refresh it out-of-band with the new range. #}
+{% if scope_period is defined and request.headers.get("HX-Request") == "true" %}
+  <div id="scope-bar-slot" hx-swap-oob="true">{{ global_scope(accounts_list, account_id, scope_period) }}</div>
+{% endif %}

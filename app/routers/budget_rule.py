@@ -21,6 +21,7 @@ from app.models.budget_rule import BudgetRuleTargets
 from app.models.category import CategoriesByType
 from app.routers import breadcrumbs
 from app.routers.htmx_events import toast
+from app.routers.scope import MONTH_COOKIE
 from app.services.aggregation import (
     BudgetRuleMonth,
     BudgetRuleSplit,
@@ -441,7 +442,7 @@ def _content_context(month_key: str, today: date) -> dict:
                 "action": "/reports/budget-rule",
             },
             "today_url": (
-                "/reports/budget-rule"
+                f"/reports/budget-rule?month={today.year:04d}-{today.month:02d}"
                 if selected != f"{today.year:04d}-{today.month:02d}"
                 else None
             ),
@@ -452,6 +453,7 @@ def _content_context(month_key: str, today: date) -> dict:
 @router.get("", response_class=HTMLResponse)
 def budget_rule_page(request: Request, month: str = "") -> HTMLResponse:
     """Render the 50/30/20 report for ``month`` (``YYYY-MM``, default current)."""
+    month = month or request.cookies.get(MONTH_COOKIE, "")
     context = _content_context(month, date.today())
     context["breadcrumbs"] = [
         breadcrumbs.Crumb("Reports", "/reports"),

@@ -156,7 +156,12 @@ def test_month_navigation_controls(client):
     assert "Previous: February 2026" in past
     assert "Next: April 2026" in past
 
-    current = client.get("/reports/budget-rule").text
+    from datetime import date
+
+    today = date.today()
+    current = client.get(
+        f"/reports/budget-rule?month={today.year:04d}-{today.month:02d}"
+    ).text
     assert "Back to current month" not in current
     assert 'class="step disabled"' in current
 

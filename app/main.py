@@ -6,6 +6,7 @@ rendered through Jinja2.
 """
 
 import logging
+import re
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -26,7 +27,13 @@ from app.routers import (
     transfers,
 )
 from app.routers.htmx_events import toast
-from app.routers.scope import ACCOUNT_COOKIE, COOKIE_MAX_AGE
+from app.routers.scope import (
+    ACCOUNT_COOKIE,
+    COOKIE_MAX_AGE,
+    MONTH_COOKIE,
+    month_key,
+    parse_month_key,
+)
 from app.services.consistency import check_consistency
 from app.storage.accounts import read_accounts
 from app.storage.ledger import read_ledger
@@ -71,26 +78,42 @@ app.include_router(reports.router)
 app.include_router(budget_rule.router)
 
 
-@app.middleware("http")
-async def remember_account_scope(request: Request, call_next) -> Response:
-    """Remember an account chosen on Reports/Dashboard in the shared cookie.
+_MONTH_REPORT_PATH = re.compile(r"^/reports/(\d{4})/(\d{1,2})/?$")
 
-    Transactions writes the same ``account_id`` cookie itself; this makes the
-    other pages do likewise whenever the URL carries ``account_id`` (an
-    explicit empty value means "all accounts" and is remembered too), so one
-    choice follows the user between pages.
+
+@app.middleware("http")
+async def remember_scope(request: Request, call_next) -> Response:
+    """Remember the account and month chosen on Reports/Dashboard URLs.
+
+    Transactions writes the shared ``account_id`` cookie itself; this makes
+    the other pages do likewise whenever the URL carries ``account_id`` (an
+    explicit empty value means "all accounts" and is remembered too). It
+    also records the month of a month-addressed report
+    (``/reports/{year}/{month}`` or ``/reports/budget-rule?month=``) as the
+    ``scope_month`` cookie, so Transactions can adopt it. One choice then
+    follows the user between pages.
     """
     response = await call_next(request)
-    if (
-        request.method == "GET"
-        and request.url.path.startswith(("/reports", "/dashboard"))
-        and "account_id" in request.query_params
+    if request.method != "GET" or not request.url.path.startswith(
+        ("/reports", "/dashboard")
     ):
+        return response
+    if "account_id" in request.query_params:
         response.set_cookie(
             ACCOUNT_COOKIE,
             request.query_params["account_id"],
             max_age=COOKIE_MAX_AGE,
             samesite="lax",
+        )
+    month = None
+    match = _MONTH_REPORT_PATH.match(request.url.path)
+    if match:
+        month = parse_month_key(f"{int(match[1]):04d}-{int(match[2]):02d}")
+    elif request.url.path == "/reports/budget-rule":
+        month = parse_month_key(request.query_params.get("month"))
+    if month and response.status_code == 200:
+        response.set_cookie(
+            MONTH_COOKIE, month_key(*month), max_age=COOKIE_MAX_AGE, samesite="lax"
         )
     return response
 
