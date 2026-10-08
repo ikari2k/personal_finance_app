@@ -107,6 +107,11 @@ tests/unit/     tmp_path-isolated; tests/integration/  TestClient, conftest redi
   touches neither.
 - **Category pickers on `/transactions` never create categories** (server re-checks via
   `category_pair_exists`); the free-typed combobox text is never submitted.
+- **50/30/20 report** (`/reports/budget-rule`, dashboard widget): income = income rows minus
+  `excluded` categories; Needs/Wants = expense spend by `effective_bucket`, untagged shown as
+  Unclassified; Savings = signed net of transfer legs on `account_type=savings` accounts (closed
+  included, investment excluded, withdrawals reduce it). No income in a period → amounts only,
+  no percentages.
 - **One shared aggregation layer** (`services/aggregation.py`) backs the transactions list,
   dashboard, and all reports — extend it, don't add per-view group-by logic.
 - **No CDN scripts, stylesheets, or fonts, ever** — the app runs offline. Vendor files and commit.

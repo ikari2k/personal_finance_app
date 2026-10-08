@@ -20,6 +20,7 @@ just don't live-update until the next full page load. Not worth extra
 plumbing for a dashboard that's typically loaded fresh each visit.
 """
 
+import calendar
 from datetime import date
 from decimal import Decimal
 from itertools import groupby
@@ -29,9 +30,12 @@ from fastapi.responses import HTMLResponse
 
 from app.models.account import ACCOUNT_TYPE_LABELS, AccountType
 from app.models.transaction import TransactionType
+from app.routers.budget_rule import _rows as budget_rule_rows
+from app.routers.budget_rule import _split_bar as budget_rule_bar
 from app.routers.reports import _category_config, _ring_geometry
 from app.services.aggregation import (
     UNCATEGORIZED,
+    budget_rule_split,
     category_all_time_monthly_average,
     category_recent_monthly_totals,
     category_totals_for_month,
@@ -41,11 +45,13 @@ from app.services.aggregation import (
     rolling_average_monthly_expense,
 )
 from app.services.balances import all_balances
+from app.services.categories import count_unclassified_expense_categories
 from app.services.transactions import (
     find_orphan_transfer_candidates,
     find_transfer_matches,
 )
 from app.storage.accounts import read_accounts
+from app.storage.budget_rule import read_targets
 from app.storage.categories import read_categories
 from app.storage.ledger import read_ledger
 from app.templating import templates
@@ -404,10 +410,25 @@ def dashboard(request: Request) -> HTMLResponse:
             {"date": txn_date, "label": txn_date.strftime("%a, %b %d"), "rows": rows}
         )
 
+    rule_targets = read_targets()
+    rule_split = budget_rule_split(
+        ledger,
+        categories,
+        accounts,
+        today.replace(day=1),
+        today.replace(day=calendar.monthrange(today.year, today.month)[1]),
+    )
+    budget_rule_widget = {
+        "bar": budget_rule_bar(rule_split, rule_targets),
+        "rows": budget_rule_rows(rule_split, rule_targets),
+        "unclassified_count": count_unclassified_expense_categories(categories),
+    }
+
     return templates.TemplateResponse(
         request,
         "dashboard/list.html",
         {
+            "budget_rule": budget_rule_widget,
             "as_of": today,
             "current_net_worth": current_net_worth,
             "net_worth_delta": net_worth_delta,

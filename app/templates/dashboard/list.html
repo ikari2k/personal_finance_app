@@ -250,6 +250,41 @@
 
     <div class="dash-widget dash-widget-bordered dash-span-12">
       <div class="dash-widget-head">
+        <span class="dash-widget-title">50/30/20 &middot; This month</span>
+        <a class="dash-widget-link" href="/reports/budget-rule">Details &rsaquo;</a>
+      </div>
+      {% if budget_rule.bar %}
+        <svg viewBox="0 0 {{ budget_rule.bar.width }} 64" class="br-bar" role="img"
+             aria-label="This month's needs, wants and savings as a share of income">
+          {% for seg in budget_rule.bar.segments %}
+            <rect x="{{ seg.x }}" y="12" width="{{ seg.width }}" height="28" class="br-{{ seg.key }}">
+              <title>{{ seg.label }}</title>
+            </rect>
+          {% endfor %}
+          {% for m in budget_rule.bar.markers %}
+            <line x1="{{ m.x }}" y1="6" x2="{{ m.x }}" y2="46" class="br-marker"/>
+            <text x="{{ m.x }}" y="60" text-anchor="middle" class="br-marker-label">{{ m.label }}</text>
+          {% endfor %}
+        </svg>
+        <p class="dash-widget-caption">
+          {% for r in budget_rule.rows if r.key != 'unclassified' %}
+            <span class="chart-legend-swatch br-swatch-{{ r.key }}"></span>
+            {{ r.label }} {{ "%.1f"|format(r.pct) }}% of {{ r.target }}%{{ " · " if not loop.last }}
+          {% endfor %}
+        </p>
+      {% else %}
+        <p class="dash-all-clear">No income recorded this month yet, so there are no shares to show.</p>
+      {% endif %}
+      {% if budget_rule.unclassified_count %}
+        <p class="dash-widget-caption">
+          {{ budget_rule.unclassified_count }} expense categor{{ "y" if budget_rule.unclassified_count == 1 else "ies" }}
+          not yet <a href="/categories/classify">classified</a>.
+        </p>
+      {% endif %}
+    </div>
+
+    <div class="dash-widget dash-widget-bordered dash-span-12">
+      <div class="dash-widget-head">
         <span class="dash-widget-title">Top transactions this month</span>
         <a class="dash-widget-link" href="/transactions?txn_type=expense">All transactions &rsaquo;</a>
       </div>

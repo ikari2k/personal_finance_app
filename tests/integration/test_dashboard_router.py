@@ -388,3 +388,11 @@ def test_dashboard_budget_status_shows_every_qualifying_category(client):
 
     assert all(f"Cat{i}: 120% of budget" in text for i in range(8))
     assert "Nearing limit" not in text
+
+
+def test_dashboard_shows_budget_rule_widget(client):
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert "50/30/20" in response.text
+    assert "No income recorded this month yet" in response.text
