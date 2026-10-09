@@ -2738,3 +2738,6 @@ body > header nav .nav-manage {
 tr.is-met td { background: color-mix(in srgb, var(--color-met) 8%, transparent); }
 tr.is-met td:first-child { box-shadow: inset 3px 0 0 var(--color-met); }
 tr.is-met .br-check { margin-right: 0.4rem; }
+
+.br-legend { margin: 0 0 0.75rem; font-size: var(--text-sm); }
+.br-legend .br-badge { margin: 0 0.4rem 0 0; }

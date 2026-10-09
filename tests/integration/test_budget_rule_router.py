@@ -316,3 +316,14 @@ def test_year_report_marks_only_the_met_months(client):
     table = text.split('id="months"')[1].split("</table>")[0]
     assert table.count('class="is-met"') == 1
     assert "March 2026" in table.split('class="is-met"')[1]
+
+
+def test_year_report_explains_the_tick_only_when_there_is_one(client):
+    empty = client.get("/reports/2026").text
+    assert "A closed month that stayed within" not in empty
+
+    _write_month(2026, 3, needs=500, wants=300, savings=200)
+    text = client.get("/reports/2026").text
+
+    assert "A closed month that stayed within the 50/30/20 targets" in text
+    assert "needs up to 50%" in text and "savings of at least 20%" in text

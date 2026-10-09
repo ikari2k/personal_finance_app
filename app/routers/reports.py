@@ -2148,6 +2148,7 @@ def year_detail(
         "reports/year.html",
         {
             "met_months": met_month_keys(ledger, categories, accounts, year),
+            "rule_targets": read_targets(),
             "year": year,
             "year_stats": year_stats,
             "accounts": accounts,

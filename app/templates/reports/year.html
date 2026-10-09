@@ -82,6 +82,15 @@
   </article>
 
   <h2 id="months" data-section>Monthly breakdown</h2>
+  {% if met_months %}
+    <p class="muted br-legend">
+      <span class="br-badge">{{ met_check() }} Rule met</span>
+      A closed month that stayed within the 50/30/20 targets: needs up to {{ rule_targets.needs }}%,
+      wants up to {{ rule_targets.wants }}% and savings of at least {{ rule_targets.savings }}% of income
+      (all accounts; spending not yet classified counts against it).
+      <a href="/reports/budget-rule">See how</a>
+    </p>
+  {% endif %}
   {% if months %}
     <div class="table-scroll">
       <table>
