@@ -28,7 +28,7 @@ from fastapi.responses import HTMLResponse
 from app.models.category import CategoriesByType
 from app.models.transaction import TransactionType
 from app.routers import breadcrumbs
-from app.routers.budget_rule import month_pair, rolling_summaries
+from app.routers.budget_rule import met_month_keys, month_pair, rolling_summaries
 from app.routers.scope import resolve_account
 from app.services.aggregation import (
     CategoryMonthPoint,
@@ -2037,7 +2037,8 @@ def year_detail(
     account_id = resolve_account(request, account_id)
     resolved_sort = sort if sort in _CATEGORY_BREAKDOWN_SORTS else "total"
     accounts = read_accounts()
-    transactions = _filter_by_account(read_ledger(), account_id)
+    ledger = read_ledger()
+    transactions = _filter_by_account(ledger, account_id)
     categories = read_categories()
     chart = _net_worth_chart(transactions, accounts, account_id, year=year)
     income_breakdown = category_breakdown(transactions, year, TransactionType.INCOME)
@@ -2146,6 +2147,7 @@ def year_detail(
         request,
         "reports/year.html",
         {
+            "met_months": met_month_keys(ledger, categories, accounts, year),
             "year": year,
             "year_stats": year_stats,
             "accounts": accounts,

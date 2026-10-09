@@ -3,6 +3,7 @@
 {% from "_scope_bar.html" import global_scope with context %}
 {% from "_breadcrumb.html" import breadcrumb %}
 {% from "_section_index.html" import section_index %}
+{% from "budget_rule/_bar.html" import met_badge %}
 {% from "_category_icons.html" import category_icon %}
 {% block title %}{{ label }} — Reports — Finance Tracker{% endblock %}
 {% block crumbs %}{{ breadcrumb(breadcrumbs) }}{% endblock %}
@@ -14,7 +15,10 @@
     "label": label}) }}
 {% endblock %}
 {% block content %}
-  <h1>{{ label }}</h1>
+  <div class="report-title{{ ' is-met' if rule_months[0].met }}">
+    <h1>{{ label }}</h1>
+    {{ met_badge(rule_months[0]) }}
+  </div>
   <p><a class="cat-cta-link" href="{{ month_txn_link }}">All {{ label }} transactions &rsaquo;</a></p>
 
   {{ section_index([

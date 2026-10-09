@@ -372,6 +372,29 @@ def recent_months(
     return summaries
 
 
+def met_month_keys(
+    transactions: list,
+    categories: CategoriesByType,
+    accounts: list,
+    year: int,
+) -> set[str]:
+    """Return the ``YYYY-MM`` keys of ``year``'s closed months that met the rule.
+
+    Uses all accounts (like every 50/30/20 view) and never includes the month
+    in progress. ``transactions`` should be the unfiltered ledger.
+    """
+    today = date.today()
+    this_month = f"{today.year:04d}-{today.month:02d}"
+    targets = read_targets()
+    return {
+        m.key
+        for m in budget_rule_monthly_series(transactions, categories, accounts, today)
+        if m.key.startswith(f"{year:04d}-")
+        and m.key < this_month
+        and rule_met(m.split, targets)
+    }
+
+
 def rolling_summaries(
     transactions: list,
     categories: CategoriesByType,

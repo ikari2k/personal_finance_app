@@ -4,6 +4,7 @@
 {% from "_breadcrumb.html" import breadcrumb %}
 {% from "_scope_bar.html" import period_stepper %}
 {% from "_section_index.html" import section_index %}
+{% from "budget_rule/_bar.html" import met_check %}
 {% from "_icons.html" import txn_link_icon %}
 {% block title %}{{ year }} — Reports — Finance Tracker{% endblock %}
 {% block crumbs %}{{ breadcrumb(breadcrumbs) }}{% endblock %}
@@ -89,9 +90,9 @@
         </thead>
         <tbody>
           {% for m in months %}
-            <tr>
+            <tr{% if m.key in met_months %} class="is-met" title="Met the 50/30/20 rule"{% endif %}>
               <td>
-                <a href="/reports/{{ year }}/{{ (m.key.split('-')[1])|int }}{{ '?account_id=' + account_id if account_id }}">{{ m.label }}</a>
+                {% if m.key in met_months %}{{ met_check() }}{% endif %}<a href="/reports/{{ year }}/{{ (m.key.split('-')[1])|int }}{{ '?account_id=' + account_id if account_id }}">{{ m.label }}</a>
                 {{ txn_link_icon(month_txn_links[m.key], "View " + m.label + " transactions") }}
               </td>
               <td class="amount-positive">{{ m.income_total|money }}</td>

@@ -288,3 +288,31 @@ def test_dashboard_marks_met_months_in_the_six_month_list(client):
     text = client.get("/dashboard").text
 
     assert 'class="br-rolling-row is-met"' in text
+
+
+def test_month_report_title_is_sealed_when_the_month_met_the_rule(client):
+    _write_month(2026, 3, needs=500, wants=300, savings=200)
+
+    text = client.get("/reports/2026/3").text
+
+    title = text.split('class="report-title')[1].split("</div>")[0]
+    assert title.startswith(" is-met") and "Rule met" in title
+
+
+def test_month_report_title_plain_when_the_rule_was_missed(client):
+    _write_month(2026, 3, needs=600, wants=300, savings=100)
+
+    text = client.get("/reports/2026/3").text
+
+    title = text.split('class="report-title')[1].split("</div>")[0]
+    assert not title.startswith(" is-met") and "Rule met" not in title
+
+
+def test_year_report_marks_only_the_met_months(client):
+    _write_month(2026, 3, needs=500, wants=300, savings=200)
+
+    text = client.get("/reports/2026").text
+
+    table = text.split('id="months"')[1].split("</table>")[0]
+    assert table.count('class="is-met"') == 1
+    assert "March 2026" in table.split('class="is-met"')[1]

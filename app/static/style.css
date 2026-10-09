@@ -2723,3 +2723,18 @@ body > header nav .nav-manage {
   stroke-linecap: round;
   stroke-linejoin: round;
 }
+
+/* Month report title: when the month met the rule, rule it off with the same
+ * double line as the bars. */
+.report-title { display: flex; align-items: center; gap: 0.25rem; margin-bottom: 0.5rem; }
+.report-title h1 { margin: 0; }
+.report-title.is-met {
+  padding-bottom: 0.4rem;
+  border-bottom: 4px double var(--color-met);
+}
+.report-title .br-badge { margin-left: 0.75rem; font-size: 0.9rem; }
+
+/* Year report's monthly table: a met month's row. */
+tr.is-met td { background: color-mix(in srgb, var(--color-met) 8%, transparent); }
+tr.is-met td:first-child { box-shadow: inset 3px 0 0 var(--color-met); }
+tr.is-met .br-check { margin-right: 0.4rem; }
