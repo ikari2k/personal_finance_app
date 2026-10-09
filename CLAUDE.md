@@ -116,7 +116,10 @@ tests/unit/     tmp_path-isolated; tests/integration/  TestClient, conftest redi
   `excluded` categories; Needs/Wants = expense spend by `effective_bucket`, untagged shown as
   Unclassified; Savings = signed net of transfer legs on `account_type=savings` accounts (closed
   included, investment excluded, withdrawals reduce it). No income in a period → amounts only,
-  no percentages.
+  no percentages. A *closed* period (ends before today) "met the rule" per
+  `services.budget_rule.rule_met`: savings ≥ target and needs/wants each ≤ target even if all
+  unclassified spend landed in that bucket. Met periods get the double-rule seal (`.br-rule`,
+  `.br-badge`, `.is-met`, trend check); the month in progress never does.
 - **One shared aggregation layer** (`services/aggregation.py`) backs the transactions list,
   dashboard, and all reports — extend it, don't add per-view group-by logic.
 - **No CDN scripts, stylesheets, or fonts, ever** — the app runs offline. Vendor files and commit.

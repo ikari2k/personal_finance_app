@@ -1,6 +1,6 @@
 {# This and last month's 50/30/20 breakdown for /reports/{year}/{month}. Expects
    `rule_months` (app.routers.budget_rule.month_pair), `rule_link`. #}
-{% from "budget_rule/_bar.html" import split_bar, rule_table %}
+{% from "budget_rule/_bar.html" import split_bar, rule_table, met_badge %}
 <div class="dash-widget-head" id="budget-rule" data-section style="margin-bottom: 0.15rem;">
   <h2 style="margin: 0;">50/30/20 rule</h2>
   <a class="table-link" href="{{ rule_link }}">Full report &rsaquo;</a>
@@ -12,7 +12,7 @@
 <div class="dash-grid" style="margin-bottom: 1.5rem;">
   {% for m in rule_months %}
     <div class="dash-span-6">
-      <h3 style="margin-bottom: 0.5rem;"><a class="table-link" href="{{ m.link }}">{{ m.label }}</a></h3>
+      <h3 style="margin-bottom: 0.5rem;"><a class="table-link" href="{{ m.link }}">{{ m.label }}</a> {{ met_badge(m) }}</h3>
       {% if m.bar %}
         {{ split_bar(m.bar, "Needs, wants and savings as a share of income for " ~ m.label) }}
       {% else %}

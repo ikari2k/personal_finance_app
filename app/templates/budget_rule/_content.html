@@ -1,4 +1,4 @@
-{% from "budget_rule/_bar.html" import split_bar, rule_table %}
+{% from "budget_rule/_bar.html" import split_bar, rule_table, met_badge, met_check %}
 {% from "_section_index.html" import section_index %}
 <div id="budget-rule-content" {% if oob %}hx-swap-oob="true"{% endif %}>
   {{ section_index([{"id": "breakdown", "label": "Breakdown"}, {"id": "trend", "label": "Trend"}], sticky=false) }}
@@ -16,8 +16,8 @@
   </p>
 
   {% for p in periods %}
-    <section class="br-panel" data-panel="{{ p.key }}" {{ 'hidden' if not loop.first }}>
-      <h3>{{ p.label }}</h3>
+    <section class="br-panel{{ ' is-met' if p.met }}" data-panel="{{ p.key }}" {{ 'hidden' if not loop.first }}>
+      <h3>{{ p.label }} {{ met_badge(p) }}</h3>
       {% if p.bar %}
         {{ split_bar(p.bar, "Needs, wants and savings as a share of income for " ~ p.label) }}
       {% else %}
@@ -52,6 +52,12 @@
           {% for s in b.segments %}
             <rect x="{{ b.x }}" y="{{ s.y }}" width="{{ b.w }}" height="{{ s.h }}" class="br-{{ s.key }}"/>
           {% endfor %}
+          {% if b.met %}
+            <g class="br-trend-check" transform="translate({{ b.check_x - 7 }} {{ b.check_y - 7 }})">
+              <circle cx="7" cy="7" r="7.5"/>
+              <polyline points="3.5 7.3 6 9.8 10.8 4.6"/>
+            </g>
+          {% endif %}
         </g>
       {% endfor %}
       {% for l in trend.labels %}

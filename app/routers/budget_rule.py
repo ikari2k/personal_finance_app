@@ -29,7 +29,7 @@ from app.services.aggregation import (
     budget_rule_split,
     top_unclassified_spend,
 )
-from app.services.budget_rule import validate_targets
+from app.services.budget_rule import rule_met, validate_targets
 from app.storage.accounts import read_accounts
 from app.storage.budget_rule import read_targets, write_targets
 from app.storage.categories import read_categories
@@ -110,7 +110,10 @@ def _rows(split: BudgetRuleSplit, targets: BudgetRuleTargets) -> list[BucketRow]
 
 
 def _split_bar(
-    split: BudgetRuleSplit, targets: BudgetRuleTargets, compact: bool = False
+    split: BudgetRuleSplit,
+    targets: BudgetRuleTargets,
+    compact: bool = False,
+    met: bool = False,
 ) -> dict | None:
     """Geometry for one period's stacked bar, or ``None`` without income.
 
@@ -119,7 +122,8 @@ def _split_bar(
     spending matches the rule. The scale stretches past 100% when spend
     plus savings exceeds income. Negative savings draws no segment (the
     table carries the number). ``compact`` gives a slim bar with no marker
-    labels, for stacking several on a summary page.
+    labels, for stacking several on a summary page. ``met`` adds a double
+    rule under the bar — the accountant's mark for a balanced total.
     """
     if split.needs_pct is None:
         return None
@@ -147,11 +151,14 @@ def _split_bar(
             "label": f"{targets.needs + targets.wants}%",
         },
     ]
+    bar_y, bar_h = (3, 20) if compact else (12, 28)
+    rule_y = bar_y + bar_h + 3
     return {
         "width": BAR_WIDTH,
-        "height": 26 if compact else 64,
-        "bar_y": 3 if compact else 12,
-        "bar_h": 20 if compact else 28,
+        "rule_lines": [rule_y, rule_y + 3] if met else None,
+        "height": (34 if met else 26) if compact else 64,
+        "bar_y": bar_y,
+        "bar_h": bar_h,
         "marker_y1": 0 if compact else 6,
         "marker_y2": 26 if compact else 46,
         "label_y": None if compact else 60,
@@ -165,12 +172,14 @@ def _tick_step(span: float) -> int:
     return 20 if span <= 120 else 50 if span <= 300 else 100
 
 
-def _trend_chart(months: list[BudgetRuleMonth]) -> dict | None:
+def _trend_chart(
+    months: list[BudgetRuleMonth], targets: BudgetRuleTargets
+) -> dict | None:
     """Geometry for the stacked % of income trend; ``None`` with no months."""
     if not months:
         return None
     width, height = 720, 260
-    pad_left, pad_right, pad_top, pad_bottom = 44, 12, 12, 30
+    pad_left, pad_right, pad_top, pad_bottom = 44, 12, 22, 30
     stacks = []
     for m in months:
         s = m.split
@@ -193,6 +202,8 @@ def _trend_chart(months: list[BudgetRuleMonth]) -> dict | None:
     y_min = -step * math.ceil(-bottom / step)
     plot_h = height - pad_top - pad_bottom
     plot_w = width - pad_left - pad_right
+    today = date.today()
+    this_month = f"{today.year:04d}-{today.month:02d}"
     slot = plot_w / len(months)
     bar_w = slot * 0.6
 
@@ -229,14 +240,19 @@ def _trend_chart(months: list[BudgetRuleMonth]) -> dict | None:
                 {"key": "savings", "y": y_at(0), "h": y_at(float(negative)) - y_at(0)}
             )
         s = m.split
+        met = m.key < this_month and rule_met(s, targets)
         bars.append(
             {
                 "x": x,
                 "w": bar_w,
                 "segments": segments,
+                "met": met,
+                "check_x": center,
+                "check_y": y_at(float(st[2])) - 9,
                 "title": (
                     f"{m.label}: needs {s.needs_pct}%, wants {s.wants_pct}%, "
                     f"savings {s.savings_pct}%, unclassified {s.unclassified_pct}%"
+                    + (" — rule met" if met else "")
                 ),
             }
         )
@@ -267,11 +283,22 @@ def period_summary(
     *,
     compact: bool = False,
 ) -> dict:
-    """Compute one period's split, bar geometry, table rows and unclassified spend."""
+    """Compute one period's split, bar geometry, table rows and unclassified spend.
+
+    ``met`` is only ever true for a *closed* period (``end`` before today): a
+    month still in progress can look balanced just because the pay or the
+    bills haven't landed yet.
+    """
     split = budget_rule_split(transactions, categories, accounts, start, end)
+    met = end is not None and end < date.today() and rule_met(split, targets)
     return {
         "split": split,
-        "bar": _split_bar(split, targets, compact),
+        "met": met,
+        "met_tip": (
+            f"Rule met: needs within {targets.needs}%, wants within "
+            f"{targets.wants}%, savings at least {targets.savings}% of income"
+        ),
+        "bar": _split_bar(split, targets, compact, met),
         "rows": _rows(split, targets),
         "unclassified": top_unclassified_spend(transactions, categories, start, end),
     }
@@ -426,7 +453,7 @@ def _content_context(month_key: str, today: date) -> dict:
         "label": f"{calendar.month_name[month]} {year}",
         "targets": targets,
         "periods": periods,
-        "trend": _trend_chart(series),
+        "trend": _trend_chart(series, targets),
         "period": {
             "prev_url": f"/reports/budget-rule?month={prev_year:04d}-{prev_month:02d}",
             "prev_label": f"{calendar.month_name[prev_month]} {prev_year}",

@@ -3,7 +3,10 @@
 Pure functions, no file I/O — see ``app.storage.budget_rule`` for persistence.
 """
 
+from decimal import Decimal
+
 from app.models.budget_rule import BudgetRuleTargets
+from app.services.aggregation import BudgetRuleSplit
 
 
 def validate_targets(targets: BudgetRuleTargets) -> BudgetRuleTargets:
@@ -23,3 +26,22 @@ def validate_targets(targets: BudgetRuleTargets) -> BudgetRuleTargets:
     if total != 100:
         raise ValueError(f"targets must sum to 100 (got {total})")
     return targets
+
+
+def rule_met(split: BudgetRuleSplit, targets: BudgetRuleTargets) -> bool:
+    """Return whether a closed period met the budget rule.
+
+    Savings must reach its target, and Needs and Wants must each stay within
+    theirs *even if every unclassified expense belonged to that bucket* —
+    untagged spend is unknown, so it must not be allowed to flatter the
+    result. With nothing unclassified this is the plain comparison. A period
+    with no income has no percentages and so never counts as met.
+    """
+    if split.needs_pct is None:
+        return False
+    unclassified = split.unclassified_pct or Decimal("0")
+    return (
+        split.savings_pct >= targets.savings
+        and split.needs_pct + unclassified <= targets.needs
+        and split.wants_pct + unclassified <= targets.wants
+    )

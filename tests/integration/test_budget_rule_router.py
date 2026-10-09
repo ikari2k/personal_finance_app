@@ -182,3 +182,109 @@ def test_page_has_non_sticky_section_index(client):
 
     assert 'class="section-index static"' in text
     assert 'id="breakdown"' in text and 'id="trend"' in text
+
+
+def _write_month(year, month, *, needs, wants, savings, today_override=None):
+    """One closed month: 1000 income plus the given needs/wants/savings."""
+    write_accounts(
+        [
+            Account(id="chk", name="Chk", number="1", starting_balance=Decimal("0")),
+            Account(
+                id="sav",
+                name="Sav",
+                number="2",
+                starting_balance=Decimal("0"),
+                account_type=AccountType.SAVINGS,
+            ),
+        ]
+    )
+    write_categories(
+        {
+            "income": {
+                "Salary": {"icon": "", "budget": "", "bucket": "", "subcategories": {}}
+            },
+            "expense": {
+                "Rent": {
+                    "icon": "",
+                    "budget": "",
+                    "bucket": "need",
+                    "subcategories": {},
+                },
+                "Fun": {
+                    "icon": "",
+                    "budget": "",
+                    "bucket": "want",
+                    "subcategories": {},
+                },
+            },
+        }
+    )
+
+    def t(id_, amount, type_, category="", account="chk", transfer_id=None):
+        return Transaction(
+            id=id_,
+            date=date(year, month, 5),
+            account_id=account,
+            category=category,
+            subcategory="",
+            description="d",
+            amount=Decimal(amount),
+            type=type_,
+            transfer_id=transfer_id,
+        )
+
+    write_ledger(
+        [
+            t("i", "1000", TransactionType.INCOME, "Salary"),
+            t("n", f"-{needs}", TransactionType.EXPENSE, "Rent"),
+            t("w", f"-{wants}", TransactionType.EXPENSE, "Fun"),
+            t("s1", str(savings), TransactionType.TRANSFER, "Transfer", "sav", "T"),
+            t("s2", f"-{savings}", TransactionType.TRANSFER, "Transfer", "chk", "T"),
+        ]
+    )
+
+
+def test_closed_month_that_met_the_rule_gets_the_seal(client):
+    _write_month(2026, 3, needs=500, wants=300, savings=200)
+
+    text = client.get("/reports/budget-rule?month=2026-03").text
+
+    month_panel = text.split('data-panel="month"')[1].split("</section>")[0]
+    assert "Rule met" in month_panel and "br-rule" in month_panel
+    assert "br-trend-check" in text  # check mark on the trend bar
+
+
+def test_closed_month_that_missed_the_rule_has_no_seal(client):
+    _write_month(2026, 3, needs=600, wants=300, savings=100)
+
+    text = client.get("/reports/budget-rule?month=2026-03").text
+
+    month_panel = text.split('data-panel="month"')[1].split("</section>")[0]
+    assert "Rule met" not in month_panel and "br-rule" not in month_panel
+    assert "br-trend-check" not in text
+
+
+def test_month_in_progress_never_gets_the_seal(client):
+    today = date.today()
+    _write_month(today.year, today.month, needs=500, wants=300, savings=200)
+
+    text = client.get(
+        f"/reports/budget-rule?month={today.year:04d}-{today.month:02d}"
+    ).text
+
+    month_panel = text.split('data-panel="month"')[1].split("</section>")[0]
+    assert "Rule met" not in month_panel
+
+
+def test_dashboard_marks_met_months_in_the_six_month_list(client):
+    from datetime import date as _date
+
+    today = _date.today()
+    prev_year, prev_month = (
+        (today.year, today.month - 1) if today.month > 1 else (today.year - 1, 12)
+    )
+    _write_month(prev_year, prev_month, needs=500, wants=300, savings=200)
+
+    text = client.get("/dashboard").text
+
+    assert 'class="br-rolling-row is-met"' in text

@@ -1,5 +1,12 @@
 {# Stacked needs/wants/savings bar with dashed target markers. `bar` comes from
    app.routers.budget_rule._split_bar (never None here — callers check). #}
+{% macro met_check() %}<svg class="br-check" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><polyline points="20 6 9 17 4 12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>{% endmacro %}
+
+{# "Rule met" seal: check + words, with the targets in the tooltip. #}
+{% macro met_badge(summary) %}
+  {% if summary.met %}<span class="br-badge" title="{{ summary.met_tip }}">{{ met_check() }} Rule met</span>{% endif %}
+{% endmacro %}
+
 {% macro split_bar(bar, aria_label) %}
   <svg viewBox="0 0 {{ bar.width }} {{ bar.height }}" class="br-bar" role="img" aria-label="{{ aria_label }}">
     {% for seg in bar.segments %}
@@ -7,6 +14,12 @@
         <title>{{ seg.label }}</title>
       </rect>
     {% endfor %}
+    {% if bar.rule_lines %}
+      {# Double rule under the total: the accountant's mark for a balanced month. #}
+      {% for y in bar.rule_lines %}
+        <line x1="0" y1="{{ y }}" x2="{{ bar.width }}" y2="{{ y }}" class="br-rule"/>
+      {% endfor %}
+    {% endif %}
     {% for m in bar.markers %}
       <line x1="{{ m.x }}" y1="{{ bar.marker_y1 }}" x2="{{ m.x }}" y2="{{ bar.marker_y2 }}" class="br-marker"/>
       {% if bar.label_y is not none %}
@@ -47,8 +60,8 @@
 {% macro compact_rows(items, empty="No income in this period.") %}
   <div class="br-rolling">
     {% for w in items %}
-      <div class="br-rolling-row">
-        <span class="br-rolling-label">{% if w.link %}<a class="table-link" href="{{ w.link }}">{{ w.label }}</a>{% else %}{{ w.label }}{% endif %}</span>
+      <div class="br-rolling-row{{ ' is-met' if w.met }}"{% if w.met %} title="{{ w.met_tip }}"{% endif %}>
+        <span class="br-rolling-label">{% if w.met %}{{ met_check() }}{% endif %}{% if w.link %}<a class="table-link" href="{{ w.link }}">{{ w.label }}</a>{% else %}{{ w.label }}{% endif %}</span>
         {% if w.bar %}
           {{ split_bar(w.bar, w.label ~ ": needs, wants and savings as a share of income") }}
           <span class="br-rolling-figures">
