@@ -32,7 +32,14 @@
   }
 
   function list(combo) {
-    return combo.querySelector(".cat-combo-list");
+    var el = combo.querySelector(".cat-combo-list");
+    // Rows ship an empty list (the options are one <template> per type on
+    // the page, not repeated per row); fill it on first use.
+    if (!el.firstChild) {
+      var tpl = document.getElementById("cat-options-" + el.dataset.type);
+      if (tpl) el.appendChild(tpl.content.cloneNode(true));
+    }
+    return el;
   }
 
   function allOptions(combo) {

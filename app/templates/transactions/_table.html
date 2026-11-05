@@ -1,6 +1,22 @@
 {% from "_icons.html" import edit_icon, delete_icon, search_icon, transfer_icon %}
 {% from "_category_icons.html" import category_icon %}
 
+{% macro cat_option_templates(categories) %}
+  {% for type_name in ('income', 'expense') %}
+    <template id="cat-options-{{ type_name }}">
+      {% for cat_name, entry in categories.get(type_name, {}).items() %}
+        <div class="cat-combo-group-label">{{ cat_name }}</div>
+        <div class="cat-combo-option" role="option" tabindex="-1"
+             data-category="{{ cat_name }}" data-subcategory="">{{ cat_name }}</div>
+        {% for sub_name in entry.subcategories %}
+          <div class="cat-combo-option" role="option" tabindex="-1"
+               data-category="{{ cat_name }}" data-subcategory="{{ sub_name }}">{{ sub_name }} ({{ cat_name }})</div>
+        {% endfor %}
+      {% endfor %}
+    </template>
+  {% endfor %}
+{% endmacro %}
+
 {% macro txn_row(txn, accounts, show_account, categories) %}
   {% set cat_entry = categories.get(txn.type.value, {}).get(txn.category, {}) %}
   {% set cat_icon = cat_entry.get('icon', '') %}
@@ -70,6 +86,11 @@
           <select>-style synthetic disabled option (not needed here — a
           text input can show arbitrary text with no matching option at
           all).
+
+          The option list itself is not repeated per row (it made the
+          page ~19 KB/row): the empty .cat-combo-list is filled on first
+          focus from the page's single #cat-options-<type> <template>
+          (app/static/app.js).
         #}
         {% set type_tree = categories.get(txn.type.value, {}) %}
         {% set current_cat_entry = type_tree.get(txn.category) %}
@@ -84,17 +105,7 @@
                  value="{{ display_value }}"
                  data-category="{{ txn.category }}" data-subcategory="{{ txn.subcategory }}"
                  data-display="{{ display_value }}">
-          <div class="cat-combo-list" role="listbox" hidden>
-            {% for cat_name, entry in type_tree.items() %}
-              <div class="cat-combo-group-label">{{ cat_name }}</div>
-              <div class="cat-combo-option" role="option" tabindex="-1"
-                   data-category="{{ cat_name }}" data-subcategory="">{{ cat_name }}</div>
-              {% for sub_name in entry.subcategories %}
-                <div class="cat-combo-option" role="option" tabindex="-1"
-                     data-category="{{ cat_name }}" data-subcategory="{{ sub_name }}">{{ sub_name }} ({{ cat_name }})</div>
-              {% endfor %}
-            {% endfor %}
-          </div>
+          <div class="cat-combo-list" role="listbox" data-type="{{ txn.type.value }}" hidden></div>
         </span>
       </span>
       {% endif %}
@@ -351,6 +362,7 @@
       {% endif %}
     </div>
   {% endif %}
+  {% if categories is defined %}{{ cat_option_templates(categories) }}{% endif %}
   {% if error %}<p class="error">{{ error }}</p>{% endif %}
   {% for month in months %}
     {% if by_month %}
