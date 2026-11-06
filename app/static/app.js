@@ -124,6 +124,11 @@
     el.dataset.subcategory = subcategory;
     el.dataset.display = text;
     closeList(combo);
+    if (combo.hasAttribute("data-local")) {
+      // Import preview: nothing to save yet, just record the pick for confirm.
+      combo.querySelector("input[type=hidden]").value = JSON.stringify([category, subcategory]);
+      return;
+    }
     if (!changed) return;
     window.htmx.ajax("POST", "/transactions/" + combo.dataset.txnId + "/category", {
       target: combo.closest("tr"),

@@ -111,7 +111,9 @@ tests/unit/     tmp_path-isolated; tests/integration/  TestClient, conftest redi
 - **Renaming a category/subcategory propagates into `rules.toml` but never the ledger**; delete
   touches neither.
 - **Category pickers on `/transactions` never create categories** (server re-checks via
-  `category_pair_exists`); the free-typed combobox text is never submitted.
+  `category_pair_exists`); the free-typed combobox text is never submitted. The import preview's
+  per-row category select (`apply_category_picks`) follows the same rule; rule-assigned
+  categories not in the tree still get created by `ensure_category` on confirm.
 - **50/30/20 report** (`/reports/budget-rule`, dashboard widget): income = income rows minus
   `excluded` categories; Needs/Wants = expense spend by `effective_bucket`, untagged shown as
   Unclassified; Savings = signed net of transfer legs on `account_type=savings` accounts (closed

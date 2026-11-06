@@ -18,6 +18,7 @@ guess a transfer from automatically — that's not what happens here.
 
 import csv
 import io
+import json
 import re
 import uuid
 from dataclasses import dataclass
@@ -25,6 +26,7 @@ from datetime import date as date_
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
+from app.models.category import CategoriesByType
 from app.models.import_mapping import ImportMapping
 from app.models.rule import Rule
 from app.models.transaction import Transaction, TransactionType
@@ -263,3 +265,53 @@ def build_transactions(
             )
         )
     return transactions
+
+
+def apply_category_picks(
+    rows: list[dict], picks: list[str], categories: CategoriesByType
+) -> list[dict]:
+    """Return ``rows`` with the category/subcategory the user re-picked in the preview.
+
+    ``picks`` holds one JSON ``[category, subcategory]`` string per row, in
+    row order. Like the transactions list's inline picker, this never
+    creates a category: a pick is applied only when that pair already
+    exists in the row's own (income/expense, by sign) tree; anything else
+    — malformed, unknown, or a list that doesn't line up with ``rows`` —
+    leaves the row's rule-assigned category untouched.
+    """
+    if len(picks) != len(rows):
+        return rows
+    result = []
+    for row, pick in zip(rows, picks):
+        txn_type = "expense" if Decimal(row["amount"]) < 0 else "income"
+        try:
+            category, subcategory = json.loads(pick)
+            entry = categories.get(txn_type, {}).get(category)
+            valid = entry is not None and (
+                not subcategory or subcategory in entry["subcategories"]
+            )
+        except (ValueError, TypeError):
+            valid = False
+        result.append(
+            {**row, "category": category, "subcategory": subcategory} if valid else row
+        )
+    return result
+
+
+def apply_note_edits(rows: list[dict], values: list[str]) -> list[dict]:
+    """Return ``rows`` with ``notes`` set where the preview's description was edited.
+
+    ``values`` holds one text per row, in row order, pre-filled with the
+    bank's description. ``description`` itself is never changed (it keys
+    duplicate detection and rule matching); a differing, non-blank value
+    becomes the row's ``notes`` instead, same as editing it on the
+    transactions list. A list that doesn't line up with ``rows`` is ignored.
+    """
+    if len(values) != len(rows):
+        return rows
+    return [
+        {**row, "notes": value.strip()}
+        if value.strip() and value.strip() != row["description"]
+        else row
+        for row, value in zip(rows, values)
+    ]

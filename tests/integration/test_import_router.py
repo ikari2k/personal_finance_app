@@ -4,9 +4,12 @@ create (``/import/new``), edit (``/import/mappings/{bank}/edit``), and run
 """
 
 import html
+import json
 
 from app import config
-from app.storage.categories import read_categories
+from app.models.transaction import TransactionType
+from app.services.transactions import ensure_category
+from app.storage.categories import read_categories, write_categories
 from app.storage.import_mappings import read_mapping
 from app.storage.ledger import read_ledger
 
@@ -196,7 +199,7 @@ def test_import_applies_matching_rule(client):
 
     preview_response = _create_mapping(client)
 
-    assert "Dining / Cafes" in preview_response.text
+    assert "Cafes (Dining)" in preview_response.text
 
 
 def test_save_mapping_with_wrong_date_format_shows_error_not_a_crash(client):
@@ -558,3 +561,66 @@ def test_confirmed_import_captures_counterparty_account(client):
 
     [txn] = read_ledger(config.LEDGER_PATH)
     assert txn.counterparty_account == "5678"
+
+
+def test_preview_offers_a_category_picker_per_row(client):
+    _create_account(client, account_id="chk", number="1234")
+    write_categories(
+        ensure_category(read_categories(), TransactionType.EXPENSE, "Food", "Coffee")
+    )
+
+    preview_response = _create_mapping(client)
+
+    assert preview_response.text.count('name="row_categories"') == 2
+    assert preview_response.text.count('name="row_notes"') == 2
+    assert 'id="cat-options-expense"' in preview_response.text
+    assert 'form="import-confirm-form"' in preview_response.text
+    assert 'id="import-confirm-form"' in preview_response.text
+
+
+def test_confirm_applies_picked_categories_but_never_creates_new_ones(client):
+    _create_account(client, account_id="chk", number="1234")
+    write_categories(
+        ensure_category(read_categories(), TransactionType.EXPENSE, "Food", "Coffee")
+    )
+    preview_response = _create_mapping(client)
+    rows_payload = _extract_hidden_value(preview_response.text, "rows_payload")
+
+    # Row 1 (Coffee Shop, expense): a real pair. Row 2 (Paycheck, income):
+    # "Food" is an expense category, so the pick is ignored.
+    confirm_response = _confirm(
+        client,
+        account_id="chk",
+        bank="Test Bank",
+        rows_payload=rows_payload,
+        row_categories=[json.dumps(["Food", "Coffee"]), json.dumps(["Food", ""])],
+    )
+
+    assert confirm_response.status_code == 200
+    by_description = {t.description: t for t in read_ledger(config.LEDGER_PATH)}
+    assert (
+        by_description["Coffee Shop"].category,
+        by_description["Coffee Shop"].subcategory,
+    ) == (
+        "Food",
+        "Coffee",
+    )
+    assert by_description["Paycheck"].category == "Uncategorized"
+
+
+def test_confirm_stores_an_edited_description_as_a_note_only(client):
+    _create_account(client, account_id="chk", number="1234")
+    preview_response = _create_mapping(client)
+    rows_payload = _extract_hidden_value(preview_response.text, "rows_payload")
+
+    _confirm(
+        client,
+        account_id="chk",
+        bank="Test Bank",
+        rows_payload=rows_payload,
+        row_notes=["Morning latte", "Paycheck"],
+    )
+
+    by_description = {t.description: t for t in read_ledger(config.LEDGER_PATH)}
+    assert by_description["Coffee Shop"].notes == "Morning latte"
+    assert by_description["Paycheck"].notes is None

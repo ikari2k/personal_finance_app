@@ -45,6 +45,8 @@ from app.models.import_mapping import ImportMapping
 from app.models.transaction import Transaction, TransactionType
 from app.routers.htmx_events import toast
 from app.services.importer import (
+    apply_category_picks,
+    apply_note_edits,
     build_transactions,
     count_blank_column_values,
     filter_by_account_number,
@@ -597,6 +599,7 @@ def _render_preview(
             "blank_amount_count": blank_amount,
             "total_rows": total_rows,
             "rows_payload": rows_payload,
+            "category_options": read_categories(),
             "restart_url": restart_url,
             "dry_run": dry_run,
         },
@@ -611,11 +614,19 @@ def confirm(
     duplicate_count: int = Form(0),
     filtered_count: int = Form(0),
     rows_payload: str = Form(...),
+    row_categories: list[str] = Form(default=[]),
+    row_notes: list[str] = Form(default=[]),
     restart_url: str = Form("/import/new/restart"),
 ) -> HTMLResponse:
-    """Write the previewed transactions to the ledger and log the import."""
-    rows = json.loads(rows_payload)
+    """Write the previewed transactions to the ledger and log the import.
+
+    ``row_categories`` / ``row_notes`` carry what the user re-picked or
+    re-typed per row in the preview (see ``apply_category_picks`` and
+    ``apply_note_edits``).
+    """
     categories = read_categories()
+    rows = apply_category_picks(json.loads(rows_payload), row_categories, categories)
+    rows = apply_note_edits(rows, row_notes)
     new_transactions = []
     for row in rows:
         amount = Decimal(row["amount"])
@@ -634,7 +645,7 @@ def confirm(
                 amount=amount,
                 type=txn_type,
                 transfer_id=None,
-                notes=None,
+                notes=row.get("notes"),
                 counterparty_account=row.get("counterparty_account", ""),
             )
         )

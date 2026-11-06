@@ -19,7 +19,9 @@
   <p class="muted">Dry run — read-only, nothing is written. Use "Run" from the mapping list to actually import.</p>
 {% endif %}
 
+{% from "transactions/_table.html" import cat_option_templates %}
 {% if transactions %}
+  {% if not dry_run %}{{ cat_option_templates(category_options) }}{% endif %}
   <div class="table-scroll">
     <table>
       <thead><tr><th>Date</th><th>Description</th><th>Category</th><th>Amount</th></tr></thead>
@@ -27,8 +29,35 @@
         {% for txn in transactions %}
           <tr>
             <td>{{ txn.date }}</td>
-            <td>{{ txn.description }}</td>
-            <td>{{ txn.category }}{% if txn.subcategory %} / {{ txn.subcategory }}{% endif %}</td>
+            <td>
+              {% if dry_run %}
+                {{ txn.description }}
+              {% else %}
+                {# Like /transactions: edits become the note, never the description (it keys duplicate detection). #}
+                <input type="text" class="desc-inline-input" name="row_notes" form="import-confirm-form"
+                       value="{{ txn.description }}" aria-label="Description">
+              {% endif %}
+            </td>
+            <td>
+              {% if dry_run %}
+                {{ txn.category }}{% if txn.subcategory %} / {{ txn.subcategory }}{% endif %}
+              {% else %}
+                {# Re-pick the rule-assigned category before it is written (existing categories only; the server re-checks). #}
+                {% set tree = category_options['expense' if txn.amount < 0 else 'income'] %}
+                {% set known = txn.category in tree and (not txn.subcategory or txn.subcategory in tree[txn.category].subcategories) %}
+                {% set display_value = (txn.subcategory + ' (' + txn.category + ')' if txn.subcategory else txn.category) ~ ('' if known else ' (not in category list)') %}
+                {# Local combobox: no data-txn-id, so app.js only updates the hidden pick. #}
+                <span class="cat-combo" data-local>
+                  <input type="hidden" name="row_categories" form="import-confirm-form"
+                         value='{{ [txn.category, txn.subcategory]|tojson }}'>
+                  <input type="text" class="cat-combo-input" autocomplete="off" spellcheck="false"
+                         aria-label="Category" value="{{ display_value }}"
+                         data-category="{{ txn.category }}" data-subcategory="{{ txn.subcategory }}"
+                         data-display="{{ display_value }}">
+                  <div class="cat-combo-list" role="listbox" data-type="{{ 'expense' if txn.amount < 0 else 'income' }}" hidden></div>
+                </span>
+              {% endif %}
+            </td>
             <td class="{{ 'amount-negative' if txn.amount < 0 else 'amount-positive' }}">
               {{ txn.amount|money }}
             </td>
@@ -43,7 +72,7 @@
       <a hx-get="{{ restart_url }}" hx-target="#import-wizard" class="btn-outline" role="button">Back to edit</a>
     </footer>
   {% else %}
-    <form hx-post="/import/confirm" hx-target="#import-wizard" hx-swap="innerHTML">
+    <form id="import-confirm-form" hx-post="/import/confirm" hx-target="#import-wizard" hx-swap="innerHTML">
       <input type="hidden" name="account_id" value="{{ account_id }}">
       <input type="hidden" name="bank" value="{{ bank }}">
       <input type="hidden" name="duplicate_count" value="{{ duplicate_count }}">
