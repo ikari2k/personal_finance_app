@@ -16,6 +16,7 @@ ACCOUNTS_PATH = CONFIG_DIR / "accounts.toml"
 CATEGORIES_PATH = CONFIG_DIR / "categories.toml"
 RULES_PATH = CONFIG_DIR / "rules.toml"
 BUDGET_RULE_PATH = CONFIG_DIR / "budget_rule.toml"
+EXPENSE_NATURE_PATH = CONFIG_DIR / "expense_nature.toml"
 IMPORT_MAPPINGS_DIR = CONFIG_DIR / "import_mappings"
 IMPORT_HISTORY_PATH = DATA_DIR / "import_history.toml"
 
