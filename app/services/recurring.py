@@ -154,9 +154,8 @@ def detect_recurring(
         # inside the window, so a subscription started 5 months ago is not
         # marked down for the 7 months before it existed.
         first = min(t.date for t in recent)
-        expected = max(
-            1, (today.year - first.year) * 12 + today.month - first.month + 1
-        )
+        elapsed = (today.year - first.year) * 12 + today.month - first.month + 1
+        expected = max(1, min(WINDOW_MONTHS, elapsed))
         period, variation, confidence, verdict = _score(
             [t.date for t in txns],
             [abs(t.amount) for t in txns],
