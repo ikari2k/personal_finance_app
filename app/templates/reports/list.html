@@ -34,6 +34,7 @@
   {% include "budget_rule/_rolling.html" %}
 
   {% if spending_categories %}
+    <section class="report-card">
     <div class="dash-widget-head" style="margin-bottom: 0.15rem;">
       <h2 style="margin: 0;">Top spending categories</h2>
       <a class="table-link" href="/reports/categories{{ '?account_id=' + account_id if account_id }}">Full report &rsaquo;</a>
@@ -69,17 +70,25 @@
       </table>
     </div>
 
-    {% set treemap_caption = "Every expense category, all time." %}
-    {% include "reports/_treemap.html" %}
+    </section>
+
+    <section class="report-card">
+      {% set treemap_caption = "Every expense category, all time." %}
+      {% include "reports/_treemap.html" %}
+    </section>
   {% endif %}
 
-  <article>
+  <section class="report-card">
     <h2>Net worth over time</h2>
     {% include "reports/_net_worth_line.html" %}
-    <h3>Monthly income and expense</h3>
-    {% include "reports/_net_worth_chart.html" %}
-  </article>
+  </section>
 
+  <section class="report-card">
+    <h2>Monthly income and expense</h2>
+    {% include "reports/_net_worth_chart.html" %}
+  </section>
+
+  <section class="report-card">
   <h2>Annual summary</h2>
   {% if years %}
     <div class="table-scroll">
@@ -121,4 +130,5 @@
   {% else %}
     <p>No transactions yet.</p>
   {% endif %}
+  </section>
 {% endblock %}

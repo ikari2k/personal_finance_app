@@ -1704,7 +1704,10 @@ def test_year_report_has_section_index_with_folded_matrix(client):
     assert 'class="section-index"' in text
     assert 'href="#month-by-month"' in text
     # The big month-by-month matrices start folded (no `open` attribute).
-    assert '<details class="report-fold" id="month-by-month" data-section>' in text
+    assert (
+        '<details class="report-fold report-card" id="month-by-month" data-section>'
+        in text
+    )
 
 
 def test_month_report_has_section_index_matching_its_sections(client):

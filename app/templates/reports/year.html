@@ -76,13 +76,17 @@
     </div>
   </div>
 
-  <article>
+  <section class="report-card">
     <h2>Net worth over time</h2>
     {% include "reports/_net_worth_line.html" %}
-    <h3>Monthly income and expense</h3>
-    {% include "reports/_net_worth_chart.html" %}
-  </article>
+  </section>
 
+  <section class="report-card">
+    <h2>Monthly income and expense</h2>
+    {% include "reports/_net_worth_chart.html" %}
+  </section>
+
+  <section class="report-card">
   <h2 id="months" data-section>Monthly breakdown</h2>
   {% if met_months %}
     <p class="muted br-legend">
@@ -129,6 +133,7 @@
   {% else %}
     <p>No transactions in {{ year }}.</p>
   {% endif %}
+  </section>
 
   <span id="categories" data-section></span>
   <form method="get" class="view-options">
@@ -141,11 +146,11 @@
   </form>
 
   <div class="report-columns">
-    <div>
+    <section class="report-card">
       <h2>Income by category</h2>
       {{ breakdown_table(income_breakdown, income_config, "income", date_from, date_to, account_id, "vs. prior year", year=year) }}
-    </div>
-    <div>
+    </section>
+    <section class="report-card">
       <h2>Expense by category</h2>
       <div class="view-options">
         <button type="button" class="secondary" id="toggle-expense-subcategories"
@@ -156,10 +161,10 @@
       <div id="expense-breakdown-wrap" class="hide-subcategories">
         {{ breakdown_table(expense_breakdown, expense_config, "expense", date_from, date_to, account_id, "vs. prior year", year=year) }}
       </div>
-    </div>
+    </section>
   </div>
 
-  <details class="report-fold" id="month-by-month" data-section>
+  <details class="report-fold report-card" id="month-by-month" data-section>
     <summary><h2>Month by month, by category</h2></summary>
     <h3>Income</h3>
     {{ month_matrix_table(income_month_rows, month_labels, "income", date_from, date_to, month_bounds, account_id) }}
@@ -172,7 +177,7 @@
   </details>
 
   {% if expense_treemap_pair %}
-    <div id="spending" data-section>
+    <div id="spending" data-section class="report-card">
       {% set treemap_caption = "Every expense category in " ~ year ~ "." %}
       {% include "reports/_treemap.html" %}
     </div>

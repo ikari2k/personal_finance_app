@@ -2780,3 +2780,16 @@ tr.is-met .br-check { margin-right: 0.4rem; }
 }
 .nw-stats dd { margin: 0; font-weight: 600; }
 .nw-stats dd .muted { margin-left: 0.4rem; font-weight: 400; font-size: 0.75rem; }
+
+/* Report sections: each chart/table group sits in its own bordered, tinted
+ * card so the page reads as distinct blocks rather than one long scroll. */
+.report-card {
+  background: var(--pico-card-sectioning-background-color);
+  border: var(--pico-border-width) solid var(--pico-muted-border-color);
+  border-radius: calc(var(--pico-border-radius) * 2);
+  padding: 1.25rem 1.5rem 1.5rem;
+  margin-bottom: 2rem;
+}
+.report-card > h2:first-child { margin-top: 0; }
+.report-columns > .report-card { margin-bottom: 0; }
+.report-columns { margin-bottom: 2rem; }
