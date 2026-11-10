@@ -25,6 +25,7 @@ from app.models.category import (
 )
 from app.models.transaction import Transaction, TransactionType
 from app.services.categories import effective_bucket
+from app.services.recurring import NATURES, effective_nature
 
 TYPE_ORDER = [TransactionType.EXPENSE, TransactionType.INCOME, TransactionType.TRANSFER]
 
@@ -652,6 +653,66 @@ def net_worth_by_day(
         points.append(NetWorthDayPoint(day=day, value=running))
         day += timedelta(days=1)
     return points
+
+
+@dataclass
+class NatureMonth:
+    """One month's expense spend split by fixed/semi/flexible nature."""
+
+    key: str
+    label: str
+    spend: dict[str, Decimal]  # nature ("" = untagged) -> magnitude
+    income: Decimal
+
+    @property
+    def total(self) -> Decimal:
+        """Total expense magnitude across every nature."""
+        return sum(self.spend.values(), Decimal("0"))
+
+
+def nature_monthly_totals(
+    transactions: Iterable[Transaction],
+    tags: dict[tuple[str, str], str],
+    today: date_,
+    months: int,
+) -> list[NatureMonth]:
+    """Return ``months`` ``NatureMonth``s ending at ``today``'s month, oldest first.
+
+    Expense rows are split by ``effective_nature`` (an untagged row lands
+    under ``""``); transfers are excluded and income is carried alongside
+    for the committed-share figure. Months with no activity are included
+    as zeros so the series is continuous.
+    """
+    keys = []
+    year, month = today.year, today.month
+    for _ in range(months):
+        keys.append((year, month))
+        month -= 1
+        if month == 0:
+            year, month = year - 1, 12
+    keys.reverse()
+
+    spend = {k: {n: Decimal("0") for n in (*NATURES, "")} for k in keys}
+    income = {k: Decimal("0") for k in keys}
+    for txn in transactions:
+        k = (txn.date.year, txn.date.month)
+        if k not in spend:
+            continue
+        if txn.type is TransactionType.INCOME:
+            income[k] += txn.amount
+        elif txn.type is TransactionType.EXPENSE:
+            nature = effective_nature(tags, txn.category, txn.subcategory)
+            spend[k][nature] += abs(txn.amount)
+
+    return [
+        NatureMonth(
+            key=f"{y:04d}-{m:02d}",
+            label=f"{calendar.month_abbr[m]} {y}",
+            spend=spend[(y, m)],
+            income=income[(y, m)],
+        )
+        for y, m in keys
+    ]
 
 
 UNCATEGORIZED = "Uncategorized"  # matches services.importer.DEFAULT_CATEGORY

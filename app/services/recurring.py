@@ -63,6 +63,16 @@ class RecurringGroup:
     spend: Decimal = field(default=Decimal("0"))  # total magnitude in the window
 
 
+def effective_nature(
+    tags: dict[tuple[str, str], str], category: str, subcategory: str = ""
+) -> str:
+    """Return the nature for a category/subcategory: its own tag, else its category's.
+
+    ``""`` when neither is tagged.
+    """
+    return tags.get((category, subcategory)) or tags.get((category, "")) or ""
+
+
 def merchant_key(description: str) -> str:
     """Return a grouping key for ``description``.
 

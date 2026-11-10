@@ -24,6 +24,7 @@ from app.services.aggregation import (
     grouped_transaction_view,
     merge_months,
     monthly_totals_with_mom,
+    nature_monthly_totals,
     net_worth_by_day,
     net_worth_by_month,
     rolling_average_daily_expense,
@@ -1957,3 +1958,46 @@ def test_net_worth_by_day_empty_without_transactions():
     accounts = [_account(id="chk", starting_balance=Decimal("100"))]
 
     assert net_worth_by_day([], accounts, date(2026, 1, 5)) == []
+
+
+def test_nature_monthly_totals_splits_by_effective_nature_and_fills_gaps():
+    tags = {("Housing", ""): "fixed", ("Housing", "Repairs"): "flexible"}
+    txns = [
+        _txn(
+            id="a",
+            date=date(2026, 10, 3),
+            category="Housing",
+            subcategory="Rent",
+            amount=Decimal("-1000"),
+        ),
+        _txn(
+            id="b",
+            date=date(2026, 10, 9),
+            category="Housing",
+            subcategory="Repairs",
+            amount=Decimal("-80"),
+        ),
+        _txn(id="c", date=date(2026, 10, 9), category="Food", amount=Decimal("-20")),
+        _txn(
+            id="d",
+            date=date(2026, 10, 1),
+            type=TransactionType.INCOME,
+            amount=Decimal("500"),
+        ),
+        _txn(
+            id="e",
+            date=date(2026, 10, 2),
+            type=TransactionType.TRANSFER,
+            amount=Decimal("-70"),
+        ),
+    ]
+
+    sept, octo = nature_monthly_totals(txns, tags, date(2026, 10, 15), 2)
+
+    assert sept.total == 0
+    assert octo.spend["fixed"] == Decimal(
+        "1000"
+    )  # subcategory inherits the category tag
+    assert octo.spend["flexible"] == Decimal("80")  # its own tag wins
+    assert octo.spend[""] == Decimal("20")  # untagged
+    assert octo.income == Decimal("500")  # the transfer leg is ignored

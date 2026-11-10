@@ -69,6 +69,12 @@ tests/unit/     tmp_path-isolated; tests/integration/  TestClient, conftest redi
   (subcategory `""` = inherit; resolve via `services.categories.effective_bucket`); income
   category `""`/`excluded` (left out of the income base), income subcategories have none. In
   `update_category`/`update_subcategory`, omitting `bucket` **keeps** it (opposite of `budget`).
+- `config/expense_nature.toml` — `[[tags]]`: `category, subcategory, nature` (fixed/semi/flexible;
+  `subcategory = ""` tags the whole category, a subcategory tag wins). Deliberately **not** a field
+  on `categories.toml` entries (see the `ensure_category` gotcha). Written only by the review
+  dialog's apply step, which re-checks every pair with `category_pair_exists`; suggestions come
+  from `services.recurring` and never write on their own. Renames don't propagate (a dangling tag
+  is ignored).
 - `config/budget_rule.toml` — `needs, wants, savings` whole-percent targets (default 50/30/20,
   must sum to 100 via `services.budget_rule.validate_targets`).
 - `data/ledger.csv` — columns: `id, date, account_id, category, subcategory, description, amount,
@@ -91,7 +97,7 @@ tests/unit/     tmp_path-isolated; tests/integration/  TestClient, conftest redi
 - **Lock every write** to ledger/config files via `app.storage.lock.file_lock` (PID lockfile,
   stale locks auto-cleared). `LockError` is handled app-wide in `app/main.py` (toast +
   `HX-Reswap: none`).
-- **Config writes leave backups**: `accounts/categories/rules` writers call
+- **Config writes leave backups**: `accounts/categories/rules/expense_nature` writers call
   `storage.backup.backup_before_write` inside the lock — `<file>.bak` (previous version) plus
   `config/backups/<file>.<date>` (state before the day's first write, kept 30 days). The ledger
   and import history are not backed up. Restore by copying a backup over the file while the app

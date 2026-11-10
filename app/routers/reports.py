@@ -30,6 +30,7 @@ from app.models.transaction import TransactionType
 from app.routers import breadcrumbs
 from app.routers.budget_rule import met_month_keys, month_pair, rolling_summaries
 from app.routers.scope import resolve_account
+from app.routers.spending_nature import DEFAULT_CARD_RANGE, nature_card_context
 from app.services.aggregation import (
     CategoryMonthPoint,
     CategoryTotal,
@@ -55,6 +56,7 @@ from app.services.aggregation import (
 from app.storage.accounts import read_accounts
 from app.storage.budget_rule import read_targets
 from app.storage.categories import read_categories
+from app.storage.expense_nature import read_nature_tags
 from app.storage.ledger import read_ledger
 from app.templating import templates
 
@@ -1919,6 +1921,9 @@ def reports_overview(
     expense_config = _category_config(categories, TransactionType.EXPENSE)
     chart = _monthly_bars_chart(transactions, account_id)
     net_worth = _net_worth_line(transactions, accounts, account_id)
+    nature_card = nature_card_context(
+        transactions, read_nature_tags(), date.today(), DEFAULT_CARD_RANGE
+    )
     years = yearly_totals_with_yoy(transactions)
     today = date.today()
     year_txn_links = {
@@ -2001,6 +2006,7 @@ def reports_overview(
             "years": years,
             "chart": chart,
             "net_worth": net_worth,
+            "nature_card": nature_card,
             "accounts": accounts,
             "account_id": account_id,
             "year_txn_links": year_txn_links,

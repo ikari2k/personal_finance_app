@@ -1,0 +1,41 @@
+<div id="recurring-table" class="hide-flexible" {% if oob %}hx-swap-oob="true"{% endif %}>
+  {% if rows %}
+    {% if hidden_count %}
+      <div class="view-options">
+        <button type="button" class="secondary"
+                onclick="var w = document.getElementById('recurring-table'); var hidden = w.classList.toggle('hide-flexible'); this.textContent = hidden ? 'Show flexible ({{ hidden_count }})' : 'Hide flexible';">
+          Show flexible ({{ hidden_count }})
+        </button>
+      </div>
+    {% endif %}
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>Description</th><th>Category</th><th>Cadence</th><th>Typical</th><th>Variation</th><th>Present</th><th>Confidence</th><th>Verdict</th><th>Your tag</th></tr>
+        </thead>
+        <tbody>
+          {% for g, tag in rows %}
+            <tr class="{{ 'ff-row-flexible' if g.verdict == 'flexible' }}">
+              <td>
+                {{ g.label }}
+                {% if g.variants|length > 1 %}
+                  <span class="muted" title="{{ g.variants|join(' · ') }}">({{ g.variants|length }} variants)</span>
+                {% endif %}
+              </td>
+              <td class="muted">{{ g.category }}{% if g.subcategory %} / {{ g.subcategory }}{% endif %}</td>
+              <td>{{ period_labels.get(g.period, 'Irregular') }}</td>
+              <td>{{ g.typical|money }}</td>
+              <td class="muted">{{ "%.0f"|format(g.variation * 100) }}%</td>
+              <td class="muted">{{ g.months_present }}/{{ g.window_months }} mo</td>
+              <td><span class="ff-meter"><i style="width: {{ g.confidence }}%"></i></span>{{ g.confidence }}%</td>
+              <td><span class="ff-pill ff-pill-{{ g.verdict }}">{{ nature_labels[g.verdict] }}</span></td>
+              <td>{% if tag %}<span class="ff-pill ff-pill-{{ tag }}">{{ nature_labels[tag] }}</span>{% else %}<span class="muted">&mdash;</span>{% endif %}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p>No expenses yet.</p>
+  {% endif %}
+</div>

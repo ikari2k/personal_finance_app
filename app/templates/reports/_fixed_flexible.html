@@ -1,0 +1,59 @@
+{#
+  Fixed vs flexible spending card for /reports: per-nature monthly averages,
+  a stacked bar per month and range tabs (HTMX swap into #fixed-flexible-card).
+  Expects ``nature_card`` and ``account_id`` in scope. Fixed/semi/flexible
+  take blue/teal/violet so green/red stay income/expense; untagged is grey.
+#}
+<div id="fixed-flexible-card">
+  <div class="dash-widget-head">
+    <h2 style="margin: 0;">Fixed vs flexible spending</h2>
+    <div class="nw-tabs" role="tablist">
+      {% for m in nature_card.ranges %}
+        <button type="button" role="tab" class="nw-tab"
+                aria-selected="{{ 'true' if m == nature_card.months else 'false' }}"
+                hx-get="/reports/fixed-flexible/card?months={{ m }}&account_id={{ account_id|urlencode }}"
+                hx-target="#fixed-flexible-card" hx-swap="outerHTML">{{ m }}M</button>
+      {% endfor %}
+    </div>
+  </div>
+  {% if nature_card.has_spend %}
+    <div class="ff-body">
+      <div class="ff-stats">
+        {% for row in nature_card.rows %}
+          <div>
+            <span class="dash-widget-title"><span class="ff-swatch ff-{{ row.nature }}"></span>{{ row.label }} &middot; avg / month</span>
+            <div class="cat-stat-number">{{ row.average|money }}</div>
+            <div class="cat-stat-sub">{{ "%.0f"|format(row.share) }}% of spending</div>
+          </div>
+        {% endfor %}
+        {% if nature_card.committed_pct is not none %}
+          <div class="ff-committed">
+            <span class="dash-widget-title">Fixed share of income</span>
+            <div class="cat-stat-number">{{ "%.0f"|format(nature_card.committed_pct) }}%</div>
+          </div>
+        {% endif %}
+      </div>
+      <svg viewBox="0 0 {{ nature_card.width }} {{ nature_card.height }}" class="ff-chart"
+           role="img" aria-label="Fixed and flexible spending by month">
+        <line x1="0" x2="{{ nature_card.width }}" y1="{{ nature_card.baseline }}" y2="{{ nature_card.baseline }}" class="chart-gridline"/>
+        {% for bar in nature_card.bars %}
+          {% for seg in bar.segments %}
+            <rect x="{{ bar.x }}" y="{{ seg.y }}" width="{{ bar.w }}" height="{{ seg.h }}"
+                  class="ff-{{ seg.nature }}"><title>{{ seg.title }}</title></rect>
+          {% endfor %}
+          <text x="{{ bar.cx }}" y="{{ nature_card.height - 8 }}" class="chart-x-label"
+                text-anchor="middle">{{ bar.label }}</text>
+        {% endfor %}
+      </svg>
+    </div>
+    {% if not nature_card.tagged %}
+      <p class="muted">Nothing is tagged yet, so all spending shows as untagged.</p>
+    {% endif %}
+    <div class="dash-widget-head" style="margin: 0.75rem 0 0;">
+      <span class="muted">Tags come from your own review of the detected recurring expenses.</span>
+      <a class="table-link" href="/reports/fixed-flexible">See what counts as fixed &rsaquo;</a>
+    </div>
+  {% else %}
+    <p>No expenses in this period.</p>
+  {% endif %}
+</div>

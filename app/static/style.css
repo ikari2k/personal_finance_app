@@ -2794,3 +2794,52 @@ tr.is-met .br-check { margin-right: 0.4rem; }
 .report-columns > .report-card { margin-bottom: 0; }
 .report-columns { margin-bottom: 2rem; }
 .report-card.report-stat { margin-bottom: 0; padding: 0.85rem 1rem 1rem; }
+
+/* Fixed vs flexible spending (reports/_fixed_flexible.html, fixed_flexible/*).
+ * Blue/teal/violet so green and red keep meaning income/expense. */
+:root {
+  --ff-fixed: #6f8fe0;
+  --ff-semi: #4fb3bf;
+  --ff-flexible: #b58be0;
+  --ff-untagged: #6b7183;
+}
+rect.ff-fixed, .ff-swatch.ff-fixed { fill: var(--ff-fixed); background: var(--ff-fixed); }
+rect.ff-semi, .ff-swatch.ff-semi { fill: var(--ff-semi); background: var(--ff-semi); }
+rect.ff-flexible, .ff-swatch.ff-flexible { fill: var(--ff-flexible); background: var(--ff-flexible); }
+rect.ff-untagged, .ff-swatch.ff-untagged { fill: var(--ff-untagged); background: var(--ff-untagged); }
+.ff-swatch {
+  display: inline-block;
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 3px;
+  margin-right: 0.4rem;
+}
+.ff-body { display: flex; gap: 2.5rem; flex-wrap: wrap; align-items: center; margin-top: 0.75rem; }
+.ff-stats { display: flex; flex-direction: column; gap: 0.9rem; min-width: 14rem; }
+.ff-committed { border-top: var(--pico-border-width) solid var(--pico-muted-border-color); padding-top: 0.75rem; }
+.ff-chart { flex: 1 1 22rem; min-width: 0; height: auto; }
+.ff-pill {
+  display: inline-block;
+  padding: 0.05rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  border: var(--pico-border-width) solid currentColor;
+}
+.ff-pill-fixed { color: var(--ff-fixed); }
+.ff-pill-semi { color: var(--ff-semi); }
+.ff-pill-flexible { color: var(--ff-flexible); }
+.ff-pill-unset { color: var(--pico-muted-color); border-style: dashed; }
+.ff-meter {
+  display: inline-block;
+  width: 4rem;
+  height: 0.4rem;
+  margin-right: 0.5rem;
+  border-radius: 2px;
+  background: var(--pico-muted-border-color);
+  vertical-align: middle;
+  overflow: hidden;
+}
+.ff-meter i { display: block; height: 100%; background: var(--ff-fixed); }
+.hide-flexible .ff-row-flexible { display: none; }
+.ff-review-scroll { max-height: 55vh; overflow-y: auto; }
