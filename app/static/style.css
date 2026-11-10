@@ -2793,3 +2793,4 @@ tr.is-met .br-check { margin-right: 0.4rem; }
 .report-card > h2:first-child { margin-top: 0; }
 .report-columns > .report-card { margin-bottom: 0; }
 .report-columns { margin-bottom: 2rem; }
+.report-card.report-stat { margin-bottom: 0; padding: 0.85rem 1rem 1rem; }
