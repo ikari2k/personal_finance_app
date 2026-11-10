@@ -34,8 +34,10 @@ WINDOW_MONTHS = 12
 # monthly, bi-monthly, quarterly, yearly.
 PERIODS = (7, 14, 30, 60, 91, 365)
 MIN_CHARGES = 3  # a yearly charge needs only 2
-FIXED_MAX_VARIATION = 0.05
+FIXED_MAX_VARIATION = 0.12  # tolerates the odd price rise
 SEMI_MAX_VARIATION = 0.35
+# Two charges a year apart prove little; only a near-identical amount counts.
+YEARLY_MAX_VARIATION = 0.10
 # A subcategory is suggested a nature only when this share of its spend
 # agrees; otherwise it is mixed and suggested "semi".
 DOMINANT_SHARE = 0.6
@@ -52,7 +54,7 @@ class RecurringGroup:
     variants: list[str]
     count: int
     months_present: int
-    window_months: int
+    window_months: int  # months it could have appeared in
     period: int | None  # the snapped period in days, ``None`` if irregular
     typical: Decimal  # median charge magnitude
     variation: float  # coefficient of variation of charge magnitudes
@@ -87,15 +89,8 @@ def _snap_period(median_gap: float) -> int | None:
     return None
 
 
-def _window_months(transactions: list[Transaction], today: date) -> int:
-    """Return the months (max ``WINDOW_MONTHS``) the ledger covers up to ``today``."""
-    first = min(t.date for t in transactions)
-    months = (today.year - first.year) * 12 + today.month - first.month + 1
-    return max(1, min(WINDOW_MONTHS, months))
-
-
 def _score(
-    dates: list[date], amounts: list[Decimal], months_present: int, window: int
+    dates: list[date], amounts: list[Decimal], months_present: int, expected: int
 ) -> tuple[int | None, float, int, str]:
     """Return ``(period, variation, confidence, verdict)`` for one group."""
     values = [float(a) for a in amounts]
@@ -114,9 +109,11 @@ def _score(
     regularity = max(0.0, 1 - spread / (0.25 * period))
     if regularity < 0.5:  # gaps too uneven to call it a cadence
         return None, variation, round(100 * 0.15 * amount_score), NATURE_FLEXIBLE
-    coverage = min(1.0, months_present / window) if period <= 31 else 1.0
+    coverage = min(1.0, months_present / expected) if period <= 31 else 1.0
     confidence = round(100 * (0.4 * regularity + 0.3 * amount_score + 0.3 * coverage))
 
+    if period == 365 and variation > YEARLY_MAX_VARIATION:
+        return None, variation, round(100 * 0.15 * amount_score), NATURE_FLEXIBLE
     if regularity >= 0.7 and variation <= FIXED_MAX_VARIATION and coverage >= 0.7:
         verdict = NATURE_FIXED
     elif regularity >= 0.5 and variation <= SEMI_MAX_VARIATION:
@@ -139,7 +136,6 @@ def detect_recurring(
     expenses = [t for t in transactions if t.type is TransactionType.EXPENSE]
     if not expenses:
         return []
-    window = _window_months(expenses, today)
     window_start = today - timedelta(days=365)
 
     grouped: dict[tuple[str, str, str], list[Transaction]] = defaultdict(list)
@@ -154,11 +150,18 @@ def detect_recurring(
         if not recent:
             continue
         months = {(t.date.year, t.date.month) for t in recent}
+        # Months the group could have appeared in: since its first charge
+        # inside the window, so a subscription started 5 months ago is not
+        # marked down for the 7 months before it existed.
+        first = min(t.date for t in recent)
+        expected = max(
+            1, (today.year - first.year) * 12 + today.month - first.month + 1
+        )
         period, variation, confidence, verdict = _score(
             [t.date for t in txns],
             [abs(t.amount) for t in txns],
             len(months),
-            window,
+            expected,
         )
         variants = sorted({t.description for t in txns})
         groups.append(
@@ -170,7 +173,7 @@ def detect_recurring(
                 variants=variants,
                 count=len(txns),
                 months_present=len(months),
-                window_months=window,
+                window_months=expected,
                 period=period,
                 typical=statistics.median(abs(t.amount) for t in txns),
                 variation=variation,
