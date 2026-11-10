@@ -2850,3 +2850,9 @@ rect.ff-untagged, .ff-swatch.ff-untagged { fill: var(--ff-untagged); background:
   height: auto;
   font-size: 0.85rem;
 }
+.ff-divider {
+  stroke: var(--pico-muted-color);
+  stroke-width: 1;
+  stroke-dasharray: 3 4;
+  opacity: 0.6;
+}

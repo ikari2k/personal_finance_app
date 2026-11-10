@@ -36,6 +36,11 @@
       <svg viewBox="0 0 {{ nature_card.width }} {{ nature_card.height }}" class="ff-chart"
            role="img" aria-label="Fixed and flexible spending by month">
         <line x1="0" x2="{{ nature_card.width }}" y1="{{ nature_card.baseline }}" y2="{{ nature_card.baseline }}" class="chart-gridline"/>
+        {% for d in nature_card.dividers %}
+          <line x1="{{ d.x }}" x2="{{ d.x }}" y1="0" y2="{{ nature_card.baseline }}" class="ff-divider"/>
+          <text x="{{ d.x - 6 }}" y="12" class="chart-x-label" text-anchor="end">{{ d.before }}</text>
+          <text x="{{ d.x + 6 }}" y="12" class="chart-x-label" text-anchor="start">{{ d.after }}</text>
+        {% endfor %}
         {% for bar in nature_card.bars %}
           {% for seg in bar.segments %}
             <rect x="{{ bar.x }}" y="{{ seg.y }}" width="{{ bar.w }}" height="{{ seg.h }}"

@@ -56,7 +56,7 @@ PERIOD_LABELS = {
 CARD_RANGES = (3, 6, 12)
 DEFAULT_CARD_RANGE = 6
 _CHART_W, _CHART_H = 560, 220
-_PAD_TOP, _PAD_BOTTOM = 8, 26
+_PAD_TOP, _PAD_BOTTOM = 22, 26
 
 
 def _stacked_bars(months: list[NatureMonth]) -> list[dict]:
@@ -96,6 +96,20 @@ def _stacked_bars(months: list[NatureMonth]) -> list[dict]:
     return bars
 
 
+def _year_dividers(months: list[NatureMonth]) -> list[dict]:
+    """Return a divider (x position and both years) wherever the year changes."""
+    slot = _CHART_W / len(months)
+    return [
+        {
+            "x": round(slot * index, 1),
+            "before": months[index - 1].key[:4],
+            "after": month.key[:4],
+        }
+        for index, month in enumerate(months)
+        if index and month.key[:4] != months[index - 1].key[:4]
+    ]
+
+
 def nature_card_context(
     transactions: list, tags: NatureTags, today: date, months: int
 ) -> dict:
@@ -125,6 +139,7 @@ def nature_card_context(
             float(totals[NATURE_FIXED] / income * 100) if income > 0 else None
         ),
         "bars": _stacked_bars(series),
+        "dividers": _year_dividers(series),
         "width": _CHART_W,
         "height": _CHART_H,
         "baseline": _CHART_H - _PAD_BOTTOM,

@@ -192,3 +192,15 @@ def test_review_skips_suggestions_that_match_and_unticks_overrides(client):
 
     write_nature_tags({("Housing", "Rent"): "fixed"})
     assert "No new suggestions" in client.get("/reports/fixed-flexible/review").text
+
+
+def test_card_marks_year_boundary_in_a_twelve_month_view(client):
+    _setup(client)
+    html = client.get("/reports/fixed-flexible/card?months=12&account_id=").text
+    today = date.today()
+
+    if today.month == 12:  # a 12-month window ending in December has no boundary
+        assert "ff-divider" not in html
+    else:
+        assert html.count("ff-divider") == 1
+        assert f">{today.year - 1}<" in html and f">{today.year}<" in html
