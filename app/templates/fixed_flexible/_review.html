@@ -8,8 +8,8 @@
         hx-target="#nature-dialog-content" hx-swap="innerHTML">
     <input type="hidden" name="account_id" value="{{ account_id }}">
     <p class="muted">
-      Suggested from the last 12 months of spending. Nothing changes until you apply,
-      and only the rows you tick.
+      Suggested from the last 12 months of spending; change any suggestion in its dropdown.
+      Nothing changes until you apply, and only the rows you tick.
     </p>
     <div class="table-scroll ff-review-scroll">
       <table>
@@ -18,13 +18,21 @@
           {% for row in rows %}
             <tr>
               <td>
-                <input type="checkbox" name="pick" value='{{ row.value }}' {{ 'checked' if row.checked }}
+                <input type="checkbox" name="pick" value="{{ loop.index0 }}" {{ 'checked' if row.checked }}
                        aria-label="{{ row.category }}{% if row.subcategory %} / {{ row.subcategory }}{% endif %}">
+                <input type="hidden" name="row_category" value="{{ row.category }}">
+                <input type="hidden" name="row_subcategory" value="{{ row.subcategory }}">
               </td>
               <td>{{ row.category }}{% if row.subcategory %} / {{ row.subcategory }}{% endif %}</td>
               <td>{% if row.now %}<span class="ff-pill ff-pill-{{ row.now }}">{{ nature_labels[row.now] }}</span>{% else %}<span class="ff-pill ff-pill-unset">Unset</span>{% endif %}</td>
               <td class="muted">&rarr;</td>
-              <td><span class="ff-pill ff-pill-{{ row.suggested }}">{{ nature_labels[row.suggested] }}</span></td>
+              <td>
+                <select name="row_nature" class="ff-tag-select" aria-label="Tag to apply">
+                  {% for value in ('fixed', 'semi', 'flexible') %}
+                    <option value="{{ value }}" {{ 'selected' if row.suggested == value }}>{{ nature_labels[value] }}</option>
+                  {% endfor %}
+                </select>
+              </td>
             </tr>
           {% endfor %}
         </tbody>

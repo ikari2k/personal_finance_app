@@ -2843,3 +2843,10 @@ rect.ff-untagged, .ff-swatch.ff-untagged { fill: var(--ff-untagged); background:
 .ff-meter i { display: block; height: 100%; background: var(--ff-fixed); }
 .hide-flexible .ff-row-flexible { display: none; }
 .ff-review-scroll { max-height: 55vh; overflow-y: auto; }
+.ff-tag-select {
+  width: auto;
+  margin: 0;
+  padding: 0.15rem 1.8rem 0.15rem 0.6rem;
+  height: auto;
+  font-size: 0.85rem;
+}

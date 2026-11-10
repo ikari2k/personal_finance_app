@@ -1,10 +1,10 @@
-<div id="recurring-table" class="hide-flexible" {% if oob %}hx-swap-oob="true"{% endif %}>
+<div id="recurring-table" class="{{ '' if show_flexible else 'hide-flexible' }}" {% if oob %}hx-swap-oob="true"{% endif %}>
   {% if rows %}
     {% if hidden_count %}
       <div class="view-options">
         <button type="button" class="secondary"
                 onclick="var w = document.getElementById('recurring-table'); var hidden = w.classList.toggle('hide-flexible'); this.textContent = hidden ? 'Show flexible ({{ hidden_count }})' : 'Hide flexible';">
-          Show flexible ({{ hidden_count }})
+          {{ 'Hide flexible' if show_flexible else 'Show flexible (' ~ hidden_count ~ ')' }}
         </button>
       </div>
     {% endif %}
@@ -29,7 +29,17 @@
               <td class="muted">{{ g.months_present }}/{{ g.window_months }} mo</td>
               <td><span class="ff-meter"><i style="width: {{ g.confidence }}%"></i></span>{{ g.confidence }}%</td>
               <td><span class="ff-pill ff-pill-{{ g.verdict }}">{{ nature_labels[g.verdict] }}</span></td>
-              <td>{% if tag %}<span class="ff-pill ff-pill-{{ tag }}">{{ nature_labels[tag] }}</span>{% else %}<span class="muted">&mdash;</span>{% endif %}</td>
+              <td>
+                <select class="ff-tag-select" aria-label="Tag for {{ g.category }}{% if g.subcategory %} / {{ g.subcategory }}{% endif %}"
+                        name="nature" hx-post="/reports/fixed-flexible/tag" hx-trigger="change"
+                        hx-target="#recurring-table" hx-swap="outerHTML"
+                        hx-vals='js:{...{{ {"category": g.category, "subcategory": g.subcategory, "account_id": account_id}|tojson }}, show_flexible: !document.getElementById("recurring-table").classList.contains("hide-flexible")}'>
+                  <option value="" {{ 'selected' if not tag }}>&mdash;</option>
+                  {% for value in ('fixed', 'semi', 'flexible') %}
+                    <option value="{{ value }}" {{ 'selected' if tag == value }}>{{ nature_labels[value] }}</option>
+                  {% endfor %}
+                </select>
+              </td>
             </tr>
           {% endfor %}
         </tbody>

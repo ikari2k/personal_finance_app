@@ -162,7 +162,7 @@ def card_fragment(
     )
 
 
-def _table_context(ledger: list, tags: NatureTags) -> dict:
+def _table_context(ledger: list, tags: NatureTags, account_id: str) -> dict:
     """Return the detected groups, each paired with the tag it currently resolves to."""
     groups = detect_recurring(ledger, date.today())
     return {
@@ -172,14 +172,28 @@ def _table_context(ledger: list, tags: NatureTags) -> dict:
         "hidden_count": sum(1 for g in groups if g.verdict == NATURE_FLEXIBLE),
         "nature_labels": NATURE_LABELS,
         "period_labels": PERIOD_LABELS,
+        "account_id": account_id,
     }
 
 
-def _render_table(request: Request, ledger: list, *, oob: bool = False, headers=None):
+def _render_table(
+    request: Request,
+    ledger: list,
+    account_id: str,
+    *,
+    oob: bool = False,
+    show_flexible: bool = False,
+    headers=None,
+):
+    """Render the recurring table fragment (``oob`` for a dialog's out-of-band swap)."""
     return templates.TemplateResponse(
         request,
         "fixed_flexible/_table.html",
-        {**_table_context(ledger, read_nature_tags()), "oob": oob},
+        {
+            **_table_context(ledger, read_nature_tags(), account_id),
+            "oob": oob,
+            "show_flexible": show_flexible,
+        },
         headers=headers,
     )
 
@@ -228,8 +242,9 @@ def detail_page(request: Request, account_id: str | None = None) -> HTMLResponse
         request,
         "fixed_flexible/list.html",
         {
-            **_table_context(ledger, read_nature_tags()),
+            **_table_context(ledger, read_nature_tags(), account_id),
             "oob": False,
+            "show_flexible": False,
             "accounts": read_accounts(),
             "account_id": account_id,
             "breadcrumbs": [
@@ -258,18 +273,33 @@ def review_dialog(request: Request, account_id: str | None = None) -> HTMLRespon
 @router.post("/apply", response_class=HTMLResponse)
 def apply_suggestions(
     request: Request,
-    pick: list[str] = Form(default_factory=list),
+    pick: list[int] = Form(default_factory=list),
+    row_category: list[str] = Form(default_factory=list),
+    row_subcategory: list[str] = Form(default_factory=list),
+    row_nature: list[str] = Form(default_factory=list),
     account_id: str = Form(""),
 ) -> HTMLResponse:
-    """Write the ticked suggestions as tags; the server re-checks every pair."""
+    """Write the ticked rows as tags; the server re-checks every pair.
+
+    The review form posts one hidden category/subcategory and one nature
+    ``<select>`` per row (the user may change the suggested value) plus
+    the indices of the ticked rows in ``pick``.
+    """
     tags = read_nature_tags()
     expense_tree = read_categories()
     applied = 0
-    for raw in pick:
-        try:
-            category, subcategory, nature = json.loads(raw)
-        except (ValueError, TypeError):
+    for index in pick:
+        if (
+            not 0
+            <= index
+            < min(len(row_category), len(row_subcategory), len(row_nature))
+        ):
             continue
+        category, subcategory, nature = (
+            row_category[index],
+            row_subcategory[index],
+            row_nature[index],
+        )
         if nature not in NATURES or not category_pair_exists(
             expense_tree, TransactionType.EXPENSE, category, subcategory
         ):
@@ -278,11 +308,40 @@ def apply_suggestions(
         applied += 1
     if applied:
         write_nature_tags(tags)
-    _, ledger = _scoped(request, account_id)
+    account_id, ledger = _scoped(request, account_id)
     noun = "tag" if applied == 1 else "tags"
     return _render_table(
         request,
         ledger,
+        account_id,
         oob=True,
         headers=toast(f"Applied {applied} {noun}", close_dialog=True),
     )
+
+
+@router.post("/tag", response_class=HTMLResponse)
+def set_tag(
+    request: Request,
+    category: str = Form(...),
+    subcategory: str = Form(""),
+    nature: str = Form(""),
+    show_flexible: bool = Form(False),
+    account_id: str = Form(""),
+) -> HTMLResponse:
+    """Set (or, with a blank ``nature``, clear) one category/subcategory's tag.
+
+    Backs the table's inline tag select. Re-renders the table, keeping the
+    "show flexible" toggle as the client had it.
+    """
+    tags = read_nature_tags()
+    if nature in NATURES or nature == "":
+        if category_pair_exists(
+            read_categories(), TransactionType.EXPENSE, category, subcategory
+        ):
+            if nature:
+                tags[(category, subcategory)] = nature
+            else:
+                tags.pop((category, subcategory), None)
+            write_nature_tags(tags)
+    account_id, ledger = _scoped(request, account_id)
+    return _render_table(request, ledger, account_id, show_flexible=show_flexible)

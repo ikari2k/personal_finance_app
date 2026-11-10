@@ -1,6 +1,5 @@
 """Integration tests for the fixed-vs-flexible card, page and review dialog."""
 
-import json
 from datetime import date
 
 from app import config
@@ -102,20 +101,83 @@ def test_review_dialog_suggests_untagged_subcategory(client):
 def test_apply_writes_only_picked_valid_rows_and_leaves_categories_alone(client):
     _setup(client)
     categories_before = config.CATEGORIES_PATH.read_text()
-    good = json.dumps(["Housing", "Rent", "fixed"])
-    ghost = json.dumps(["Nope", "", "fixed"])
-    bad_nature = json.dumps(["Housing", "", "bogus"])
 
     response = client.post(
-        "/reports/fixed-flexible/apply", data={"pick": [good, ghost, bad_nature]}
+        "/reports/fixed-flexible/apply",
+        data={
+            "pick": ["0", "1", "2", "3"],
+            "row_category": ["Housing", "Nope", "Housing", "Housing"],
+            "row_subcategory": ["Rent", "", "", "Rent"],
+            "row_nature": ["fixed", "fixed", "bogus", "flexible"],
+        },
     )
-
+    # index 3 reuses ("Housing", "Rent") and is applied last, so it wins.
     assert response.status_code == 200
-    assert read_nature_tags() == {("Housing", "Rent"): "fixed"}
-    assert "close-dialog" in response.headers["HX-Trigger"]
-    assert "Applied 1 tag" in response.headers["HX-Trigger"]
+    assert read_nature_tags() == {("Housing", "Rent"): "flexible"}
+    assert "Applied 2 tags" in response.headers["HX-Trigger"]
     assert 'hx-swap-oob="true"' in response.text
     assert config.CATEGORIES_PATH.read_text() == categories_before
+
+
+def test_apply_lets_the_user_change_the_suggested_nature(client):
+    _setup(client)
+
+    client.post(
+        "/reports/fixed-flexible/apply",
+        data={
+            "pick": ["0"],
+            "row_category": ["Housing"],
+            "row_subcategory": ["Rent"],
+            "row_nature": ["semi"],
+        },
+    )
+
+    assert read_nature_tags() == {("Housing", "Rent"): "semi"}
+
+
+def test_inline_tag_select_sets_changes_and_clears_a_tag(client):
+    _setup(client)
+    form = {"category": "Housing", "subcategory": "Rent", "account_id": ""}
+
+    client.post("/reports/fixed-flexible/tag", data={**form, "nature": "fixed"})
+    assert read_nature_tags() == {("Housing", "Rent"): "fixed"}
+
+    client.post("/reports/fixed-flexible/tag", data={**form, "nature": "flexible"})
+    assert read_nature_tags() == {("Housing", "Rent"): "flexible"}
+
+    response = client.post("/reports/fixed-flexible/tag", data={**form, "nature": ""})
+    assert read_nature_tags() == {}
+    assert response.status_code == 200
+
+
+def test_inline_tag_rejects_unknown_category_and_nature(client):
+    _setup(client)
+
+    client.post(
+        "/reports/fixed-flexible/tag",
+        data={"category": "Nope", "subcategory": "", "nature": "fixed"},
+    )
+    client.post(
+        "/reports/fixed-flexible/tag",
+        data={"category": "Housing", "subcategory": "Rent", "nature": "bogus"},
+    )
+
+    assert read_nature_tags() == {}
+
+
+def test_inline_tag_keeps_show_flexible_state(client):
+    _setup(client)
+    data = {"category": "Housing", "subcategory": "Rent", "nature": "fixed"}
+
+    shown = client.post(
+        "/reports/fixed-flexible/tag", data={**data, "show_flexible": "true"}
+    )
+    hidden = client.post(
+        "/reports/fixed-flexible/tag", data={**data, "show_flexible": "false"}
+    )
+
+    assert 'class=""' in shown.text
+    assert 'class="hide-flexible"' in hidden.text
 
 
 def test_review_skips_suggestions_that_match_and_unticks_overrides(client):
