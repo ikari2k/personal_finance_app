@@ -2767,3 +2767,16 @@ tr.is-met .br-check { margin-right: 0.4rem; }
   font-variant-numeric: tabular-nums;
 }
 .nw-tip .muted { margin-left: 0.4rem; }
+.nw-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 2rem;
+  margin: 0.75rem 0 0;
+  font-variant-numeric: tabular-nums;
+}
+.nw-stats dt {
+  font-size: 0.75rem;
+  color: var(--pico-muted-color);
+}
+.nw-stats dd { margin: 0; font-weight: 600; }
+.nw-stats dd .muted { margin-left: 0.4rem; font-weight: 400; font-size: 0.75rem; }

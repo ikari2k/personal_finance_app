@@ -1359,6 +1359,8 @@ def _svg_net_worth_line(
     ]
 
     first_value, last_value = points[0].value, points[-1].value
+    high_point = max(points, key=lambda p: p.value)
+    low_point = min(points, key=lambda p: p.value)
     change = last_value - first_value
     return {
         "has_data": True,
@@ -1382,6 +1384,11 @@ def _svg_net_worth_line(
             for (x, y), p in zip(xy, points, strict=True)
         ],
         "value": last_value,
+        "start": first_value,
+        "high": high_point.value,
+        "high_day": day_label(high_point.day),
+        "low": low_point.value,
+        "low_day": day_label(low_point.day),
         "change": change,
         "change_pct": (float(change / abs(first_value) * 100) if first_value else None),
         "direction": "up" if change >= 0 else "down",

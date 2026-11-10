@@ -1717,3 +1717,22 @@ def test_month_report_has_section_index_matching_its_sections(client):
         assert f'id="{anchor}"' in text
     # No expenses in this (empty) month: no dead links to missing sections.
     assert 'href="#spending"' not in nav and 'href="#movers"' not in nav
+
+
+def test_net_worth_fragment_shows_start_high_low_and_change(client):
+    _create_account(client, starting_balance="1000.00")
+    _create_transaction(
+        client, date="2026-11-01", type="income", category="Salary", amount="500"
+    )
+    _create_transaction(
+        client, date="2026-11-05", type="expense", category="Rent", amount="800"
+    )
+
+    html = client.get("/reports/net-worth?range=1M&account_id=").text
+
+    stats = html.split('class="nw-stats"')[1]
+    assert "1,500.00" in stats  # high
+    assert "700.00" in stats  # low and current
+    # The range opens on 1 Nov's closing balance (1,500), so it fell by 800.
+    assert "−800.00" in stats
+    assert "−53.33%" in stats

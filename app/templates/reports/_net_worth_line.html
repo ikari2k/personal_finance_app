@@ -50,6 +50,19 @@
       </svg>
       <div class="nw-tip" hidden></div>
     </div>
+    <dl class="nw-stats">
+      <div><dt>Start</dt><dd>{{ net_worth.start|money }}</dd></div>
+      <div><dt>High</dt><dd>{{ net_worth.high|money }}<span class="muted">{{ net_worth.high_day }}</span></dd></div>
+      <div><dt>Low</dt><dd>{{ net_worth.low|money }}<span class="muted">{{ net_worth.low_day }}</span></dd></div>
+      <div>
+        <dt>Change</dt>
+        <dd class="nw-change {{ net_worth.direction }}">{{ '+' if net_worth.change >= 0 else '−' }}{{ net_worth.change|abs|money }}</dd>
+      </div>
+      <div>
+        <dt>Change %</dt>
+        <dd class="nw-change {{ net_worth.direction }}">{% if net_worth.change_pct is not none %}{{ '+' if net_worth.change >= 0 else '−' }}{{ "%.2f"|format(net_worth.change_pct|abs) }}%{% else %}&ndash;{% endif %}</dd>
+      </div>
+    </dl>
   {% else %}
     <p>No transactions yet.</p>
   {% endif %}
