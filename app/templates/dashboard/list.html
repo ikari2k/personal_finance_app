@@ -37,14 +37,9 @@
         </div>
       {% endif %}
     </div>
-    {% if sparkline_svg %}
-      <div class="dash-hero-chart">
-        <div class="spark-wrap">{{ sparkline_svg | safe }}</div>
-        <div class="dash-hero-chart-caption">
-          {% for label in sparkline_labels %}<span>{{ label.split(' ')[0][:3] }}</span>{% endfor %}
-        </div>
-      </div>
-    {% endif %}
+    <div class="dash-hero-chart">
+      {% include "reports/_net_worth_line.html" %}
+    </div>
   </div>
 
   <div class="dash-grid">

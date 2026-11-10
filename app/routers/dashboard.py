@@ -30,7 +30,7 @@ from fastapi.responses import HTMLResponse
 from app.models.account import ACCOUNT_TYPE_LABELS, AccountType
 from app.models.transaction import TransactionType
 from app.routers.budget_rule import recent_months
-from app.routers.reports import _category_config, _ring_geometry
+from app.routers.reports import _category_config, _net_worth_line, _ring_geometry
 from app.routers.scope import resolve_account
 from app.services.aggregation import (
     UNCATEGORIZED,
@@ -85,7 +85,6 @@ TOP_TRANSACTIONS_LIMIT = 5
 # the transactions list's own "group by months with activity, not every
 # calendar month" convention.
 RECENT_DAYS_LIMIT = 5
-SPARKLINE_MONTHS = 12
 # Trailing windows (in days) for the "Average monthly spend" widget —
 # the standard ~1/3/12-month rolling-average horizons, shortest first so
 # the trend comparison below reads "recent pace vs. your longer-run
@@ -108,87 +107,6 @@ def _pct_change(current: Decimal, previous: Decimal) -> Decimal | None:
     return (current - previous) / abs(previous) * 100
 
 
-# _SPARK_W is 460 * 1.4 = 644 — widened 40% alongside .dash-hero-chart's
-# own max-width/flex-basis in style.css (also *1.4) so the two scale
-# together: the chart gets wider on screen without also getting taller,
-# since the SVG's rendered height follows its viewBox aspect ratio
-# (width:100%; height:auto), and _SPARK_H is deliberately left alone.
-_SPARK_W, _SPARK_H = 644, 96
-_SPARK_PAD_RIGHT, _SPARK_PAD_TOP, _SPARK_PAD_BOTTOM = 4, 8, 6
-# Reserved on the left for the max/min value labels — a plain sparkline
-# with no numbers on its scale can't actually be read, only glanced at
-# (see references/marks-and-anatomy.md's "every label names a value the
-# chart reaches"), so this trades a slice of plot width for two labels
-# instead of leaving the axis silent.
-_SPARK_LABEL_GUTTER = 60
-
-
-def _svg_net_worth_sparkline(values: list[Decimal]) -> str:
-    """Return a small inline-SVG area+line sparkline for the last few months.
-
-    Deliberately not ``reports._svg_net_worth_chart`` — that draws a full
-    chart with bars, gridlines, and a full axis sized for its own page;
-    this is a compact glance-only version for the dashboard hero, same
-    "one scale, labeled reach, theme-token colors" discipline at a much
-    smaller size, just with only the two labels (max and min) a
-    sparkline has room for rather than a full tick axis. A single value
-    (or none) draws a flat line instead of dividing by a zero span.
-    """
-    if not values:
-        return ""
-    floats = [float(v) for v in values]
-    n = len(floats)
-    vmin, vmax = min(floats), max(floats)
-    vspan = (vmax - vmin) or 1.0
-    plot_x0 = _SPARK_LABEL_GUTTER
-    plot_x1 = _SPARK_W - _SPARK_PAD_RIGHT
-
-    def xy(i: int, v: float) -> tuple[float, float]:
-        x = plot_x0 + (plot_x1 - plot_x0) * (i / (n - 1) if n > 1 else 0.5)
-        y = _SPARK_PAD_TOP + (_SPARK_H - _SPARK_PAD_TOP - _SPARK_PAD_BOTTOM) * (
-            1 - (v - vmin) / vspan
-        )
-        return x, y
-
-    points = [xy(i, v) for i, v in enumerate(floats)]
-    path_d = "M " + " L ".join(f"{x:.1f} {y:.1f}" for x, y in points)
-    floor_y = _SPARK_H - _SPARK_PAD_BOTTOM
-    area_d = (
-        path_d
-        + f" L {points[-1][0]:.1f} {floor_y:.1f} L {points[0][0]:.1f} {floor_y:.1f} Z"
-    )
-    top_y, bottom_y = _SPARK_PAD_TOP, floor_y
-    mid_y = (top_y + bottom_y) / 2
-    gridlines = "".join(
-        f'<line x1="{plot_x0}" y1="{y:.1f}" x2="{plot_x1}" y2="{y:.1f}" '
-        f'class="spark-grid"/>'
-        for y in (top_y, mid_y, bottom_y)
-    )
-    # Top/bottom gridlines land exactly on vmax/vmin (xy()'s own mapping
-    # puts the highest value at the top row and the lowest at the
-    # bottom), so labeling them there is exact, not an approximation.
-    labels = (
-        f'<text x="{plot_x0 - 8}" y="{top_y:.1f}" dy="0.32em" text-anchor="end" '
-        f'class="spark-axis-label">{vmax:,.0f}</text>'
-        f'<text x="{plot_x0 - 8}" y="{bottom_y:.1f}" dy="0.32em" text-anchor="end" '
-        f'class="spark-axis-label">{vmin:,.0f}</text>'
-    )
-    last_x, last_y = points[-1]
-    return (
-        f'<svg viewBox="0 0 {_SPARK_W} {_SPARK_H}" aria-label="Net worth trend">'
-        f'<defs><linearGradient id="nwFill" x1="0" y1="0" x2="0" y2="1">'
-        f'<stop offset="0%" class="spark-fill-start"/>'
-        f'<stop offset="100%" class="spark-fill-end"/></linearGradient></defs>'
-        f"{gridlines}"
-        f'<path d="{area_d}" fill="url(#nwFill)" stroke="none"/>'
-        f'<path d="{path_d}" fill="none" class="spark-line" stroke-width="2" '
-        f'stroke-linecap="round" stroke-linejoin="round"/>'
-        f'<circle cx="{last_x:.1f}" cy="{last_y:.1f}" r="3.2" class="spark-dot"/>'
-        f"{labels}"
-        f"</svg>"
-    )
-
-
 @router.get("/dashboard", response_class=HTMLResponse)
 def dashboard(request: Request, account_id: str | None = None) -> HTMLResponse:
     """Render the dashboard: net worth, this month, accounts, budgets, activity.
@@ -208,7 +126,7 @@ def dashboard(request: Request, account_id: str | None = None) -> HTMLResponse:
     ledger = [t for t in full_ledger if not account_id or t.account_id == account_id]
     balances = all_balances(accounts, ledger)
 
-    # --- net worth + sparkline ---
+    # --- net worth + line chart ---
     net_worth_points = net_worth_by_month(ledger, accounts)
     current_net_worth = (
         net_worth_points[-1].value
@@ -228,8 +146,7 @@ def dashboard(request: Request, account_id: str | None = None) -> HTMLResponse:
         if previous_net_worth is not None
         else None
     )
-    sparkline_points = net_worth_points[-SPARKLINE_MONTHS:]
-    sparkline_svg = _svg_net_worth_sparkline([p.value for p in sparkline_points])
+    net_worth_line = _net_worth_line(ledger, accounts, account_id)
 
     # --- this month vs last month ---
     today = date.today()
@@ -461,8 +378,8 @@ def dashboard(request: Request, account_id: str | None = None) -> HTMLResponse:
             "net_worth_delta": net_worth_delta,
             "net_worth_delta_pct": net_worth_delta_pct,
             "has_attention": bool(uncategorized_count or transfer_candidate_count),
-            "sparkline_svg": sparkline_svg,
-            "sparkline_labels": [p.label for p in sparkline_points],
+            "net_worth": net_worth_line,
+            "compact": True,
             "income_total": income_total,
             "expense_total": expense_total,
             "expense_forecast": expense_forecast,

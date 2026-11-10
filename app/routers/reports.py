@@ -1868,8 +1868,12 @@ def net_worth_chart_fragment(
     request: Request,
     range_key: str = Query(DEFAULT_NET_WORTH_RANGE, alias="range"),
     account_id: str | None = None,
+    compact: bool = False,
 ) -> HTMLResponse:
-    """Render just the net worth line chart for one range tab (an HTMX swap target)."""
+    """Render just the net worth line chart for one range tab (an HTMX swap target).
+
+    ``compact`` drops the headline (the dashboard hero supplies its own).
+    """
     account_id = resolve_account(request, account_id)
     transactions = _filter_by_account(read_ledger(), account_id)
     net_worth = _net_worth_line(
@@ -1878,7 +1882,7 @@ def net_worth_chart_fragment(
     return templates.TemplateResponse(
         request,
         "reports/_net_worth_line.html",
-        {"net_worth": net_worth, "account_id": account_id},
+        {"net_worth": net_worth, "account_id": account_id, "compact": compact},
     )
 
 

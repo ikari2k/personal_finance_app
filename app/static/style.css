@@ -1845,26 +1845,6 @@ fieldset legend {
 .dash-hero-delta .muted { color: var(--pico-muted-color); font-weight: 500; }
 
 .dash-hero-chart { flex: 1 1 448px; max-width: 42rem; min-width: 0; }
-.spark-wrap svg { width: 100%; height: auto; display: block; overflow: visible; }
-.spark-grid { stroke: var(--pico-muted-border-color); stroke-width: 1; }
-.spark-line { stroke: var(--pico-ins-color); }
-.spark-dot { fill: var(--pico-ins-color); }
-.spark-axis-label {
-  fill: var(--pico-muted-color);
-  font-family: var(--pico-font-family);
-  font-size: 9px;
-  font-variant-numeric: tabular-nums;
-}
-.spark-fill-start { stop-color: var(--pico-ins-color); stop-opacity: 0.2; }
-.spark-fill-end { stop-color: var(--pico-ins-color); stop-opacity: 0; }
-
-.dash-hero-chart-caption {
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.7rem;
-  color: var(--pico-muted-color);
-  margin-top: 0.25rem;
-}
 
 .dash-grid {
   display: grid;

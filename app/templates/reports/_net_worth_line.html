@@ -2,11 +2,14 @@
   Stock-style net worth chart: headline value + change, range tabs, daily
   line with an area fill and a hover crosshair (app.js, `.nw-chart`). Shared
   by reports/list.html (range tabs, swapped via HTMX into #net-worth-line)
-  and reports/year.html (one year, no tabs). Expects ``net_worth`` in scope;
-  ``account_id`` is only needed for the tab links.
+  and reports/year.html (one year, no tabs), and the dashboard hero
+  (``compact``: no headline, the hero above it already shows the value).
+  Expects ``net_worth`` in scope; ``account_id`` and ``compact`` feed the
+  tab links so a swap keeps the same shape.
 #}
 <div id="net-worth-line">
   {% if net_worth.has_data %}
+    {% if not compact %}
     <div class="nw-head">
       <span class="nw-value">{{ net_worth.value|money }}</span>
       <span class="nw-change {{ net_worth.direction }}">
@@ -16,12 +19,13 @@
       </span>
       <span class="muted">{{ net_worth.label }}</span>
     </div>
+    {% endif %}
     {% if net_worth.tabs %}
       <div class="nw-tabs" role="tablist">
         {% for key in net_worth.tabs %}
           <button type="button" role="tab" class="nw-tab"
                   aria-selected="{{ 'true' if key == net_worth.active else 'false' }}"
-                  hx-get="/reports/net-worth?range={{ key }}&account_id={{ account_id|urlencode }}"
+                  hx-get="/reports/net-worth?range={{ key }}&account_id={{ account_id|urlencode }}{% if compact %}&compact=1{% endif %}"
                   hx-target="#net-worth-line" hx-swap="outerHTML">{{ key if key != 'MAX' else 'Max' }}</button>
         {% endfor %}
       </div>

@@ -481,3 +481,47 @@ def test_dashboard_ignores_a_remembered_account_that_no_longer_exists(client):
 
     assert response.status_code == 200
     assert "1,000.00" in response.text
+
+
+def test_dashboard_hero_shows_net_worth_line_without_duplicate_headline(client):
+    client.post(
+        "/accounts",
+        data={
+            "account_id": "chk",
+            "name": "Chk",
+            "number": "1",
+            "description": "",
+            "starting_balance": "500.00",
+        },
+    )
+    client.post(
+        "/transactions",
+        data={
+            "account_id": "chk",
+            "date": "2026-03-01",
+            "type": "income",
+            "category": "Salary",
+            "subcategory": "",
+            "description": "",
+            "amount": "200",
+            "notes": "",
+        },
+    )
+
+    response = client.get("/dashboard")
+
+    assert response.status_code == 200
+    assert "nw-tab" in response.text
+    assert "nw-line" in response.text
+    # The hero already shows the value, so the chart's own headline is dropped.
+    assert "nw-value" not in response.text
+    assert "compact=1" in response.text
+
+
+def test_net_worth_fragment_compact_hides_headline(client):
+    full = client.get("/reports/net-worth?range=1Y&account_id=")
+    compact = client.get("/reports/net-worth?range=1Y&account_id=&compact=1")
+
+    assert compact.status_code == 200
+    assert "nw-value" not in compact.text
+    assert full.status_code == 200
