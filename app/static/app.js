@@ -197,3 +197,72 @@
     }, 0);
   });
 })();
+
+/*
+ * Net worth line chart hover (reports/_net_worth_line.html, `.nw-chart`):
+ * a crosshair, dot and tooltip snapped to the nearest daily point. The
+ * points ship as JSON in `data-points` ([x, y, date, value] in SVG
+ * viewBox units). Delegated on `document` since htmx swaps the chart
+ * when a range tab is clicked.
+ */
+(function () {
+  "use strict";
+
+  function pointsOf(chart) {
+    if (!chart._pts) chart._pts = JSON.parse(chart.dataset.points);
+    return chart._pts;
+  }
+
+  function hide(chart) {
+    chart.querySelectorAll(".nw-cross, .nw-dot, .nw-tip").forEach(function (el) {
+      el.hidden = true;
+    });
+  }
+
+  document.addEventListener("mousemove", function (e) {
+    var chart = e.target.closest && e.target.closest(".nw-chart");
+    if (!chart) return;
+    var svg = chart.querySelector(".nw-svg");
+    var rect = svg.getBoundingClientRect();
+    var vb = svg.viewBox.baseVal;
+    var scale = vb.width / rect.width;
+    var x = (e.clientX - rect.left) * scale;
+    var pts = pointsOf(chart);
+    if (!pts.length) return;
+
+    // Binary search for the point whose x is closest.
+    var lo = 0, hi = pts.length - 1;
+    while (lo < hi) {
+      var mid = (lo + hi) >> 1;
+      if (pts[mid][0] < x) lo = mid + 1; else hi = mid;
+    }
+    if (lo > 0 && Math.abs(pts[lo - 1][0] - x) < Math.abs(pts[lo][0] - x)) lo--;
+    var p = pts[lo];
+
+    var cross = chart.querySelector(".nw-cross");
+    var dot = chart.querySelector(".nw-dot");
+    var tip = chart.querySelector(".nw-tip");
+    cross.setAttribute("x1", p[0]);
+    cross.setAttribute("x2", p[0]);
+    dot.setAttribute("cx", p[0]);
+    dot.setAttribute("cy", p[1]);
+    tip.textContent = "";
+    var value = document.createElement("strong");
+    value.textContent = p[3];
+    var day = document.createElement("span");
+    day.className = "muted";
+    day.textContent = p[2];
+    tip.append(value, day);
+    cross.hidden = dot.hidden = tip.hidden = false;
+
+    var px = p[0] / scale;
+    var left = px + 12;
+    if (left + tip.offsetWidth > rect.width) left = px - 12 - tip.offsetWidth;
+    tip.style.left = Math.max(0, left) + "px";
+  });
+
+  document.addEventListener("mouseout", function (e) {
+    var chart = e.target.closest && e.target.closest(".nw-chart");
+    if (chart && !chart.contains(e.relatedTarget)) hide(chart);
+  });
+})();

@@ -3,6 +3,11 @@
 from datetime import date
 
 
+def _svg(html, label):
+    """Return the markup of the <svg> whose aria-label is ``label``."""
+    return html.split(f'aria-label="{label}"')[1].split("</svg>")[0]
+
+
 def _create_account(client, account_id="chk", starting_balance="1000.00"):
     client.post(
         "/accounts",
@@ -67,10 +72,10 @@ def test_reports_overview_renders_net_worth_chart(client):
     assert "700.00" in response.text
 
 
-def test_reports_overview_chart_y_axis_starts_at_zero_and_adapts_step(client):
+def test_reports_overview_bars_y_axis_starts_at_zero_and_adapts_step(client):
     _create_account(client, starting_balance="500.00")
     _create_transaction(
-        client, date="2026-01-01", type="income", category="Salary", amount="200"
+        client, date="2026-01-01", type="income", category="Salary", amount="700"
     )
     _create_transaction(
         client, date="2026-02-01", type="expense", category="Groceries", amount="50"
@@ -79,16 +84,13 @@ def test_reports_overview_chart_y_axis_starts_at_zero_and_adapts_step(client):
     response = client.get("/reports")
 
     assert response.status_code == 200
-    net_worth_svg = response.text.split('aria-label="Net worth over time"')[1].split(
-        "</svg>"
-    )[0]
-    # Values stay within 0-700ish, so _nice_step picks 200 (not a flat
-    # 5,000) to land on a readable ~5 gridlines: 0/200/400/600/800.
-    assert net_worth_svg.count("chart-gridline") == 5
-    assert net_worth_svg.count("chart-axis-label") == 5
-    assert ">0<" in net_worth_svg
-    assert ">200<" in net_worth_svg
-    assert ">800<" in net_worth_svg
+    bars_svg = _svg(response.text, "Monthly income and expense")
+    # Bars reach 700, so _nice_step picks 200: 0/200/400/600/800.
+    assert bars_svg.count("chart-gridline") == 5
+    assert bars_svg.count("chart-axis-label") == 5
+    assert ">0<" in bars_svg
+    assert ">200<" in bars_svg
+    assert ">800<" in bars_svg
 
 
 def test_reports_overview_chart_y_axis_stays_uncrowded_for_large_values(client):
@@ -103,9 +105,9 @@ def test_reports_overview_chart_y_axis_stays_uncrowded_for_large_values(client):
     response = client.get("/reports")
 
     assert response.status_code == 200
-    net_worth_svg = response.text.split('aria-label="Net worth over time"')[1].split(
-        "</svg>"
-    )[0]
+    net_worth_svg = response.text.split('aria-label="Monthly income and expense"')[
+        1
+    ].split("</svg>")[0]
     # A flat every-5,000 step would crowd this axis with ~27 gridlines;
     # the adaptive step keeps it to a small, readable handful instead.
     assert net_worth_svg.count("chart-gridline") <= 6
@@ -131,9 +133,9 @@ def test_reports_overview_chart_includes_monthly_income_expense_bars(client):
     response = client.get("/reports")
 
     assert response.status_code == 200
-    net_worth_svg = response.text.split('aria-label="Net worth over time"')[1].split(
-        "</svg>"
-    )[0]
+    net_worth_svg = response.text.split('aria-label="Monthly income and expense"')[
+        1
+    ].split("</svg>")[0]
     # One income + one expense rect per month (a month with no expense
     # still gets a zero-height rect, not an omitted one).
     assert net_worth_svg.count("bar-income") == 2
@@ -155,9 +157,9 @@ def test_reports_overview_chart_shows_month_and_year_x_axis_labels(client):
     response = client.get("/reports")
 
     assert response.status_code == 200
-    net_worth_svg = response.text.split('aria-label="Net worth over time"')[1].split(
-        "</svg>"
-    )[0]
+    net_worth_svg = response.text.split('aria-label="Monthly income and expense"')[
+        1
+    ].split("</svg>")[0]
     assert ">Dec<" in net_worth_svg
     assert ">Jan<" in net_worth_svg
     # The year label only appears once per year change, not on every
@@ -198,7 +200,7 @@ def test_year_detail_with_no_transactions(client):
     assert "No data" in response.text
 
 
-def test_year_detail_shows_net_worth_chart_for_just_that_year(client):
+def test_year_detail_shows_net_worth_line_for_just_that_year(client):
     _create_account(client, starting_balance="1000.00")
     _create_transaction(
         client, date="2025-06-01", type="income", category="Salary", amount="500"
@@ -213,15 +215,57 @@ def test_year_detail_shows_net_worth_chart_for_just_that_year(client):
     response = client.get("/reports/2026")
 
     assert response.status_code == 200
-    net_worth_svg = response.text.split('aria-label="Net worth over time"')[1].split(
-        "</svg>"
-    )[0]
-    # Only 2026's two months show, even though 2025 has earlier activity
-    # that the cumulative net worth still needs to account for.
-    assert net_worth_svg.count("chart-point") == 2
-    assert "January 2026 net worth: 1,700.00" in net_worth_svg
-    assert "February 2026 net worth: 2,000.00" in net_worth_svg
-    assert "2025" not in net_worth_svg
+    line_svg = _svg(response.text, "Net worth over time")
+    # The line covers 2026 only (starts from 2025's closing balance of
+    # 1,500, ends at 2,000); no range tabs on a year page.
+    assert "nw-line" in line_svg
+    assert "nw-tab" not in response.text
+    assert "1,500.00" in response.text  # first point's value in data-points
+    assert "2025" not in line_svg
+    bars_svg = _svg(response.text, "Monthly income and expense")
+    assert bars_svg.count("bar-income") == 2
+    assert "January 2026 income: 200.00" in bars_svg
+
+
+def test_overview_net_worth_line_has_range_tabs_and_headline(client):
+    _create_account(client, starting_balance="500.00")
+    _create_transaction(
+        client, date="2026-03-01", type="income", category="Salary", amount="200"
+    )
+
+    response = client.get("/reports")
+
+    assert response.status_code == 200
+    assert "nw-tab" in response.text
+    for key in ("1M", "6M", "YTD", "1Y", "5Y", "Max"):
+        assert f">{key}</button>" in response.text
+    assert 'class="nw-value">700.00' in response.text
+
+
+def test_net_worth_fragment_respects_range(client):
+    _create_account(client, starting_balance="0.00")
+    _create_transaction(
+        client, date="2024-01-01", type="income", category="Salary", amount="100"
+    )
+    _create_transaction(
+        client, date="2026-11-01", type="income", category="Salary", amount="50"
+    )
+
+    maximum = client.get("/reports/net-worth?range=MAX&account_id=")
+    one_month = client.get("/reports/net-worth?range=1M&account_id=")
+
+    assert maximum.status_code == one_month.status_code == 200
+    assert 'aria-selected="true"' in maximum.text
+    # Max includes the 2024 starting point; 1M starts at 100 (no change before Nov).
+    assert maximum.text.count('"100.00"') > 1
+    assert "▲" in maximum.text
+    assert "2024" not in one_month.text.split("data-points")[1].split("'>")[0]
+
+
+def test_net_worth_fragment_unknown_range_falls_back(client):
+    response = client.get("/reports/net-worth?range=bogus&account_id=")
+
+    assert response.status_code == 200
 
 
 def test_year_detail_chart_stretches_to_fill_since_a_year_never_needs_scroll(client):

@@ -4,8 +4,8 @@ Read-only — no forms, no writes. Every view pulls from the shared
 ``services.aggregation`` group-by layer (CLAUDE.md's "one shared
 aggregation layer" invariant) rather than one-off per-view logic.
 
-The net worth chart combines a line (cumulative net worth) with paired
-income/expense bars, one shared axis, all rendered as plain inline SVG
+The net worth chart is a stock-style daily line with range tabs; a smaller
+chart of paired monthly income/expense bars sits beside it. Both are plain inline SVG
 computed here — not via a vendored JS charting library, a deliberate
 choice (see CLAUDE.md) to keep the app's zero-network-dependency,
 minimal-JS posture intact rather than trusting/maintaining a
@@ -18,7 +18,7 @@ this function and the template, not ``services.aggregation``'s data.
 import math
 import statistics
 from calendar import month_abbr, month_name, monthrange
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from urllib.parse import quote
 
@@ -33,6 +33,7 @@ from app.routers.scope import resolve_account
 from app.services.aggregation import (
     CategoryMonthPoint,
     CategoryTotal,
+    NetWorthDayPoint,
     SubcategoryMonthPoint,
     category_breakdown,
     category_mom_deltas,
@@ -47,7 +48,7 @@ from app.services.aggregation import (
     category_yearly_series,
     forecast_month_end,
     monthly_totals_with_mom,
-    net_worth_by_month,
+    net_worth_by_day,
     subcategory_monthly_totals,
     yearly_totals_with_yoy,
 )
@@ -407,21 +408,21 @@ VISIBLE_MONTHS = 15
 
 
 def _svg_net_worth_chart(
-    rows: list[tuple[str, str, Decimal, Decimal, Decimal]],
+    rows: list[tuple[str, str, Decimal, Decimal]],
     *,
     account_id: str = "",
     per_month_width: int = PER_MONTH_W,
-    height: int = 380,
+    height: int = 240,
     pad_left: int = 84,
     pad_right: int = 16,
     pad_top: int = 16,
     pad_bottom: int = 42,
     tick_step: float | None = None,
 ) -> dict:
-    """Return template-ready SVG geometry: a net worth line plus income/expense bars.
+    """Return template-ready SVG geometry: paired monthly income/expense bars.
 
-    ``rows`` is ``(key, label, net_worth, income_total, expense_total)``
-    quintuples, oldest first, all for the same set of months — ``key``
+    ``rows`` is ``(key, label, income_total, expense_total)``
+    quadruples, oldest first, all for the same set of months — ``key``
     is the "YYYY-MM" form (see ``services.aggregation.NetWorthPoint``),
     used both to build the x-axis month/year labels below and each bar's
     own click-through link into ``/transactions`` (``income_link``/
@@ -431,8 +432,8 @@ def _svg_net_worth_chart(
     app). Returns ``{"has_data": False}`` for no rows. Income/expense
     plot as magnitudes (``abs``) rising from the shared zero baseline —
     mixing a signed expense total with an unsigned bar height would read
-    wrong — while the net worth line plots its actual (signed) value
-    against the same baseline. Y-axis ticks start from 0 (see
+    wrong. The net worth line lives in ``_svg_net_worth_line``. Y-axis
+    ticks start from 0 (see
     ``_tick_bounds``) at a step ``_nice_step`` picks to fit the data
     (``tick_step`` overrides that, mainly for tests that want an exact,
     predictable step rather than whatever the sample data happens to
@@ -448,11 +449,9 @@ def _svg_net_worth_chart(
     if not rows:
         return {"has_data": False}
 
-    net_worth_values = [float(net_worth) for _, _, net_worth, _, _ in rows]
-    magnitudes = [abs(float(income)) for _, _, _, income, _ in rows] + [
-        abs(float(expense)) for _, _, _, _, expense in rows
+    all_values = [abs(float(income)) for _, _, income, _ in rows] + [
+        abs(float(expense)) for _, _, _, expense in rows
     ]
-    all_values = net_worth_values + magnitudes
     step = (
         tick_step
         if tick_step is not None
@@ -476,10 +475,9 @@ def _svg_net_worth_chart(
     zero_y = y_at(0)
 
     bars = []
-    coords = []
     x_labels = []
     previous_year = None
-    for index, (key, label, net_worth, income, expense) in enumerate(rows):
+    for index, (key, label, income, expense) in enumerate(rows):
         center = plot_left + group_width * (index + 0.5)
         income_y = y_at(abs(float(income)))
         expense_y = y_at(abs(float(expense)))
@@ -510,7 +508,6 @@ def _svg_net_worth_chart(
                 "label": label,
             }
         )
-        coords.append((center, y_at(float(net_worth))))
 
         year, month = key.split("-")
         x_labels.append(
@@ -524,8 +521,6 @@ def _svg_net_worth_chart(
             }
         )
         previous_year = year
-
-    path_d = "M " + " L ".join(f"{x:.1f},{y:.1f}" for x, y in coords)
 
     step_count = round((y_max - y_min) / step)
     y_ticks = [
@@ -543,14 +538,8 @@ def _svg_net_worth_chart(
         "plot_left": plot_left,
         "plot_right": plot_right,
         "zero_y": zero_y,
-        "path_d": path_d,
-        "coords": coords,
         "bars": bars,
         "x_labels": x_labels,
-        "labels": [label for _, label, _, _, _ in rows],
-        "net_worth_labels": [
-            f"{float(net_worth):,.2f}" for _, _, net_worth, _, _ in rows
-        ],
         "y_ticks": y_ticks,
         "visible_width": pad_left + group_width * min(count, VISIBLE_MONTHS),
         # When the data already fits within one screen (a single year on
@@ -1266,46 +1255,185 @@ def _filter_by_account(transactions: list, account_id: str) -> list:
     return [t for t in transactions if t.account_id == account_id]
 
 
-def _net_worth_chart(
-    transactions: list, accounts: list, account_id: str, *, year: int | None = None
+def _monthly_bars_chart(
+    transactions: list, account_id: str, *, year: int | None = None
 ) -> dict:
-    """Build ``_svg_net_worth_chart``'s geometry, optionally scoped to one year.
+    """Build ``_svg_net_worth_chart``'s bar geometry, optionally for one year.
 
     Shared by ``reports_overview`` (the full history) and ``year_detail``
-    (just that year's slice) so the two never duplicate the same
-    "resolve which accounts' starting balances count, run
-    ``net_worth_by_month``, zip in each month's income/expense" steps.
-    Net worth is always computed from the *full* transaction history
-    even when ``year`` narrows the result afterward — it's a running
-    cumulative total, so computing it against only one year's
-    transactions would drop every prior year's contribution and start
-    the line from zero instead of where the account actually stood
-    entering that year.
+    (just that year's months).
     """
-    net_worth_accounts = (
-        [a for a in accounts if a.id == account_id] if account_id else accounts
-    )
-    net_worth_points = net_worth_by_month(transactions, net_worth_accounts)
+    months = list(reversed(monthly_totals_with_mom(transactions)))  # oldest first
     if year is not None:
-        net_worth_points = [
-            p for p in net_worth_points if p.key.startswith(f"{year:04d}-")
-        ]
-    monthly_totals = {
-        month.key: month for month in monthly_totals_with_mom(transactions)
-    }
+        months = [m for m in months if m.key.startswith(f"{year:04d}-")]
     return _svg_net_worth_chart(
-        [
-            (
-                point.key,
-                point.label,
-                point.value,
-                monthly_totals[point.key].income_total,
-                monthly_totals[point.key].expense_total,
-            )
-            for point in net_worth_points
-        ],
+        [(m.key, m.label, m.income_total, m.expense_total) for m in months],
         account_id=account_id,
     )
+
+
+# Range tabs for the net worth line chart: key -> trailing window in days
+# (``None`` = the whole history; "YTD" is handled separately since it
+# starts on Jan 1, not a fixed number of days back).
+NET_WORTH_RANGES: dict[str, int | None] = {
+    "1M": 30,
+    "6M": 182,
+    "YTD": None,
+    "1Y": 365,
+    "5Y": 1826,
+    "MAX": None,
+}
+DEFAULT_NET_WORTH_RANGE = "1Y"
+
+
+def _svg_net_worth_line(
+    points: list[NetWorthDayPoint],
+    *,
+    width: int = 900,
+    height: int = 300,
+    pad_left: int = 64,
+    pad_right: int = 16,
+    pad_top: int = 16,
+    pad_bottom: int = 30,
+) -> dict:
+    """Return template-ready geometry for a stock-style net worth line + area.
+
+    ``points`` is one value per day, oldest first (already sliced to the
+    visible range). Unlike the bars chart, the y-axis fits the data's own
+    min/max rather than spanning 0 — a stock chart's job is to show the
+    shape of the move. ``coords`` carries every point as ``[x, y, date
+    label, value label]`` for the hover script (``app.js``). ``change``/
+    ``change_pct`` compare the last point against the first; the pct is
+    ``None`` when the first value is 0. Returns ``{"has_data": False}``
+    for no points.
+    """
+    if not points:
+        return {"has_data": False}
+
+    values = [float(p.value) for p in points]
+    low, high = min(values), max(values)
+    step = _nice_step(high - low if high > low else max(abs(high), 1.0))
+    y_min = math.floor(low / step) * step
+    y_max = math.ceil(high / step) * step
+    if y_min == y_max:
+        y_max += step
+
+    plot_right = width - pad_right
+    plot_bottom = height - pad_bottom
+    plot_width = plot_right - pad_left
+    plot_height = plot_bottom - pad_top
+    last = len(points) - 1
+
+    def x_at(index: int) -> float:
+        return pad_left + (plot_width * index / last if last else plot_width / 2)
+
+    def y_at(value: float) -> float:
+        return pad_top + plot_height * (1 - (value - y_min) / (y_max - y_min))
+
+    xy = [(x_at(i), y_at(v)) for i, v in enumerate(values)]
+    path_d = "M " + " L ".join(f"{x:.1f},{y:.1f}" for x, y in xy)
+    area_d = (
+        f"{path_d} L {xy[-1][0]:.1f},{plot_bottom} L {xy[0][0]:.1f},{plot_bottom} Z"
+    )
+
+    span_days = (points[-1].day - points[0].day).days
+    short = span_days <= 62
+
+    def day_label(day: date) -> str:
+        return (
+            f"{day.day} {_MONTH_ABBR[day.month]}"
+            if short
+            else f"{_MONTH_ABBR[day.month]} {day.year}"
+        )
+
+    label_count = min(5, len(points))
+    x_labels = []
+    for k in range(label_count):
+        index = round(last * k / (label_count - 1)) if label_count > 1 else 0
+        x_labels.append({"x": xy[index][0], "text": day_label(points[index].day)})
+
+    step_count = round((y_max - y_min) / step)
+    y_ticks = [
+        {"y": y_at(y_min + i * step), "label": f"{y_min + i * step:,.0f}"}
+        for i in range(step_count + 1)
+    ]
+
+    first_value, last_value = points[0].value, points[-1].value
+    change = last_value - first_value
+    return {
+        "has_data": True,
+        "width": width,
+        "height": height,
+        "plot_left": pad_left,
+        "plot_right": plot_right,
+        "plot_top": pad_top,
+        "plot_bottom": plot_bottom,
+        "path_d": path_d,
+        "area_d": area_d,
+        "y_ticks": y_ticks,
+        "x_labels": x_labels,
+        "coords": [
+            [
+                round(x, 1),
+                round(y, 1),
+                f"{p.day.day} {_MONTH_ABBR[p.day.month]} {p.day.year}",
+                f"{p.value:,.2f}",
+            ]
+            for (x, y), p in zip(xy, points, strict=True)
+        ],
+        "value": last_value,
+        "change": change,
+        "change_pct": (float(change / abs(first_value) * 100) if first_value else None),
+        "direction": "up" if change >= 0 else "down",
+    }
+
+
+def _net_worth_line(
+    transactions: list,
+    accounts: list,
+    account_id: str,
+    *,
+    range_key: str = DEFAULT_NET_WORTH_RANGE,
+    year: int | None = None,
+    today: date | None = None,
+) -> dict:
+    """Build ``_svg_net_worth_line``'s geometry for one range tab or one year.
+
+    The running total is always computed over the *full* history and
+    sliced afterward (a cumulative figure — see ``net_worth_by_day``).
+    With ``year`` the slice is that calendar year and no tabs are shown
+    (``tabs`` is ``None``); otherwise ``range_key`` picks the trailing
+    window (unknown keys fall back to the default). The result also
+    carries the tab labels and which one is active.
+    """
+    today = today or date.today()
+    scoped_accounts = (
+        [a for a in accounts if a.id == account_id] if account_id else accounts
+    )
+    series = net_worth_by_day(transactions, scoped_accounts, today)
+
+    if year is not None:
+        series = [p for p in series if p.day.year == year]
+        tabs = None
+        label = str(year)
+    else:
+        if range_key not in NET_WORTH_RANGES:
+            range_key = DEFAULT_NET_WORTH_RANGE
+        days = NET_WORTH_RANGES[range_key]
+        if range_key == "YTD":
+            start = date(today.year, 1, 1)
+        elif days is not None:
+            start = today - timedelta(days=days)
+        else:
+            start = None
+        if start is not None:
+            series = [p for p in series if p.day >= start]
+        tabs = list(NET_WORTH_RANGES)
+        label = range_key
+
+    chart = _svg_net_worth_line(series)
+    chart.update(tabs=tabs, active=range_key if year is None else "", label=label)
+    return chart
 
 
 def _year_stats(years: list, today: date) -> dict[int, dict]:
@@ -1735,6 +1863,25 @@ def _spending_categories_headers(
     ]
 
 
+@router.get("/net-worth", response_class=HTMLResponse)
+def net_worth_chart_fragment(
+    request: Request,
+    range_key: str = Query(DEFAULT_NET_WORTH_RANGE, alias="range"),
+    account_id: str | None = None,
+) -> HTMLResponse:
+    """Render just the net worth line chart for one range tab (an HTMX swap target)."""
+    account_id = resolve_account(request, account_id)
+    transactions = _filter_by_account(read_ledger(), account_id)
+    net_worth = _net_worth_line(
+        transactions, read_accounts(), account_id, range_key=range_key
+    )
+    return templates.TemplateResponse(
+        request,
+        "reports/_net_worth_line.html",
+        {"net_worth": net_worth, "account_id": account_id},
+    )
+
+
 @router.get("", response_class=HTMLResponse)
 def reports_overview(
     request: Request,
@@ -1759,7 +1906,8 @@ def reports_overview(
     transactions = _filter_by_account(ledger, account_id)
     categories = read_categories()
     expense_config = _category_config(categories, TransactionType.EXPENSE)
-    chart = _net_worth_chart(transactions, accounts, account_id)
+    chart = _monthly_bars_chart(transactions, account_id)
+    net_worth = _net_worth_line(transactions, accounts, account_id)
     years = yearly_totals_with_yoy(transactions)
     today = date.today()
     year_txn_links = {
@@ -1841,6 +1989,7 @@ def reports_overview(
             "rule_to_label": f"{month_name[today.month]} {today.year}",
             "years": years,
             "chart": chart,
+            "net_worth": net_worth,
             "accounts": accounts,
             "account_id": account_id,
             "year_txn_links": year_txn_links,
@@ -2040,7 +2189,8 @@ def year_detail(
     ledger = read_ledger()
     transactions = _filter_by_account(ledger, account_id)
     categories = read_categories()
-    chart = _net_worth_chart(transactions, accounts, account_id, year=year)
+    chart = _monthly_bars_chart(transactions, account_id, year=year)
+    net_worth = _net_worth_line(transactions, accounts, account_id, year=year)
     income_breakdown = category_breakdown(transactions, year, TransactionType.INCOME)
     expense_breakdown = category_breakdown(transactions, year, TransactionType.EXPENSE)
     if resolved_sort == "change":
@@ -2154,6 +2304,7 @@ def year_detail(
             "accounts": accounts,
             "account_id": account_id,
             "chart": chart,
+            "net_worth": net_worth,
             "months": months,
             "month_labels": month_labels,
             "date_from": f"{year:04d}-01-01",

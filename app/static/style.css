@@ -1235,16 +1235,6 @@ fieldset legend {
   font-weight: 600;
 }
 
-.chart-line {
-  fill: none;
-  stroke: var(--pico-primary);
-  stroke-width: 2.5;
-}
-
-.chart-point {
-  fill: var(--pico-primary);
-}
-
 .chart-zero-line {
   stroke: var(--pico-muted-border-color);
   stroke-dasharray: 4 4;
@@ -1379,17 +1369,6 @@ fieldset legend {
 
 .chart-legend-swatch.bar-expense {
   background-color: #e27e76;
-}
-
-.chart-legend-swatch.line-net-worth {
-  background-color: var(--pico-primary);
-  border-radius: 50%;
-}
-
-.chart-range {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 0.25rem;
 }
 
 /* The year-detail report's income/expense category breakdowns sit side
@@ -2743,3 +2722,68 @@ tr.is-met .br-check { margin-right: 0.4rem; }
 
 .br-legend { margin: 0 0 0.75rem; font-size: var(--text-sm); }
 .br-legend .br-badge { margin: 0 0.4rem 0 0; }
+
+/* Net worth line chart (reports/_net_worth_line.html): stock-style daily
+ * line + area, range tabs, hover crosshair filled in by app.js. The line
+ * takes the green/red of the range's overall direction. */
+#net-worth-line { --nw-color: var(--pico-ins-color); }
+.nw-chart.down, .nw-change.down { --nw-color: var(--pico-del-color); }
+.nw-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+.nw-value {
+  font-family: var(--font-mono);
+  font-size: 2rem;
+  font-variant-numeric: tabular-nums;
+}
+.nw-change { font-weight: 600; font-variant-numeric: tabular-nums; }
+.nw-change.up { color: var(--pico-ins-color); }
+.nw-change.down { color: var(--pico-del-color); }
+.nw-tabs { display: flex; gap: 0.25rem; margin-bottom: 0.5rem; }
+.nw-tab {
+  width: auto;
+  margin: 0;
+  padding: 0.2rem 0.7rem;
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  color: var(--pico-muted-color);
+  font-weight: 600;
+}
+.nw-tab[aria-selected="true"] {
+  color: var(--pico-primary);
+  border-bottom-color: var(--pico-primary);
+}
+.nw-chart { position: relative; }
+.nw-svg { display: block; width: 100%; height: auto; }
+.nw-line {
+  fill: none;
+  stroke: var(--nw-color);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+.nw-area { fill: var(--nw-color); opacity: 0.12; }
+.nw-cross {
+  stroke: var(--pico-muted-color);
+  stroke-dasharray: 3 3;
+}
+.nw-dot { fill: var(--nw-color); }
+.nw-tip {
+  position: absolute;
+  top: 0;
+  z-index: 5;
+  pointer-events: none;
+  white-space: nowrap;
+  background: var(--pico-background-color);
+  border: var(--pico-border-width) solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+  padding: 0.3rem 0.6rem;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+.nw-tip .muted { margin-left: 0.4rem; }

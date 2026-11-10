@@ -1,0 +1,52 @@
+{#
+  Stock-style net worth chart: headline value + change, range tabs, daily
+  line with an area fill and a hover crosshair (app.js, `.nw-chart`). Shared
+  by reports/list.html (range tabs, swapped via HTMX into #net-worth-line)
+  and reports/year.html (one year, no tabs). Expects ``net_worth`` in scope;
+  ``account_id`` is only needed for the tab links.
+#}
+<div id="net-worth-line">
+  {% if net_worth.has_data %}
+    <div class="nw-head">
+      <span class="nw-value">{{ net_worth.value|money }}</span>
+      <span class="nw-change {{ net_worth.direction }}">
+        {{ '▲' if net_worth.direction == 'up' else '▼' }}
+        {{ net_worth.change|abs|money }}{% if net_worth.change_pct is not none %}
+          &middot; {{ "%.2f"|format(net_worth.change_pct|abs) }}%{% endif %}
+      </span>
+      <span class="muted">{{ net_worth.label }}</span>
+    </div>
+    {% if net_worth.tabs %}
+      <div class="nw-tabs" role="tablist">
+        {% for key in net_worth.tabs %}
+          <button type="button" role="tab" class="nw-tab"
+                  aria-selected="{{ 'true' if key == net_worth.active else 'false' }}"
+                  hx-get="/reports/net-worth?range={{ key }}&account_id={{ account_id|urlencode }}"
+                  hx-target="#net-worth-line" hx-swap="outerHTML">{{ key if key != 'MAX' else 'Max' }}</button>
+        {% endfor %}
+      </div>
+    {% endif %}
+    <div class="nw-chart {{ net_worth.direction }}" data-points='{{ net_worth.coords|tojson }}'>
+      <svg viewBox="0 0 {{ net_worth.width }} {{ net_worth.height }}" class="nw-svg"
+           role="img" aria-label="Net worth over time">
+        {% for tick in net_worth.y_ticks %}
+          <line x1="{{ net_worth.plot_left }}" y1="{{ tick.y }}" x2="{{ net_worth.plot_right }}" y2="{{ tick.y }}"
+                class="chart-gridline"/>
+          <text x="{{ net_worth.plot_left - 8 }}" y="{{ tick.y }}" class="chart-axis-label"
+                text-anchor="end" dominant-baseline="middle">{{ tick.label }}</text>
+        {% endfor %}
+        <path d="{{ net_worth.area_d }}" class="nw-area"/>
+        <path d="{{ net_worth.path_d }}" class="nw-line"/>
+        {% for xl in net_worth.x_labels %}
+          <text x="{{ xl.x }}" y="{{ net_worth.height - 8 }}" class="chart-x-label"
+                text-anchor="{{ 'start' if loop.first else 'end' if loop.last else 'middle' }}">{{ xl.text }}</text>
+        {% endfor %}
+        <line class="nw-cross" y1="{{ net_worth.plot_top }}" y2="{{ net_worth.plot_bottom }}" hidden/>
+        <circle class="nw-dot" r="5" hidden/>
+      </svg>
+      <div class="nw-tip" hidden></div>
+    </div>
+  {% else %}
+    <p>No transactions yet.</p>
+  {% endif %}
+</div>

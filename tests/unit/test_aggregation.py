@@ -24,6 +24,7 @@ from app.services.aggregation import (
     grouped_transaction_view,
     merge_months,
     monthly_totals_with_mom,
+    net_worth_by_day,
     net_worth_by_month,
     rolling_average_daily_expense,
     rolling_average_monthly_expense,
@@ -1937,3 +1938,22 @@ def test_money_filter_formats_with_thousands_separators():
     assert money(-1500) == "-1,500.00"
     assert money("400") == "400.00"
     assert money(1234.5) == "1,234.50"
+
+
+def test_net_worth_by_day_carries_balance_over_quiet_days_through_today():
+    accounts = [_account(id="chk", starting_balance=Decimal("100"))]
+    txns = [
+        _txn(id="t1", date=date(2026, 1, 1), amount=Decimal("50")),
+        _txn(id="t2", date=date(2026, 1, 3), amount=Decimal("-20")),
+    ]
+
+    points = net_worth_by_day(txns, accounts, date(2026, 1, 5))
+
+    assert [p.day.day for p in points] == [1, 2, 3, 4, 5]
+    assert [p.value for p in points] == [Decimal(v) for v in (150, 150, 130, 130, 130)]
+
+
+def test_net_worth_by_day_empty_without_transactions():
+    accounts = [_account(id="chk", starting_balance=Decimal("100"))]
+
+    assert net_worth_by_day([], accounts, date(2026, 1, 5)) == []

@@ -616,6 +616,44 @@ def net_worth_by_month(
     return points
 
 
+@dataclass
+class NetWorthDayPoint:
+    """Combined net worth at the end of one calendar day."""
+
+    day: date_
+    value: Decimal
+
+
+def net_worth_by_day(
+    transactions: Iterable[Transaction],
+    accounts: Iterable[Account],
+    today: date_,
+) -> list[NetWorthDayPoint]:
+    """Return one ``NetWorthDayPoint`` per calendar day, oldest first.
+
+    Same running total as ``net_worth_by_month`` (starting balances plus
+    every signed amount to date, transfer legs cancelling), but sampled
+    daily from the first transaction through the later of the last
+    transaction or ``today``, carrying the balance forward over quiet
+    days so the series is continuous. Empty when there are no transactions.
+    """
+    by_day: dict[date_, Decimal] = defaultdict(lambda: Decimal("0"))
+    for transaction in transactions:
+        by_day[transaction.date] += transaction.amount
+    if not by_day:
+        return []
+
+    running = sum((a.starting_balance for a in accounts), Decimal("0"))
+    day = min(by_day)
+    end = max(max(by_day), today)
+    points = []
+    while day <= end:
+        running += by_day.get(day, Decimal("0"))
+        points.append(NetWorthDayPoint(day=day, value=running))
+        day += timedelta(days=1)
+    return points
+
+
 UNCATEGORIZED = "Uncategorized"  # matches services.importer.DEFAULT_CATEGORY
 
 

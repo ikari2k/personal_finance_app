@@ -150,6 +150,10 @@ tests/unit/     tmp_path-isolated; tests/integration/  TestClient, conftest redi
   `app/models/category.py`, plus a macro and `_icon_registry` entry in
   `app/templates/_category_icons.html`. Icon keys in stored data must stay stable; only artwork
   changes. Icons are Lucide markup, vendored verbatim (24×24, stroke 2).
+- The net worth chart (`reports/_net_worth_line.html`) is a daily line (`aggregation.net_worth_by_day`,
+  always computed over the full ledger, then sliced) with range tabs that swap via HTMX from
+  `/reports/net-worth?range=`; the year report shows the same line without tabs. Hover is `app.js`
+  reading `data-points`. Monthly income/expense bars are a separate chart below it.
 - Charts are inline SVG built in Python (no JS chart library); chart data and SVG rendering are
   separate functions. Chart colors follow the entity, never its rank.
 
