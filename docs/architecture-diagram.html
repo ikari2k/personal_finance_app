@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Finance App Architecture</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper:   #ffffff;
+      --color-ink:     #373c44;
+      --color-muted:   #646b79;
+      --color-accent:  #0172ad;
+      --font-sans:     "Instrument Sans Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+      --font-serif:    "Iowan Old Style", Georgia, "Times New Roman", serif;
+      --font-mono:     "JetBrains Mono Variable", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-paper);
+      color: var(--color-ink);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 2rem;
+    }
+
+    .frame { max-width: 1280px; width: 100%; }
+    /* The SVG holds its readable width (min-width == the viewBox width, so the
+       type ramp is never silently scaled down). This wrapper lets a narrow
+       screen scroll the diagram instead of the whole page. */
+    .diagram-container { width: 100%; overflow-x: auto; }
+
+    .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.5rem;
+    }
+
+    h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem);
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      color: var(--color-ink);
+      margin-bottom: 1.5rem;
+    }
+
+    svg { width: 100%; min-width: 1280px; display: block; }
+    @media print {
+      .diagram-container { overflow-x: visible; }
+      svg { min-width: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Architecture · Diagram Design</p>
+    <h1>Routers glue the layers; only storage touches disk</h1>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="architecture-title architecture-desc">
+        <title id="architecture-title">Finance App Architecture</title>
+        <desc id="architecture-desc">Architecture of the local finance app: a browser talks to thin routers, which call pure services and read or write through a storage layer that alone touches the CSV ledger and TOML config, guarded by a file lock and backups.</desc>
+        <defs>
+          <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#646b79"/></marker>
+          <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#0172ad"/></marker>
+          <marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#0a58ca"/></marker>
+        </defs>
+
+        <rect width="100%" height="100%" fill="#ffffff"/>
+
+        <!-- ============ Connectors (drawn before nodes) ============ -->
+        <!-- Browser -> Routers -->
+        <line x1="200" y1="280" x2="270" y2="280" stroke="#646b79" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <rect x="217" y="260" width="36" height="12" rx="2" fill="#ffffff"/>
+        <text x="235" y="269" fill="#4b525e" font-size="8" font-family="'JetBrains Mono Variable', ui-monospace, Menlo, monospace" text-anchor="middle" letter-spacing="0.06em">HTMX</text>
+
+        <!-- Routers -> Storage (headline path) -->
+        <line x1="430" y1="280" x2="680" y2="280" stroke="#0172ad" stroke-width="1.4" marker-end="url(#arrow-accent)"/>
+        <rect x="517" y="260" width="76" height="12" rx="2" fill="#ffffff"/>
+        <text x="555" y="269" fill="#4b525e" font-size="8" font-family="'JetBrains Mono Variable', ui-monospace, Menlo, monospace" text-anchor="middle" letter-spacing="0.06em">READ · WRITE</text>
+
+        <!-- Routers -> Services -->
+        <line x1="350" y1="322" x2="350" y2="430" stroke="#646b79" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <rect x="358" y="370" width="44" height="12" rx="2" fill="#ffffff"/>
+        <text x="380" y="379" fill="#4b525e" font-size="8" font-family="'JetBrains Mono Variable', ui-monospace, Menlo, monospace" text-anchor="middle" letter-spacing="0.06em">CALLS</text>
+
+        <!-- Services -> Aggregation -->
+        <line x1="430" y1="472" x2="470" y2="472" stroke="#646b79" stroke-width="1.2" marker-end="url(#arrow)"/>
+
+        <!-- Storage -> Lock + backups (dashed: passes through, not a data path) -->
+        <line x1="760" y1="322" x2="760" y2="430" stroke="#646b79" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+        <rect x="768" y="370" width="68" height="12" rx="2" fill="#ffffff"/>
+        <text x="802" y="379" fill="#4b525e" font-size="8" font-family="'JetBrains Mono Variable', ui-monospace, Menlo, monospace" text-anchor="middle" letter-spacing="0.06em">WRITES VIA</text>
+
+        <!-- Storage -> Ledger (fanned port y=266) -->
+        <path d="M840,266 H912 Q920,266 920,258 V208 Q920,200 928,200 H1000" fill="none" stroke="#646b79" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <!-- Storage -> Config (fanned port y=294) -->
+        <path d="M840,294 H912 Q920,294 920,302 V352 Q920,360 928,360 H1000" fill="none" stroke="#646b79" stroke-width="1.2" marker-end="url(#arrow)"/>
+
+        <!-- ============ Nodes ============ -->
+        <!-- Browser (external) -->
+        <rect x="40" y="238" width="160" height="84" rx="6" fill="#ffffff"/>
+        <rect x="40" y="238" width="160" height="84" rx="6" fill="#373c44" fill-opacity="0.03" stroke="#373c44" stroke-opacity="0.3" stroke-width="1"/>
+        <text x="120" y="278" fill="#373c44" font-size="12" font-weight="600" font-family="'Instrument Sans Variable', system-ui, sans-serif" text-anchor="middle">Browser</text>
+        <text x="120" y="296" fill="#646b79" font-size="9" font-family="'JetBrains Mono Variable', ui-monospace, Menlo, monospace" text-anchor="middle">Jinja2 pages + HTMX</text>
+        <text x="120" y="310" fill="#646b79" font-size="9" font-family="'JetBrains Mono Variable', ui-monospace, Menlo, monospace" text-anchor="middle">Pico.css · app.js</text>
+
+        <!-- Routers (backend) -->
+        <rect x="270" y="238" width="160" height="84" rx="6" fill="#ffffff"/>
+        <rect x="270" y="238" width="160" height="84" rx="6" fill="#ffffff" stroke="#373c44" stroke-width="1"/>
+        <text x="350" y="278" fill="#373c44" font-size="12" font-weight="600" font-family="'Instrument Sans Variable', system-ui, sans-serif" text-anchor="middle">Routers</text>
+        <text x="350" y="296" fill="#646b79" font-size="9" font-family="'JetBrains Mono Variable', ui-monospace, Menlo, monospace" text-anchor="middle">app/routers</text>
+        <text x="350" y="310" fill="#646b79" font-size="9" font-family="'JetBrains Mono Variable', ui-monospace, Menlo, monospace" text-anchor="middle">thin HTTP/HTMX glue</text>
+
+        <!-- Storage (focal) -->
+        <rect x="680" y="238" width="160" height="84" rx="6" fill="#ffffff"/>
+        <rect x="680" y="238" width="160" height="84" rx="6" fill="#e8f3fa" stroke="#0172ad" stroke-width="1.2"/>
+        <text x="760" y="278" fill="#373c44" font-size="12" font-weight="600" font-family="'Instrument Sans Variable', system-ui, sans-serif" text-anchor="middle">Storage</text>
+        <text x="760" y="296" fill="#646b79" font-size="9" font-family="'JetBrains Mono Variable', ui-monospace, Menlo, monospace" text-anchor="middle">app/storage</text>
+        <text x="760" y="310" fill="#646b79" font-size="9" font-family="'JetBrains Mono Variable', ui-monospace, Menlo, monospace" text-anchor="middle">only layer on disk</text>
+
+        <!-- Services (backend) -->
+        <rect x="270" y="430" width="160" height="84" rx="6" fill="#ffffff"/>
+        <rect x="270" y="430" width="160" height="84" rx="6" fill="#ffffff" stroke="#373c44" stroke-width="1"/>
+        <text x="350" y="470" fill="#373c44" font-size="12" font-weight="600" font-family="'Instrument Sans Variable', system-ui, sans-serif" text-anchor="middle">Services</text>
+        <text x="350" y="488" fill="#646b79" font-size="9" font-family="'JetBrains Mono Variable', ui-monospace, Menlo, monospace" text-anchor="middle">pure business logic</text>
+        <text x="350" y="502" fill="#646b79" font-size="9" font-family="'JetBrains Mono Variable', ui-monospace, Menlo, monospace" text-anchor="middle">no file I/O</text>
+
+        <!-- Aggregation (backend) -->
+        <rect x="470" y="430" width="160" height="84" rx="6" fill="#ffffff"/>
+        <rect x="470" y="430" width="160" height="84" rx="6" fill="#ffffff" stroke="#373c44" stroke-width="1"/>
+        <text x="550" y="470" fill="#373c44" font-size="12" font-weight="600" font-family="'Instrument Sans Variable', system-ui, sans-serif" text-anchor="middle">Aggregation</text>
+        <text x="550" y="488" fill="#646b79" font-size="9" font-family="'JetBrains Mono Variable', ui-monospace, Menlo, monospace" text-anchor="middle">services/aggregation.py</text>
+        <text x="550" y="502" fill="#646b79" font-size="9" font-family="'JetBrains Mono Variable', ui-monospace, Menlo, monospace" text-anchor="middle">shared by all views</text>
+
+        <!-- Lock + backups (security / guardrail) -->
+        <rect x="680" y="430" width="160" height="84" rx="6" fill="#ffffff"/>
+        <rect x="680" y="430" width="160" height="84" rx="6" fill="#0172ad" fill-opacity="0.05" stroke="#0172ad" stroke-opacity="0.5" stroke-width="1" stroke-dasharray="4,4"/>
+        <text x="760" y="470" fill="#373c44" font-size="12" font-weight="600" font-family="'Instrument Sans Variable', system-ui, sans-serif" text-anchor="middle">Lock + backups</text>
+        <text x="760" y="488" fill="#646b79" font-size="9" font-family="'JetBrains Mono Variable', ui-monospace, Menlo, monospace" text-anchor="middle">file_lock · .bak</text>
+        <text x="760" y="502" fill="#646b79" font-size="9" font-family="'JetBrains Mono Variable', ui-monospace, Menlo, monospace" text-anchor="middle">config/backups · 30d</text>
+
+        <!-- Ledger (store) -->
+        <rect x="1000" y="164" width="240" height="72" rx="6" fill="#ffffff"/>
+        <rect x="1000" y="164" width="240" height="72" rx="6" fill="#373c44" fill-opacity="0.05" stroke="#646b79" stroke-width="1"/>
+        <text x="1120" y="198" fill="#373c44" font-size="12" font-weight="600" font-family="'Instrument Sans Variable', system-ui, sans-serif" text-anchor="middle">Ledger</text>
+        <text x="1120" y="216" fill="#646b79" font-size="9" font-family="'JetBrains Mono Variable', ui-monospace, Menlo, monospace" text-anchor="middle">data/ledger.csv</text>
+        <text x="1120" y="230" fill="#646b79" font-size="9" font-family="'JetBrains Mono Variable', ui-monospace, Menlo, monospace" text-anchor="middle">transfers = two linked rows</text>
+
+        <!-- Config (store) -->
+        <rect x="1000" y="324" width="240" height="72" rx="6" fill="#ffffff"/>
+        <rect x="1000" y="324" width="240" height="72" rx="6" fill="#373c44" fill-opacity="0.05" stroke="#646b79" stroke-width="1"/>
+        <text x="1120" y="358" fill="#373c44" font-size="12" font-weight="600" font-family="'Instrument Sans Variable', system-ui, sans-serif" text-anchor="middle">Config</text>
+        <text x="1120" y="376" fill="#646b79" font-size="9" font-family="'JetBrains Mono Variable', ui-monospace, Menlo, monospace" text-anchor="middle">config/*.toml</text>
+        <text x="1120" y="390" fill="#646b79" font-size="9" font-family="'JetBrains Mono Variable', ui-monospace, Menlo, monospace" text-anchor="middle">accounts · categories · rules</text>
+
+        <!-- Models (cross-cutting, spans the layers) -->
+        <rect x="40" y="572" width="800" height="44" rx="6" fill="#ffffff"/>
+        <rect x="40" y="572" width="800" height="44" rx="6" fill="#646b79" fill-opacity="0.1" stroke="#4b525e" stroke-width="1"/>
+        <text x="60" y="599" fill="#373c44" font-size="12" font-weight="600" font-family="'Instrument Sans Variable', system-ui, sans-serif">Models</text>
+        <text x="124" y="599" fill="#646b79" font-size="9" font-family="'JetBrains Mono Variable', ui-monospace, Menlo, monospace">pydantic domain types · Decimal money · imported by every layer</text>
+
+        <!-- Editorial callout -->
+        <line x1="900" y1="440" x2="900" y2="496" stroke="#0172ad" stroke-width="1.2"/>
+        <text x="916" y="462" fill="#373c44" font-size="15" font-style="italic" font-family="'Iowan Old Style', Georgia, serif">Services never touch disk;</text>
+        <text x="916" y="484" fill="#373c44" font-size="15" font-style="italic" font-family="'Iowan Old Style', Georgia, serif">routers hold no business logic.</text>
+
+        <!-- ============ Legend ============ -->
+        <line x1="40" y1="652" x2="1240" y2="652" stroke="#373c44" stroke-opacity="0.1" stroke-width="0.8"/>
+        <text x="40" y="684" fill="#646b79" font-size="8" font-family="'JetBrains Mono Variable', ui-monospace, Menlo, monospace" letter-spacing="0.14em">LEGEND</text>
+
+        <rect x="120" y="674" width="16" height="12" rx="2" fill="#ffffff" stroke="#373c44" stroke-width="1"/>
+        <text x="144" y="684" fill="#646b79" font-size="9" font-family="'JetBrains Mono Variable', ui-monospace, Menlo, monospace">Layer</text>
+
+        <rect x="230" y="674" width="16" height="12" rx="2" fill="#e8f3fa" stroke="#0172ad" stroke-width="1.2"/>
+        <text x="254" y="684" fill="#646b79" font-size="9" font-family="'JetBrains Mono Variable', ui-monospace, Menlo, monospace">Disk gateway</text>
+
+        <rect x="380" y="674" width="16" height="12" rx="2" fill="#373c44" fill-opacity="0.05" stroke="#646b79" stroke-width="1"/>
+        <text x="404" y="684" fill="#646b79" font-size="9" font-family="'JetBrains Mono Variable', ui-monospace, Menlo, monospace">Data file</text>
+
+        <rect x="510" y="674" width="16" height="12" rx="2" fill="#373c44" fill-opacity="0.03" stroke="#373c44" stroke-opacity="0.3" stroke-width="1"/>
+        <text x="534" y="684" fill="#646b79" font-size="9" font-family="'JetBrains Mono Variable', ui-monospace, Menlo, monospace">External client</text>
+
+        <rect x="660" y="674" width="16" height="12" rx="2" fill="#0172ad" fill-opacity="0.05" stroke="#0172ad" stroke-opacity="0.5" stroke-width="1" stroke-dasharray="4,4"/>
+        <text x="684" y="684" fill="#646b79" font-size="9" font-family="'JetBrains Mono Variable', ui-monospace, Menlo, monospace">Guardrail</text>
+
+        <rect x="790" y="674" width="16" height="12" rx="2" fill="#646b79" fill-opacity="0.1" stroke="#4b525e" stroke-width="1"/>
+        <text x="814" y="684" fill="#646b79" font-size="9" font-family="'JetBrains Mono Variable', ui-monospace, Menlo, monospace">Cross-cutting</text>
+      </svg>
+    </div>
+  </div>
+</body>
+</html>
