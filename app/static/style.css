@@ -2060,9 +2060,8 @@ fieldset legend {
 .dash-budget-pct { font-size: 0.82rem; font-weight: 700; }
 
 /* ---- top categories ---- */
-.dash-cat-bars { display: flex; flex-direction: column; gap: 0.6rem; }
-.dash-cat-bar-row { display: flex; align-items: center; gap: 0.6rem; }
-
+/* One line per category: this month's spend, then last month and the
+ * monthly average, each with this month's change against it. */
 .dash-cat-glyph {
   display: inline-flex;
   align-items: center;
@@ -2076,44 +2075,34 @@ fieldset legend {
 }
 .dash-cat-glyph svg { width: 0.9rem; height: 0.9rem; }
 
-.dash-cat-bar-main { flex: 1; min-width: 0; }
-.dash-cat-bar-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  font-size: 0.8rem;
-  margin-bottom: 0.25rem;
-}
-.dash-cat-bar-name { font-weight: 600; display: block; font-size: 0.8rem; }
-.dash-cat-bar-amount { font-variant-numeric: tabular-nums; color: var(--pico-muted-color); font-size: 0.76rem; }
-.dash-cat-bar-track {
-  display: block;
-  height: 0.4rem;
-  background: rgba(127, 127, 127, 0.14);
-  border-radius: 999px;
-  overflow: hidden;
-}
-.dash-cat-bar-fill { display: block; height: 100%; background: #2563eb; border-radius: 999px; }
-
-/* This-month / last-month / average-per-month lines share one grid so
- * their labels, bars, amounts and delta columns line up exactly, all on
- * one scale (the widget's own max) so lengths compare across rows too.
- * The delta column is empty on the this-month line. */
-.dash-cat-line {
+.dash-cat-row {
   display: grid;
-  grid-template-columns: 5rem 1fr 4.6rem 3.6rem;
+  grid-template-columns: 1.65rem minmax(4rem, 1fr) 5rem 8rem 8rem;
   align-items: center;
   gap: 0.5rem;
-  margin-top: 0.3rem;
-  font-size: 0.72rem;
-  color: var(--pico-muted-color);
+  padding: 0.18rem 0;
+  font-size: 0.8rem;
 }
-.dash-cat-line-amount { text-align: right; font-variant-numeric: tabular-nums; }
-.dash-cat-line-delta { text-align: right; font-variant-numeric: tabular-nums; }
-.dash-cat-line-delta.up { color: var(--pico-ins-color); }
-.dash-cat-line-delta.down { color: var(--pico-del-color); }
-.dash-cat-bar-fill-last { background: #8b5cf6; }
-.dash-cat-bar-fill-avg { background: #14b8a6; }
+.dash-cat-cols { padding: 0; font-size: 0.68rem; color: var(--pico-muted-color); }
+.dash-cat-cols span:nth-child(n + 3) { text-align: right; }
+.dash-cat-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dash-cat-amount { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+.dash-cat-cmp {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  font-variant-numeric: tabular-nums;
+}
+.dash-cat-cmp-amount { color: var(--pico-muted-color); }
+.dash-cat-delta { min-width: 2.9rem; text-align: right; font-size: 0.72rem; color: var(--pico-muted-color); }
+.dash-cat-delta.up { color: var(--pico-ins-color); }
+.dash-cat-delta.down { color: var(--pico-del-color); }
+
+@media (max-width: 520px) {
+  .dash-cat-row { grid-template-columns: 1.65rem 1fr 4.4rem 6.6rem 6.6rem; font-size: 0.74rem; }
+  .dash-cat-cmp { gap: 0.25rem; }
+  .dash-cat-delta { min-width: 2.4rem; }
+}
 
 /* ---- recent transactions ---- */
 .dash-txn-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }

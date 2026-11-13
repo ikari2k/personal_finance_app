@@ -294,8 +294,8 @@ def test_dashboard_top_categories_shows_vs_last_month_and_all_time_avg(client):
     assert f"{abs(vs_avg_pct):.0f}%" in response.text
     # Spent less than last month (-25%) -> "up"/green; spent more than
     # the all-time monthly average (+38%) -> "down"/red.
-    assert "dash-cat-line-delta up" in response.text
-    assert "dash-cat-line-delta down" in response.text
+    assert "dash-cat-delta up" in response.text
+    assert "dash-cat-delta down" in response.text
 
 
 def test_dashboard_top_categories_omits_comparisons_for_brand_new_category(client):
@@ -312,8 +312,8 @@ def test_dashboard_top_categories_omits_comparisons_for_brand_new_category(clien
 
     assert response.status_code == 200
     assert "Groceries" in response.text
-    assert "dash-cat-line-delta up" not in response.text
-    assert "dash-cat-line-delta down" not in response.text
+    assert "dash-cat-delta up" not in response.text
+    assert "dash-cat-delta down" not in response.text
 
 
 def _seed_forecastable_history(client):

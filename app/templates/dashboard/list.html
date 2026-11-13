@@ -216,28 +216,25 @@
         <span class="dash-widget-title">Top categories this month</span>
       </div>
       {% if top_categories %}
-        {% macro cat_line(label, value, fill_class, pct, max_value) %}
-          <span class="dash-cat-line">
-            <span class="dash-cat-line-label">{{ label }}</span>
-            <span class="dash-cat-bar-track">
-              <span class="dash-cat-bar-fill {{ fill_class }}" style="width: {{ (value / max_value * 100) if max_value else 0 }}%"></span>
-            </span>
-            <span class="dash-cat-line-amount">{{ value|money }}</span>
-            <span class="dash-cat-line-delta {{ ('down' if pct >= 0 else 'up') if pct is not none else '' }}" title="This month vs {{ label|lower }}">
-              {%- if pct is not none %}{{ '▲' if pct >= 0 else '▼' }} {{ "%.0f"|format(pct|abs) }}%{% endif -%}
+        {% macro cat_cmp(value, pct) %}
+          <span class="dash-cat-cmp">
+            <span class="dash-cat-cmp-amount">{{ value|money }}</span>
+            <span class="dash-cat-delta {{ ('down' if pct >= 0 else 'up') if pct is not none else '' }}">
+              {%- if pct is not none %}{{ '▲' if pct >= 0 else '▼' }} {{ "%.0f"|format(pct|abs) }}%{% else %}&ndash;{% endif -%}
             </span>
           </span>
         {% endmacro %}
-        <div class="dash-cat-bars">
+        <div class="dash-cat-rows">
+          <div class="dash-cat-row dash-cat-cols">
+            <span></span><span></span><span>This month</span><span>Last month</span><span>Monthly avg</span>
+          </div>
           {% for cat in top_categories %}
-            <div class="dash-cat-bar-row">
+            <div class="dash-cat-row">
               <span class="dash-cat-glyph">{{ category_icon(cat.icon) }}</span>
-              <span class="dash-cat-bar-main">
-                <span class="dash-cat-bar-name">{{ cat.name }}</span>
-                {{ cat_line("This month", cat.amount, "", none, top_category_max) }}
-                {{ cat_line("Last month", cat.last_month_amount, "dash-cat-bar-fill-last", cat.vs_last_month_pct, top_category_max) }}
-                {{ cat_line("Avg / month", cat.avg_all_time, "dash-cat-bar-fill-avg", cat.vs_avg_all_time_pct, top_category_max) }}
-              </span>
+              <span class="dash-cat-name">{{ cat.name }}</span>
+              <span class="dash-cat-amount">{{ cat.amount|money }}</span>
+              {{ cat_cmp(cat.last_month_amount, cat.vs_last_month_pct) }}
+              {{ cat_cmp(cat.avg_all_time, cat.vs_avg_all_time_pct) }}
             </div>
           {% endfor %}
         </div>

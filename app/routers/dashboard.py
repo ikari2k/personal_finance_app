@@ -288,14 +288,6 @@ def dashboard(request: Request, account_id: str | None = None) -> HTMLResponse:
                 "vs_avg_all_time_pct": _pct_change(cat.total, avg_all_time),
             }
         )
-    top_category_max = max(
-        (
-            value
-            for c in top_categories
-            for value in (c["amount"], c["last_month_amount"], c["avg_all_time"])
-        ),
-        default=Decimal("0"),
-    )
 
     # --- needs attention ---
     uncategorized_count = sum(
@@ -396,7 +388,6 @@ def dashboard(request: Request, account_id: str | None = None) -> HTMLResponse:
             "near_budget_rows": near_budget_rows,
             "budget_threshold_pct": BUDGET_ATTENTION_THRESHOLD_PCT,
             "top_categories": top_categories,
-            "top_category_max": top_category_max,
             "uncategorized_count": uncategorized_count,
             "transfer_candidate_count": transfer_candidate_count,
             "recent_days": recent_days,
