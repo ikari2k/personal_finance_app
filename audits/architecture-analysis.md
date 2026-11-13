@@ -329,8 +329,10 @@ router, mirroring `app/services/categories.py`'s existing shape:
 Pure functions over rule form fields — no file I/O, matching every other
 services module. Mirrors app/services/categories.py's validation shape.
 """
+
 from decimal import Decimal, InvalidOperation
 from app.models.transaction import TransactionType
+
 
 def parse_priority(raw: str) -> int:
     raw = raw.strip()
@@ -338,6 +340,7 @@ def parse_priority(raw: str) -> int:
         return int(raw) if raw else 0
     except ValueError as exc:
         raise ValueError("priority must be a whole number") from exc
+
 
 def parse_amount_bound(raw: str, field_name: str) -> Decimal | None:
     raw = raw.strip()
@@ -350,6 +353,7 @@ def parse_amount_bound(raw: str, field_name: str) -> Decimal | None:
     if value < 0:
         raise ValueError(f"{field_name} cannot be negative")
     return value
+
 
 # ... parse_rule_type / validate_rule, moved verbatim from routers/rules.py
 ```

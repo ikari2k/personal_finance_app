@@ -320,9 +320,7 @@ from 131 to ~100 lines, with no behavior change.
 
 ```python
 # Duplicated verbatim at app/routers/categories.py:264-272 and :427-437 — extract:
-def _rename_in_rules(
-    old_name: str, new_name: str, rename_fn, *args
-) -> int:
+def _rename_in_rules(old_name: str, new_name: str, rename_fn, *args) -> int:
     """Apply rename_fn if old != new; return how many rules actually changed."""
     if old_name == new_name:
         return 0
@@ -333,9 +331,12 @@ def _rename_in_rules(
     write_rules(renamed_rules)
     return sum(1 for old, new in zip(rules, renamed_rules) if old != new)
 
+
 # Call sites become:
 rules_renamed = _rename_in_rules(category_name, name, rename_category_in_rules)
-rules_renamed = _rename_in_rules(sub_name, name, rename_subcategory_in_rules, category_name, sub_name)
+rules_renamed = _rename_in_rules(
+    sub_name, name, rename_subcategory_in_rules, category_name, sub_name
+)
 ```
 (The second call site's `rename_subcategory_in_rules(rules, category, old_subcategory, new_subcategory)`
 signature needs its args in the right order — adjust `_rename_in_rules`'s `*args` placement
@@ -350,7 +351,9 @@ accordingly; shown here as the shape of the fix, not a drop-in-exact signature m
 #   if category: ledger = [t for t in ledger if t.category == category]
 #   if subcategory: ledger = [t for t in ledger if t.subcategory == subcategory]
 # Extract once:
-def _filtered_ledger(account_id: str, category: str, subcategory: str) -> list[Transaction]:
+def _filtered_ledger(
+    account_id: str, category: str, subcategory: str
+) -> list[Transaction]:
     ledger = read_ledger()
     if account_id:
         ledger = [t for t in ledger if t.account_id == account_id]
