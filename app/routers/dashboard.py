@@ -49,6 +49,7 @@ from app.services.transactions import (
     find_transfer_matches,
 )
 from app.storage.accounts import read_accounts
+from app.storage.budget_rule import read_targets
 from app.storage.categories import read_categories
 from app.storage.ledger import read_ledger
 from app.templating import templates
@@ -354,6 +355,7 @@ def dashboard(request: Request, account_id: str | None = None) -> HTMLResponse:
         "months": recent_months(
             full_ledger, categories, all_accounts, today.year, today.month
         ),
+        "targets": read_targets(),
         "all_accounts_note": bool(account_id),
         "unclassified_count": count_unclassified_expense_categories(categories),
     }

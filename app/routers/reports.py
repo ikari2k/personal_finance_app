@@ -2500,6 +2500,7 @@ def month_detail(
         "reports/month.html",
         {
             "rule_months": month_pair(ledger, categories, accounts, year, month),
+            "rule_targets": read_targets(),
             "rule_link": f"/reports/budget-rule?month={year:04d}-{month:02d}",
             "year": year,
             "month": month,

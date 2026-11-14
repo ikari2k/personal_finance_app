@@ -1,6 +1,6 @@
 {# Rolling 3/6/12-month 50/30/20 summary for /reports. Expects `rule_windows`
    (app.routers.budget_rule.rolling_summaries), `rule_targets`, `rule_to_label`. #}
-{% from "budget_rule/_bar.html" import compact_rows %}
+{% from "budget_rule/_bar.html" import month_rows %}
 <div class="dash-widget-head" style="margin-bottom: 0.15rem;">
   <h2 style="margin: 0;">50/30/20 rule</h2>
   <a class="table-link" href="/reports/budget-rule">Full report &rsaquo;</a>
@@ -8,9 +8,10 @@
 <p class="muted" style="margin-top: 0;">
   Share of income over rolling windows ending {{ rule_to_label }} (all accounts).
   Dashed lines mark the Needs ({{ rule_targets.needs }}%) and Needs + Wants
-  ({{ rule_targets.needs + rule_targets.wants }}%) targets.
+  ({{ rule_targets.needs + rule_targets.wants }}%) targets, the solid line is
+  100% of income.
 </p>
-{{ compact_rows(rule_windows, "No income in this window.") }}
+{{ month_rows(rule_windows, rule_targets, "No income in this window.", wide_labels=true) }}
 <p class="chart-legend">
   <span class="chart-legend-swatch br-swatch-needs"></span> Needs
   <span class="chart-legend-swatch br-swatch-wants"></span> Wants

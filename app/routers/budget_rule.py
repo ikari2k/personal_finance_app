@@ -9,7 +9,6 @@ draws its own.
 """
 
 import calendar
-import math
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
@@ -168,52 +167,122 @@ def _split_bar(
     }
 
 
-def _tick_step(span: float) -> int:
-    return 20 if span <= 120 else 50 if span <= 300 else 100
+# Trend panels: (key, label, target attribute, cap as a multiple of the target).
+# Unclassified has no target, so it gets a fixed scale instead.
+_TREND_PANELS = (
+    ("needs", "Needs", "needs", 2.6),
+    ("wants", "Wants", "wants", 2.6),
+    ("savings", "Savings", "savings", 2.6),
+    ("unclassified", "Unclassified", None, 0),
+)
+
+
+def _break_points(x: float, w: float, y: float) -> str:
+    """Polygon for a jagged tear across a bar of width ``w`` at height ``y``."""
+    teeth = 4
+    step = w / teeth
+    top = [(x + step * i, y + (3 if i % 2 else 0)) for i in range(teeth + 1)]
+    bottom = [(px, py + 4) for px, py in reversed(top)]
+    return " ".join(f"{px:.1f},{py:.1f}" for px, py in top + bottom)
 
 
 def _trend_chart(
     months: list[BudgetRuleMonth], targets: BudgetRuleTargets
 ) -> dict | None:
-    """Geometry for the stacked % of income trend; ``None`` with no months."""
+    """Geometry for the per-bucket trend: one small column chart per bucket.
+
+    Each panel plots that bucket's share of income by month against its own
+    target (dashed line). A bar past the panel's scale is clipped and torn,
+    its label keeping the real figure, so one extreme month cannot flatten
+    the rest. A row of checks on top marks the closed months that met the
+    rule. ``None`` with no months.
+    """
     if not months:
         return None
-    width, height = 720, 260
-    pad_left, pad_right, pad_top, pad_bottom = 44, 12, 22, 30
-    stacks = []
-    for m in months:
-        s = m.split
-        if s.needs_pct is None:
-            stacks.append(None)
-            continue
-        positives = [
-            s.needs_pct,
-            s.wants_pct,
-            max(s.savings_pct, 0),
-            s.unclassified_pct,
-        ]
-        stacks.append(
-            (positives, min(s.savings_pct, Decimal("0")), sum(positives, Decimal("0")))
-        )
-    top = max([100.0] + [float(st[2]) for st in stacks if st])
-    bottom = min([0.0] + [float(st[1]) for st in stacks if st])
-    step = _tick_step(top - bottom)
-    y_max = step * math.ceil(top / step)
-    y_min = -step * math.ceil(-bottom / step)
-    plot_h = height - pad_top - pad_bottom
-    plot_w = width - pad_left - pad_right
+    width = 960
+    gutter, pad_right = 104, 12
+    check_h, label_pad, plot_h, bottom_pad = 26, 16, 112, 16
+    block_h = label_pad + plot_h + bottom_pad
+    plot_w = width - gutter - pad_right
+    slot = plot_w / len(months)
+    bar_w = min(slot * 0.6, 34)
     today = date.today()
     this_month = f"{today.year:04d}-{today.month:02d}"
-    slot = plot_w / len(months)
-    bar_w = slot * 0.6
 
-    def y_at(v: float) -> float:
-        return pad_top + plot_h * (1 - (v - y_min) / (y_max - y_min))
+    def share(m: BudgetRuleMonth, key: str) -> float | None:
+        pct = getattr(m.split, f"{key}_pct")
+        return None if pct is None else float(pct)
 
-    bars, labels = [], []
-    for i, (m, st) in enumerate(zip(months, stacks)):
-        x = pad_left + slot * i + (slot - bar_w) / 2
-        center = x + bar_w / 2
+    panels = []
+    for key, label, target_attr, cap_mult in _TREND_PANELS:
+        values = [v for m in months if (v := share(m, key)) is not None]
+        target = float(getattr(targets, target_attr)) if target_attr else None
+        if target is None and not any(v > 0 for v in values):
+            continue  # nothing unclassified anywhere: no panel
+        if target is not None:
+            hi = min(max([target * 2] + values), target * cap_mult)
+            lo = max(min([0.0] + values), -target * 1.5)
+        else:
+            hi = min(max([10.0] + values), 60.0)
+            lo = 0.0
+        top_y = check_h + len(panels) * block_h + label_pad
+
+        def y_at(v: float, top_y=top_y, hi=hi, lo=lo) -> float:
+            return top_y + plot_h * (1 - (v - lo) / (hi - lo))
+
+        bars = []
+        for i, m in enumerate(months):
+            x = gutter + slot * i + (slot - bar_w) / 2
+            v = share(m, key)
+            live = m.key == this_month
+            if v is None:
+                bars.append({"x": x, "w": bar_w, "none": True, "live": live})
+                continue
+            clipped = v > hi or v < lo
+            shown = max(min(v, hi), lo)
+            zero = y_at(0.0)
+            y = min(y_at(shown), zero)
+            h = abs(y_at(shown) - zero)
+            miss = target is not None and (
+                v < target if key == "savings" else v > target
+            )
+            bar = {
+                "x": x,
+                "w": bar_w,
+                "y": y,
+                "h": max(h, 0.0),
+                "text": f"{v:.0f}",
+                "text_y": (y + h + 10) if v < 0 else y - 3,
+                "text_x": x + bar_w / 2,
+                "miss": miss,
+                "live": live,
+                "none": False,
+                "title": f"{m.label}: {label.lower()} {v:.1f}% of income"
+                + (f" (target {target:.0f}%)" if target is not None else ""),
+                "tear": None,
+            }
+            if clipped:
+                tear_y = y + 5 if v > 0 else y + h - 9
+                bar["tear"] = _break_points(x - 1, bar_w + 2, tear_y)
+            bars.append(bar)
+        panels.append(
+            {
+                "key": key,
+                "label": label,
+                "target": None if target is None else f"{target:.0f}",
+                "target_y": None if target is None else y_at(target),
+                "zero_y": y_at(0.0),
+                "name_y": top_y + 11,
+                "bars": bars,
+            }
+        )
+
+    checks, labels = [], []
+    for i, m in enumerate(months):
+        center = gutter + slot * i + slot / 2
+        met = m.key < this_month and rule_met(m.split, targets)
+        if met:
+            checks.append({"x": center, "title": f"{m.label}: rule met"})
         labels.append(
             {
                 "x": center,
@@ -221,55 +290,17 @@ def _trend_chart(
                 "year": m.label[-4:] if m.key.endswith("-01") or i == 0 else "",
             }
         )
-        if st is None:
-            bars.append(
-                {"x": x, "w": bar_w, "segments": [], "title": f"{m.label}: no income"}
-            )
-            continue
-        positives, negative, _ = st
-        segments, cursor = [], 0.0
-        for key, pct in zip(("needs", "wants", "savings", "unclassified"), positives):
-            top_v = cursor + float(pct)
-            if pct > 0:
-                segments.append(
-                    {"key": key, "y": y_at(top_v), "h": y_at(cursor) - y_at(top_v)}
-                )
-            cursor = top_v
-        if negative < 0:
-            segments.append(
-                {"key": "savings", "y": y_at(0), "h": y_at(float(negative)) - y_at(0)}
-            )
-        s = m.split
-        met = m.key < this_month and rule_met(s, targets)
-        bars.append(
-            {
-                "x": x,
-                "w": bar_w,
-                "segments": segments,
-                "met": met,
-                "check_x": center,
-                "check_y": y_at(float(st[2])) - 9,
-                "title": (
-                    f"{m.label}: needs {s.needs_pct}%, wants {s.wants_pct}%, "
-                    f"savings {s.savings_pct}%, unclassified {s.unclassified_pct}%"
-                    + (" — rule met" if met else "")
-                ),
-            }
-        )
-    ticks = [
-        {"y": y_at(v), "label": f"{v}%"}
-        for v in range(int(y_min), int(y_max) + 1, step)
-    ]
+    height = check_h + len(panels) * block_h + 22
     return {
         "width": width,
         "height": height,
-        "plot_left": pad_left,
+        "plot_left": gutter,
         "plot_right": width - pad_right,
-        "zero_y": y_at(0),
-        "bars": bars,
+        "panels": panels,
+        "checks": checks,
         "labels": labels,
-        "label_y": height - 10,
-        "ticks": ticks,
+        "label_y": height - 6,
+        "check_y": check_h / 2,
     }
 
 
@@ -361,13 +392,15 @@ def recent_months(
     """Compact summaries of the last ``count`` months, newest first.
 
     Starts at ``year``-``month`` (the current month, still in progress).
-    Labels are short (``Oct 2026``) so a row's label column stays narrow.
+    Labels are short (``Oct 2026``) so a row's label column stays narrow;
+    the first entry is flagged ``in_progress``.
     """
     summaries = []
     for back in range(count):
         y, m = _shift_month(year, month, -back)
         summary = month_summary(transactions, categories, accounts, y, m, compact=True)
         summary["label"] = f"{calendar.month_abbr[m]} {y}"
+        summary["in_progress"] = back == 0
         summaries.append(summary)
     return summaries
 

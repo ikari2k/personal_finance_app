@@ -250,8 +250,33 @@ def test_closed_month_that_met_the_rule_gets_the_seal(client):
     text = client.get("/reports/budget-rule?month=2026-03").text
 
     month_panel = text.split('data-panel="month"')[1].split("</section>")[0]
-    assert "Rule met" in month_panel and "br-rule" in month_panel
+    assert "Rule met" in month_panel and "br-bucket-row" in month_panel
     assert "br-trend-check" in text  # check mark on the trend bar
+
+
+def test_panel_shows_each_bucket_even_when_one_runs_far_past_the_scale(client):
+    _write_month(2026, 3, needs=5000, wants=300, savings=200)
+
+    text = client.get("/reports/budget-rule?month=2026-03").text
+
+    panel = text.split('data-panel="month"')[1].split("</section>")[0]
+    assert "br-bucket-track is-cut" in panel
+    assert panel.count("br-bucket-row") == 3  # Needs, Wants, Savings
+    assert "br-wants-bg" in panel and "br-savings-bg" in panel
+
+
+def test_trend_has_a_panel_per_bucket_and_tears_clipped_bars(client):
+    _write_month(2026, 3, needs=5000, wants=300, savings=200)
+
+    text = client.get("/reports/budget-rule?month=2026-03").text
+
+    trend = text.split('class="br-trend"')[1].split("</svg>")[0]
+    for name in ("Needs", "Wants", "Savings"):
+        assert f">{name}</text>" in trend
+    assert "target 50%" in trend and "br-trend-target" in trend
+    assert "br-trend-tear" in trend  # needs at 500% runs past the scale
+    assert ">500<" in trend  # the figure stays real
+    assert "Unclassified</text>" not in trend  # none anywhere, so no panel
 
 
 def test_closed_month_that_missed_the_rule_has_no_seal(client):
@@ -260,7 +285,7 @@ def test_closed_month_that_missed_the_rule_has_no_seal(client):
     text = client.get("/reports/budget-rule?month=2026-03").text
 
     month_panel = text.split('data-panel="month"')[1].split("</section>")[0]
-    assert "Rule met" not in month_panel and "br-rule" not in month_panel
+    assert "Rule met" not in month_panel
     assert "br-trend-check" not in text
 
 
@@ -288,6 +313,59 @@ def test_dashboard_marks_met_months_in_the_six_month_list(client):
     text = client.get("/dashboard").text
 
     assert 'class="br-rolling-row is-met"' in text
+
+
+def test_dashboard_says_what_a_missed_month_missed(client):
+    from datetime import date as _date
+
+    today = _date.today()
+    prev_year, prev_month = (
+        (today.year, today.month - 1) if today.month > 1 else (today.year - 1, 12)
+    )
+    _write_month(prev_year, prev_month, needs=550, wants=300, savings=150)
+
+    text = client.get("/dashboard").text
+
+    assert "Needs +5" in text
+    assert "Savings \u22125" in text
+    assert "Rule met" not in text
+
+
+def test_dashboard_flags_months_that_spent_past_their_income(client):
+    from datetime import date as _date
+
+    today = _date.today()
+    prev_year, prev_month = (
+        (today.year, today.month - 1) if today.month > 1 else (today.year - 1, 12)
+    )
+    _write_month(prev_year, prev_month, needs=600, wants=400, savings=300)
+
+    text = client.get("/dashboard").text
+
+    assert "30 pts over income" in text
+    assert "br-months-over" in text
+
+
+def test_dashboard_clips_a_month_far_past_the_scale(client):
+    from datetime import date as _date
+
+    today = _date.today()
+    prev_year, prev_month = (
+        (today.year, today.month - 1) if today.month > 1 else (today.year - 1, 12)
+    )
+    _write_month(prev_year, prev_month, needs=5000, wants=100, savings=0)
+
+    text = client.get("/dashboard").text
+
+    assert "is-cut" in text
+    assert ">500<" in text  # the label keeps the real figure, not the clipped one
+
+
+def test_reports_rolling_windows_use_the_strip_layout(client):
+    text = client.get("/reports").text
+
+    assert "br-months br-months-wide" in text
+    assert "Last 12 months" in text
 
 
 def test_month_report_title_is_sealed_when_the_month_met_the_rule(client):

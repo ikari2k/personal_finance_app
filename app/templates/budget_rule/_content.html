@@ -1,4 +1,4 @@
-{% from "budget_rule/_bar.html" import split_bar, rule_table, met_badge, met_check %}
+{% from "budget_rule/_bar.html" import bucket_bars, rule_table, met_badge, met_check %}
 {% from "_section_index.html" import section_index %}
 <div id="budget-rule-content" {% if oob %}hx-swap-oob="true"{% endif %}>
   {{ section_index([{"id": "breakdown", "label": "Breakdown"}, {"id": "trend", "label": "Trend"}], sticky=false) }}
@@ -19,11 +19,11 @@
     <section class="br-panel{{ ' is-met' if p.met }}" data-panel="{{ p.key }}" {{ 'hidden' if not loop.first }}>
       <h3>{{ p.label }} {{ met_badge(p) }}</h3>
       {% if p.bar %}
-        {{ split_bar(p.bar, "Needs, wants and savings as a share of income for " ~ p.label) }}
+        {{ bucket_bars(p) }}
       {% else %}
         <p class="muted">No income in this period, so shares can't be computed — amounts only.</p>
+        {{ rule_table(p) }}
       {% endif %}
-      {{ rule_table(p) }}
       {% if p.unclassified %}
         <p class="muted">
           Biggest unclassified spend — <a href="/categories/classify">classify these</a>:
@@ -36,40 +36,41 @@
   {% endfor %}
 
   <h2 id="trend" data-section>Trend</h2>
-  <p class="muted">Share of income per month, up to {{ label }}. Savings below zero (net withdrawals) hangs below the axis.</p>
+  <p class="muted">
+    Each bucket's share of income by month, up to {{ label }}, against its own target (dashed).
+    Red figures missed the target; a torn bar runs past the scale and its figure is the real one.
+    A check marks a closed month that met the rule.
+  </p>
   {% if trend %}
     <svg viewBox="0 0 {{ trend.width }} {{ trend.height }}" class="br-trend" role="img"
-         aria-label="Monthly needs, wants, savings and unclassified as a share of income">
-      {% for t in trend.ticks %}
-        <line x1="{{ trend.plot_left }}" y1="{{ t.y }}" x2="{{ trend.plot_right }}" y2="{{ t.y }}" class="chart-gridline"/>
-        <text x="{{ trend.plot_left - 6 }}" y="{{ t.y }}" class="chart-axis-label" text-anchor="end"
-              dominant-baseline="middle">{{ t.label }}</text>
-      {% endfor %}
-      <line x1="{{ trend.plot_left }}" y1="{{ trend.zero_y }}" x2="{{ trend.plot_right }}" y2="{{ trend.zero_y }}" class="chart-zero-line"/>
-      {% for b in trend.bars %}
-        <g>
-          <title>{{ b.title }}</title>
-          {% for s in b.segments %}
-            <rect x="{{ b.x }}" y="{{ s.y }}" width="{{ b.w }}" height="{{ s.h }}" class="br-{{ s.key }}"/>
-          {% endfor %}
-          {% if b.met %}
-            <g class="br-trend-check" transform="translate({{ b.check_x - 7 }} {{ b.check_y - 7 }})">
-              <circle cx="7" cy="7" r="7.5"/>
-              <polyline points="3.5 7.3 6 9.8 10.8 4.6"/>
-            </g>
-          {% endif %}
+         aria-label="Monthly needs, wants and savings as a share of income, each against its target">
+      {% for c in trend.checks %}
+        <g class="br-trend-check" transform="translate({{ c.x - 7 }} {{ trend.check_y - 7 }})">
+          <title>{{ c.title }}</title>
+          <circle cx="7" cy="7" r="7.5"/>
+          <polyline points="3.5 7.3 6 9.8 10.8 4.6"/>
         </g>
       {% endfor %}
+      {% for p in trend.panels %}
+        <text x="0" y="{{ p.name_y }}" class="br-trend-name">{{ p.label }}</text>
+        {% if p.target %}<text x="0" y="{{ p.name_y + 13 }}" class="br-trend-sub">target {{ p.target }}%</text>{% endif %}
+        <line x1="{{ trend.plot_left }}" y1="{{ p.zero_y }}" x2="{{ trend.plot_right }}" y2="{{ p.zero_y }}" class="chart-zero-line"/>
+        {% for b in p.bars if not b.none %}
+          <g class="br-trend-bar{{ ' is-live' if b.live }}">
+            <title>{{ b.title }}</title>
+            <rect x="{{ b.x }}" y="{{ b.y }}" width="{{ b.w }}" height="{{ b.h }}" class="br-{{ p.key }}"/>
+            {% if b.tear %}<polygon points="{{ b.tear }}" class="br-trend-tear"/>{% endif %}
+            <text x="{{ b.text_x }}" y="{{ b.text_y }}" text-anchor="middle" class="br-trend-val{{ ' is-miss' if b.miss }}">{{ b.text }}</text>
+          </g>
+        {% endfor %}
+        {% if p.target %}
+          <line x1="{{ trend.plot_left }}" y1="{{ p.target_y }}" x2="{{ trend.plot_right }}" y2="{{ p.target_y }}" class="br-trend-target"/>
+        {% endif %}
+      {% endfor %}
       {% for l in trend.labels %}
-        <text x="{{ l.x }}" y="{{ trend.label_y }}" class="chart-x-label" text-anchor="middle">{{ l.text }}{{ " " ~ l.year if l.year }}</text>
+        <text x="{{ l.x }}" y="{{ trend.label_y }}" class="br-trend-x" text-anchor="middle">{{ l.text }}{{ " " ~ l.year if l.year }}</text>
       {% endfor %}
     </svg>
-    <p class="chart-legend">
-      <span class="chart-legend-swatch br-swatch-needs"></span> Needs
-      <span class="chart-legend-swatch br-swatch-wants"></span> Wants
-      <span class="chart-legend-swatch br-swatch-savings"></span> Savings
-      <span class="chart-legend-swatch br-swatch-unclassified"></span> Unclassified
-    </p>
   {% else %}
     <p>No transactions yet.</p>
   {% endif %}
