@@ -8,7 +8,7 @@ from app.models.transaction import Transaction, TransactionType
 from app.storage.accounts import write_accounts
 from app.storage.budget_rule import read_targets
 from app.storage.categories import write_categories
-from app.storage.ledger import write_ledger
+from app.storage.ledger import read_ledger, write_ledger
 
 
 def _seed():
@@ -301,64 +301,80 @@ def test_month_in_progress_never_gets_the_seal(client):
     assert "Rule met" not in month_panel
 
 
-def test_dashboard_marks_met_months_in_the_six_month_list(client):
+def _last_month():
     from datetime import date as _date
 
     today = _date.today()
-    prev_year, prev_month = (
-        (today.year, today.month - 1) if today.month > 1 else (today.year - 1, 12)
-    )
-    _write_month(prev_year, prev_month, needs=500, wants=300, savings=200)
-
-    text = client.get("/dashboard").text
-
-    assert 'class="br-rolling-row is-met"' in text
+    return (today.year, today.month - 1) if today.month > 1 else (today.year - 1, 12)
 
 
-def test_dashboard_says_what_a_missed_month_missed(client):
+def _dashboard_widget(client) -> str:
+    return client.get("/dashboard").text.split("Last 6 months")[1].split("</svg>")[0]
+
+
+def test_dashboard_widget_is_the_per_bucket_trend(client):
+    _write_month(*_last_month(), needs=500, wants=300, savings=200)
+
+    widget = _dashboard_widget(client)
+
+    for name in ("Needs", "Wants", "Savings"):
+        assert f">{name}</text>" in widget
+    assert "br-trend-target" in widget
+
+
+def test_dashboard_marks_met_months_with_a_check(client):
+    _write_month(*_last_month(), needs=500, wants=300, savings=200)
+
+    assert "br-trend-check" in _dashboard_widget(client)
+
+
+def test_dashboard_reddens_the_figures_that_missed(client):
+    _write_month(*_last_month(), needs=550, wants=300, savings=150)
+
+    widget = _dashboard_widget(client)
+
+    assert "br-trend-check" not in widget
+    assert 'br-trend-val is-miss">55<' in widget  # needs over 50
+    assert 'br-trend-val is-miss">15<' in widget  # savings under 20
+
+
+def test_dashboard_tears_a_month_far_past_the_scale(client):
+    _write_month(*_last_month(), needs=5000, wants=100, savings=0)
+
+    widget = _dashboard_widget(client)
+
+    assert "br-trend-tear" in widget
+    assert ">500<" in widget  # the label keeps the real figure
+
+
+def _expense_only_this_month():
+    """Spend in the current month and nothing else: no income anywhere."""
     from datetime import date as _date
 
     today = _date.today()
-    prev_year, prev_month = (
-        (today.year, today.month - 1) if today.month > 1 else (today.year - 1, 12)
-    )
-    _write_month(prev_year, prev_month, needs=550, wants=300, savings=150)
-
-    text = client.get("/dashboard").text
-
-    assert "Needs +5" in text
-    assert "Savings \u22125" in text
-    assert "Rule met" not in text
+    _write_month(today.year, today.month, needs=300, wants=100, savings=50)
+    write_ledger([t for t in read_ledger() if t.type == TransactionType.EXPENSE])
+    return today
 
 
-def test_dashboard_flags_months_that_spent_past_their_income(client):
-    from datetime import date as _date
+def test_current_month_without_income_is_not_calculated(client):
+    today = _expense_only_this_month()
 
-    today = _date.today()
-    prev_year, prev_month = (
-        (today.year, today.month - 1) if today.month > 1 else (today.year - 1, 12)
-    )
-    _write_month(prev_year, prev_month, needs=600, wants=400, savings=300)
+    text = client.get(
+        f"/reports/budget-rule?month={today.year:04d}-{today.month:02d}"
+    ).text
 
-    text = client.get("/dashboard").text
-
-    assert "30 pts over income" in text
-    assert "br-months-over" in text
+    panel = text.split('data-panel="month"')[1].split("</section>")[0]
+    assert "Waiting for income" in panel
+    assert "br-bucket-row" not in panel and "breakdown-table" not in panel
 
 
-def test_dashboard_clips_a_month_far_past_the_scale(client):
-    from datetime import date as _date
+def test_month_report_waits_for_income_in_the_current_month(client):
+    today = _expense_only_this_month()
 
-    today = _date.today()
-    prev_year, prev_month = (
-        (today.year, today.month - 1) if today.month > 1 else (today.year - 1, 12)
-    )
-    _write_month(prev_year, prev_month, needs=5000, wants=100, savings=0)
+    text = client.get(f"/reports/{today.year}/{today.month}").text
 
-    text = client.get("/dashboard").text
-
-    assert "is-cut" in text
-    assert ">500<" in text  # the label keeps the real figure, not the clipped one
+    assert "Waiting for income" in text
 
 
 def test_reports_rolling_windows_use_the_strip_layout(client):

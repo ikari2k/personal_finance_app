@@ -1,6 +1,5 @@
 {% extends "base.html" %}
 {% from "_scope_bar.html" import global_scope with context %}
-{% from "budget_rule/_bar.html" import month_rows %}
 {% from "_category_icons.html" import category_icon %}
 {% block title %}Dashboard — Finance Tracker{% endblock %}
 {% block scope %}{{ global_scope(accounts, account_id) }}{% endblock %}
@@ -248,8 +247,13 @@
         <span class="dash-widget-title">50/30/20 &middot; Last 6 months</span>
         <a class="dash-widget-link" href="/reports/budget-rule">Full report &rsaquo;</a>
       </div>
-      <p class="dash-widget-caption">Share of income per month, newest first; the current month is still in progress.{% if budget_rule.all_accounts_note %} Always across all accounts.{% endif %}</p>
-      {{ month_rows(budget_rule.months, budget_rule.targets, "No income.") }}
+      <p class="dash-widget-caption">Each bucket's share of income per month against its target (dashed); red missed it, a check met the whole rule. The current month is faded, still in progress.{% if budget_rule.all_accounts_note %} Always across all accounts.{% endif %}</p>
+      {% if budget_rule.trend %}
+        {% set trend = budget_rule.trend %}
+        {% include "budget_rule/_trend.html" %}
+      {% else %}
+        <p class="dash-all-clear">No transactions yet.</p>
+      {% endif %}
       {% if budget_rule.unclassified_count %}
         <p class="dash-widget-caption">
           {{ budget_rule.unclassified_count }} expense categor{{ "y" if budget_rule.unclassified_count == 1 else "ies" }}

@@ -187,7 +187,10 @@ def _break_points(x: float, w: float, y: float) -> str:
 
 
 def _trend_chart(
-    months: list[BudgetRuleMonth], targets: BudgetRuleTargets
+    months: list[BudgetRuleMonth],
+    targets: BudgetRuleTargets,
+    *,
+    compact: bool = False,
 ) -> dict | None:
     """Geometry for the per-bucket trend: one small column chart per bucket.
 
@@ -195,17 +198,20 @@ def _trend_chart(
     target (dashed line). A bar past the panel's scale is clipped and torn,
     its label keeping the real figure, so one extreme month cannot flatten
     the rest. A row of checks on top marks the closed months that met the
-    rule. ``None`` with no months.
+    rule. ``compact`` shortens the panels for the dashboard. ``None`` with no
+    months.
     """
     if not months:
         return None
     width = 960
     gutter, pad_right = 104, 12
-    check_h, label_pad, plot_h, bottom_pad = 26, 16, 112, 16
+    check_h, label_pad, plot_h, bottom_pad = (
+        (22, 14, 44, 12) if compact else (26, 16, 112, 16)
+    )
     block_h = label_pad + plot_h + bottom_pad
     plot_w = width - gutter - pad_right
     slot = plot_w / len(months)
-    bar_w = min(slot * 0.6, 34)
+    bar_w = min(slot * 0.6, 34 if len(months) > 8 else 52)
     today = date.today()
     this_month = f"{today.year:04d}-{today.month:02d}"
 
@@ -318,13 +324,18 @@ def period_summary(
 
     ``met`` is only ever true for a *closed* period (``end`` before today): a
     month still in progress can look balanced just because the pay or the
-    bills haven't landed yet.
+    bills haven't landed yet. ``pending`` marks a period still in progress
+    with no income yet: its spend has nothing to be measured against, so
+    views show a waiting note instead of figures.
     """
     split = budget_rule_split(transactions, categories, accounts, start, end)
     met = end is not None and end < date.today() and rule_met(split, targets)
     return {
         "split": split,
         "met": met,
+        "pending": (
+            end is not None and end >= date.today() and split.needs_pct is None
+        ),
         "met_tip": (
             f"Rule met: needs within {targets.needs}%, wants within "
             f"{targets.wants}%, savings at least {targets.savings}% of income"
@@ -379,30 +390,6 @@ def month_pair(
         month_summary(transactions, categories, accounts, y, m, compact=compact)
         for y, m in ((year, month), (previous_year, previous_month))
     ]
-
-
-def recent_months(
-    transactions: list,
-    categories: CategoriesByType,
-    accounts: list,
-    year: int,
-    month: int,
-    count: int = 6,
-) -> list[dict]:
-    """Compact summaries of the last ``count`` months, newest first.
-
-    Starts at ``year``-``month`` (the current month, still in progress).
-    Labels are short (``Oct 2026``) so a row's label column stays narrow;
-    the first entry is flagged ``in_progress``.
-    """
-    summaries = []
-    for back in range(count):
-        y, m = _shift_month(year, month, -back)
-        summary = month_summary(transactions, categories, accounts, y, m, compact=True)
-        summary["label"] = f"{calendar.month_abbr[m]} {y}"
-        summary["in_progress"] = back == 0
-        summaries.append(summary)
-    return summaries
 
 
 def met_month_keys(

@@ -13,7 +13,9 @@
   {% for m in rule_months %}
     <div class="dash-span-6">
       <h3 style="margin-bottom: 0.5rem;"><a class="table-link" href="{{ m.link }}">{{ m.label }}</a> {{ met_badge(m) }}</h3>
-      {% if m.bar %}
+      {% if m.pending %}
+        <p class="muted">Waiting for income. Shares are worked out once this month has income, so nothing is calculated yet.</p>
+      {% elif m.bar %}
         {{ bucket_bars(m) }}
       {% else %}
         <p class="muted">No income this month, so shares can't be computed &mdash; amounts only.</p>

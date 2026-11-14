@@ -118,7 +118,10 @@ tests/unit/     tmp_path-isolated; tests/integration/  TestClient, conftest redi
   `excluded` categories; Needs/Wants = expense spend by `effective_bucket`, untagged shown as
   Unclassified; Savings = signed net of transfer legs on `account_type=savings` accounts (closed
   included, investment excluded, withdrawals reduce it). No income in a period → amounts only,
-  no percentages. A *closed* period (ends before today) "met the rule" per
+  no percentages; a period still in progress with no income yet is `pending` (set in
+  `period_summary`) and shows "Waiting for income" with no figures at all. The per-bucket trend
+  (`budget_rule/_trend.html`, from `_trend_chart`) backs both the reports page and the dashboard
+  widget (`compact=True`). A *closed* period (ends before today) "met the rule" per
   `services.budget_rule.rule_met`: savings ≥ target and needs/wants each ≤ target even if all
   unclassified spend landed in that bucket. Met periods get the double-rule seal (`.br-rule`,
   `.br-badge`, `.is-met`, trend check); the month in progress never does.

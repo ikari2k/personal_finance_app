@@ -29,11 +29,12 @@ from fastapi.responses import HTMLResponse
 
 from app.models.account import ACCOUNT_TYPE_LABELS, AccountType
 from app.models.transaction import TransactionType
-from app.routers.budget_rule import recent_months
+from app.routers.budget_rule import _trend_chart
 from app.routers.reports import _category_config, _net_worth_line, _ring_geometry
 from app.routers.scope import resolve_account
 from app.services.aggregation import (
     UNCATEGORIZED,
+    budget_rule_monthly_series,
     category_all_time_monthly_average,
     category_recent_monthly_totals,
     category_totals_for_month,
@@ -76,6 +77,8 @@ ACCOUNT_TYPE_ICONS: dict[AccountType, str] = {
 BUDGET_ATTENTION_THRESHOLD_PCT = 75
 BUDGET_OVER_PCT = 100
 TOP_CATEGORIES_LIMIT = 10
+# Months shown in the 50/30/20 widget.
+BUDGET_RULE_MONTHS = 6
 # Last month plus this (partial) one.
 TOP_CATEGORIES_TREND_MONTHS = 2
 TOP_TRANSACTIONS_LIMIT = 5
@@ -352,10 +355,13 @@ def dashboard(request: Request, account_id: str | None = None) -> HTMLResponse:
         )
 
     budget_rule_widget = {
-        "months": recent_months(
-            full_ledger, categories, all_accounts, today.year, today.month
+        "trend": _trend_chart(
+            budget_rule_monthly_series(full_ledger, categories, all_accounts, today)[
+                -BUDGET_RULE_MONTHS:
+            ],
+            read_targets(),
+            compact=True,
         ),
-        "targets": read_targets(),
         "all_accounts_note": bool(account_id),
         "unclassified_count": count_unclassified_expense_categories(categories),
     }

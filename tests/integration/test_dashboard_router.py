@@ -395,17 +395,7 @@ def test_dashboard_shows_budget_rule_widget(client):
 
     assert response.status_code == 200
     assert "50/30/20" in response.text
-    assert "No income" in response.text
-
-
-def test_dashboard_budget_rule_widget_shows_six_months(client):
-    from datetime import date
-
-    text = client.get("/").text
-    widget = text.split("Last 6 months")[1]
-
-    assert widget.count("br-rolling-row") == 6
-    assert f"{date.today():%b %Y}" in widget
+    assert "No transactions yet" in response.text
 
 
 def test_dashboard_shows_currency_next_to_net_worth(client):

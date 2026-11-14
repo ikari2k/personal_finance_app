@@ -1,0 +1,30 @@
+{# The per-bucket trend chart. Expects `trend` (app.routers.budget_rule._trend_chart). #}
+<svg viewBox="0 0 {{ trend.width }} {{ trend.height }}" class="br-trend" role="img"
+     aria-label="Monthly needs, wants and savings as a share of income, each against its target">
+  {% for c in trend.checks %}
+    <g class="br-trend-check" transform="translate({{ c.x - 7 }} {{ trend.check_y - 7 }})">
+      <title>{{ c.title }}</title>
+      <circle cx="7" cy="7" r="7.5"/>
+      <polyline points="3.5 7.3 6 9.8 10.8 4.6"/>
+    </g>
+  {% endfor %}
+  {% for p in trend.panels %}
+    <text x="0" y="{{ p.name_y }}" class="br-trend-name">{{ p.label }}</text>
+    {% if p.target %}<text x="0" y="{{ p.name_y + 13 }}" class="br-trend-sub">target {{ p.target }}%</text>{% endif %}
+    <line x1="{{ trend.plot_left }}" y1="{{ p.zero_y }}" x2="{{ trend.plot_right }}" y2="{{ p.zero_y }}" class="chart-zero-line"/>
+    {% for b in p.bars if not b.none %}
+      <g class="br-trend-bar{{ ' is-live' if b.live }}">
+        <title>{{ b.title }}</title>
+        <rect x="{{ b.x }}" y="{{ b.y }}" width="{{ b.w }}" height="{{ b.h }}" class="br-{{ p.key }}"/>
+        {% if b.tear %}<polygon points="{{ b.tear }}" class="br-trend-tear"/>{% endif %}
+        <text x="{{ b.text_x }}" y="{{ b.text_y }}" text-anchor="middle" class="br-trend-val{{ ' is-miss' if b.miss }}">{{ b.text }}</text>
+      </g>
+    {% endfor %}
+    {% if p.target %}
+      <line x1="{{ trend.plot_left }}" y1="{{ p.target_y }}" x2="{{ trend.plot_right }}" y2="{{ p.target_y }}" class="br-trend-target"/>
+    {% endif %}
+  {% endfor %}
+  {% for l in trend.labels %}
+    <text x="{{ l.x }}" y="{{ trend.label_y }}" class="br-trend-x" text-anchor="middle">{{ l.text }}{{ " " ~ l.year if l.year }}</text>
+  {% endfor %}
+</svg>
