@@ -54,88 +54,19 @@
   </div>
 {% endmacro %}
 
-{# One strip per period (dashboard months, reports rolling windows) with the
-   shares inside it, dashed guides at the targets shared by every strip (a month that follows the
-   rule has its boundaries on them), and a verdict saying what missed.
-   All strips share one scale: 0-100% of income, stretched to the largest
-   month up to `axis_cap` percent, with the part past 100% hatched. A strip
-   longer than the scale is clipped and marked with a break. `targets` is a
-   BudgetRuleTargets; `items` are the summaries `recent_months` /
-   `rolling_summaries` build; `wide_labels` makes room for "Last 12 months". #}
-{% macro month_rows(items, targets, empty="No income.", axis_cap=130, wide_labels=false) %}
-  {% set ns = namespace(axis=100) %}
-  {% for w in items if w.bar %}
-    {% set total = w.rows|selectattr("pct")|selectattr("pct", "gt", 0)|sum(attribute="pct") %}
-    {% if total > ns.axis %}{% set ns.axis = total %}{% endif %}
-  {% endfor %}
-  {% set axis = [ns.axis, axis_cap]|min %}
-  <div class="br-months{{ ' br-months-wide' if wide_labels }}">
-    <div class="br-months-axis" aria-hidden="true">
-      <span></span>
-      <div class="br-months-scale">
-        <span style="left: 0">0</span>
-        <span style="left: {{ targets.needs / axis * 100 }}%">{{ targets.needs }}</span>
-        <span style="left: {{ (targets.needs + targets.wants) / axis * 100 }}%">{{ targets.needs + targets.wants }}</span>
-        <span style="left: {{ 100 / axis * 100 }}%" class="br-months-income" title="Income">100%</span>
-      </div>
-      <span></span>
-    </div>
-    <div class="br-months-guides" aria-hidden="true">
-      {% if axis > 100 %}<b class="br-months-over" style="left: {{ 100 / axis * 100 }}%"></b>{% endif %}
-      <i style="left: {{ targets.needs / axis * 100 }}%"></i>
-      <i style="left: {{ (targets.needs + targets.wants) / axis * 100 }}%"></i>
-      <i class="br-months-income-line" style="left: {{ 100 / axis * 100 }}%"></i>
-    </div>
-    {% for w in items %}
-      {% set parts = w.rows|selectattr("pct")|selectattr("pct", "gt", 0)|list %}
-      {% set total = parts|sum(attribute="pct") %}
-      <div class="br-rolling-row{{ ' is-met' if w.met }}"{% if w.met %} title="{{ w.met_tip }}"{% endif %}>
-        <span class="br-rolling-label">{% if w.link %}<a class="table-link" href="{{ w.link }}">{{ w.label }}</a>{% else %}{{ w.label }}{% endif %}</span>
-        {% if w.bar %}
-          {% set u = namespace(used=0) %}
-          <div class="br-months-strip{{ ' is-live' if w.in_progress }}{{ ' is-cut' if total > axis }}" role="img"
-               aria-label="{{ w.label }}: needs, wants and savings as a share of income"
-               title="{% for r in parts %}{{ r.label }} {{ '%.0f'|format(r.pct) }}%{{ ', ' if not loop.last }}{% endfor %} of income">
-            {% for r in parts %}
-              {% set shown = [r.pct, axis - u.used]|min %}
-              {% if shown > 0 %}
-                <i class="br-{{ r.key }}-bg" style="width: {{ shown / axis * 100 }}%">{% if shown / axis * 100 >= 6 and r.key != 'unclassified' %}{{ "%.0f"|format(r.pct) }}{% endif %}</i>
-              {% endif %}
-              {% set u.used = u.used + shown %}
-            {% endfor %}
-          </div>
-          <span class="br-months-verdict{{ ' is-met' if w.met }}">
-            {%- if w.met %}{{ met_check() }}Rule met
-            {%- elif w.in_progress %}In progress
-            {%- else %}
-              {%- if total > 100 %}<span class="br-months-miss" title="Needs, wants and savings together came to {{ '%.0f'|format(total) }}% of income">{{ "%.0f"|format(total - 100) }} pts over income</span>{% endif %}
-              {%- set misses = w.rows|selectattr("status", "in", ["over target", "below target"])|list %}
-              {%- if misses %}<span class="br-months-misses">
-                {%- for r in misses %}{{ r.label }} {{ ("%+.0f" if r.delta|abs >= 1 else "%+.1f")|format(r.delta)|replace("-", "−") }}{{ ", " if not loop.last }}{% endfor %} pts
-              </span>
-              {%- elif total <= 100 %}No misses{% endif -%}
-            {%- endif -%}
-          </span>
-        {% else %}
-          <span class="muted br-months-none">{{ empty }}</span>
-        {% endif %}
-      </div>
-    {% endfor %}
-  </div>
-{% endmacro %}
-
 {# One period's breakdown for the panels: a bar per bucket against its own
    target, so a bucket that runs far past the scale can't hide the others.
    Bars share the 0-100% of income scale, stretched up to `axis_cap` percent;
-   a longer one is clipped and marked with a break. `p` as `period_summary`
+   a longer one is clipped and marked with a break; `narrow` stacks each bar
+   under its name, for a third-width column. `p` as `period_summary`
    returns it (with a `bar`, i.e. there is income). #}
-{% macro bucket_bars(p, axis_cap=130) %}
+{% macro bucket_bars(p, axis_cap=130, narrow=false) %}
   {% set rows = p.rows|rejectattr("key", "equalto", "unclassified")|list + p.rows|selectattr("key", "equalto", "unclassified")|rejectattr("amount", "equalto", 0)|list %}
   {% set pcts = rows|selectattr("pct")|map(attribute="pct")|list %}
   {% set axis = ([100] + pcts)|max %}
   {% set axis = [axis, axis_cap]|min %}
   {% set total = rows|selectattr("pct")|selectattr("pct", "gt", 0)|sum(attribute="pct") %}
-  <div class="br-buckets">
+  <div class="br-buckets{{ ' br-buckets-narrow' if narrow }}">
     <p class="br-buckets-income">
       Income <strong>{{ p.split.income|money }}</strong>
       {% if total > 100 %}<span class="br-months-miss" title="Needs, wants and savings together came to {{ '%.0f'|format(total) }}% of income">&middot; {{ "%.0f"|format(total - 100) }} pts over income</span>{% endif %}

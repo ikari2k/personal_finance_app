@@ -1,20 +1,26 @@
-{# Rolling 3/6/12-month 50/30/20 summary for /reports. Expects `rule_windows`
-   (app.routers.budget_rule.rolling_summaries), `rule_targets`, `rule_to_label`. #}
-{% from "budget_rule/_bar.html" import month_rows %}
+{# Rolling 3/6/12-month 50/30/20 summary for /reports: a block of per-bucket
+   bars for each window. Expects `rule_windows`
+   (app.routers.budget_rule.rolling_summaries), `rule_to_label`. #}
+{% from "budget_rule/_bar.html" import bucket_bars, met_badge %}
 <div class="dash-widget-head" style="margin-bottom: 0.15rem;">
   <h2 style="margin: 0;">50/30/20 rule</h2>
   <a class="table-link" href="/reports/budget-rule">Full report &rsaquo;</a>
 </div>
 <p class="muted" style="margin-top: 0;">
-  Share of income over rolling windows ending {{ rule_to_label }} (all accounts).
-  Dashed lines mark the Needs ({{ rule_targets.needs }}%) and Needs + Wants
-  ({{ rule_targets.needs + rule_targets.wants }}%) targets, the solid line is
-  100% of income.
+  Share of income over rolling windows ending {{ rule_to_label }} (all accounts), each
+  bucket against its own target. A torn bar runs past the scale.
 </p>
-{{ month_rows(rule_windows, rule_targets, "No income in this window.", wide_labels=true) }}
-<p class="chart-legend">
-  <span class="chart-legend-swatch br-swatch-needs"></span> Needs
-  <span class="chart-legend-swatch br-swatch-wants"></span> Wants
-  <span class="chart-legend-swatch br-swatch-savings"></span> Savings
-  <span class="chart-legend-swatch br-swatch-unclassified"></span> Unclassified
-</p>
+<div class="br-windows">
+  {% for w in rule_windows %}
+    <div class="br-window">
+      <h3>{{ w.label }} {{ met_badge(w) }}</h3>
+      {% if w.pending %}
+        <p class="muted">Waiting for income.</p>
+      {% elif w.bar %}
+        {{ bucket_bars(w, narrow=true) }}
+      {% else %}
+        <p class="muted">No income in this window.</p>
+      {% endif %}
+    </div>
+  {% endfor %}
+</div>

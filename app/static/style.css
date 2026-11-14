@@ -2324,6 +2324,11 @@ fieldset legend {
 .br-swatch-wants { background-color: #4f8fe0; }
 .br-swatch-savings { background-color: #e0a93b; }
 .br-swatch-unclassified { background-color: #9aa0a6; }
+/* Bucket fills for the HTML bars (the SVG trend uses the fill rules above). */
+.br-needs-bg { background-color: #3f8f4f; }
+.br-wants-bg { background-color: #4f8fe0; }
+.br-savings-bg { background-color: #e0a93b; }
+.br-unclassified-bg { background-color: #9aa0a6; }
 .br-bar { width: 100%; height: auto; }
 /* Trend: drawn at its natural size (960 units) and never scaled up, so the
  * 11px labels stay 11px however wide the page is. */
@@ -2424,126 +2429,6 @@ fieldset legend {
 .br-caption { font-size: 0.85rem; margin: 0 0 1rem; }
 .br-rolling-label { font-size: 0.85rem; font-weight: 600; }
 
-/* Dashboard 50/30/20: one strip per month, shares inside it. The guides sit
- * over the strip column, so every strip shares the same target lines. */
-.br-months { --label: 5rem; --verdict: 15rem; --gap: 0.85rem; position: relative; margin-top: 0.4rem; }
-.br-months-axis,
-.br-months .br-rolling-row {
-  display: grid;
-  grid-template-columns: var(--label) minmax(0, 1fr) var(--verdict);
-  align-items: center;
-  gap: var(--gap);
-  padding-block: 0.2rem;
-  margin-bottom: 0;
-}
-.br-months-axis { height: 1.2rem; padding-block: 0; font-size: 0.75rem; font-weight: 650; color: var(--pico-color); }
-.br-months-scale { position: relative; }
-.br-months-scale span { position: absolute; top: 0; transform: translateX(-50%); }
-.br-months-scale span:first-child { transform: none; }
-.br-months-scale span:last-child { transform: translateX(-100%); }
-.br-months-income { white-space: nowrap; }
-.br-months-guides {
-  position: absolute;
-  top: 1.3rem;
-  bottom: 0;
-  left: calc(var(--label) + var(--gap));
-  right: calc(var(--verdict) + var(--gap));
-  pointer-events: none;
-}
-.br-months-guides i {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  border-left: 2px dashed color-mix(in srgb, var(--pico-color) 70%, transparent);
-}
-.br-months-strip {
-  display: flex;
-  height: 1.45rem;
-  border-radius: 3px;
-  overflow: hidden;
-  background: rgba(127, 127, 127, 0.14);
-}
-.br-months-strip.is-live { background: transparent; outline: 1px dashed var(--pico-muted-color); outline-offset: -1px; }
-.br-months-strip i {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 0;
-  font-style: normal;
-  font-size: 0.74rem;
-  font-weight: 650;
-  color: #fff;
-}
-.br-months-strip i + i { box-shadow: -1px 0 0 var(--pico-card-background-color, var(--pico-background-color)); }
-.br-months-strip .br-savings-bg { color: #3a2a05; }
-.br-needs-bg { background: #3f8f4f; }
-.br-wants-bg { background: #4f8fe0; }
-.br-savings-bg { background: #e0a93b; }
-.br-unclassified-bg { background: #9aa0a6; }
-.br-months-verdict {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  font-size: 0.78rem;
-  line-height: 1.25;
-  color: var(--pico-muted-color);
-}
-.br-months-misses { overflow-wrap: anywhere; }
-.br-months-over {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  right: 0;
-  background: repeating-linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--pico-del-color) 14%, transparent) 0 3px,
-    transparent 3px 7px
-  );
-}
-.br-months-guides i.br-months-income-line {
-  border-left: 2px solid var(--pico-color);
-}
-/* A strip clipped at the end of the scale: a jagged tear through the whole
- * bar, with a short stub of bar continuing past it, says the bar really runs
- * on much longer. The tear is a band with zigzag edges in the card colour. */
-.br-months-strip { position: relative; }
-.br-months-strip.is-cut { overflow: visible; }
-.br-months-strip.is-cut i:first-child { border-radius: 3px 0 0 3px; }
-.br-months-strip.is-cut i:last-child { border-radius: 0 3px 3px 0; }
-.br-months-strip.is-cut::after {
-  content: "";
-  position: absolute;
-  top: -3px;
-  bottom: -3px;
-  right: 1.4rem;
-  width: 0.9rem;
-  background: var(--pico-card-background-color, var(--pico-background-color));
-  clip-path: polygon(
-    0 0, 30% 25%, 0 50%, 30% 75%, 0 100%,
-    38% 100%, 68% 75%, 38% 50%, 68% 25%, 38% 0
-  );
-}
-.br-months-verdict.is-met { color: var(--color-met); font-weight: 600; }
-.br-months-miss { color: var(--pico-del-color); font-weight: 600; }
-.br-months-none { grid-column: 2 / -1; font-size: 0.8rem; }
-.br-months-wide { --label: 8.5rem; }
-/* Met month: the double rule under the strip, plus the row tint above. */
-.br-months .br-rolling-row.is-met .br-months-strip {
-  box-shadow: 0 3px 0 -1px var(--pico-card-background-color, var(--pico-background-color)),
-    0 4.5px 0 -1px var(--color-met),
-    0 7px 0 -1px var(--pico-card-background-color, var(--pico-background-color)),
-    0 8.5px 0 -1px var(--color-met);
-  margin-bottom: 0.45rem;
-}
-@media (max-width: 40rem) {
-  .br-months,
-  .br-months-wide { --label: 4.2rem; --verdict: 0px; --gap: 0.6rem; }
-  .br-months-axis,
-  .br-months .br-rolling-row { grid-template-columns: var(--label) 1fr; row-gap: 0; }
-  .br-months-verdict { grid-column: 2; padding-bottom: 0.25rem; }
-  .br-months-guides { right: 0; }
-}
-
 /* Breakdown panels: a bar per bucket against its own target tick. */
 .br-buckets { margin: 0.25rem 0 1rem; }
 .br-buckets-income { margin: 0 0 0.4rem; font-size: 0.85rem; }
@@ -2597,6 +2482,17 @@ fieldset legend {
   .br-bucket-track { grid-column: 1 / -1; grid-row: 2; }
   .br-bucket-amount { display: none; }
 }
+/* Third-width column (reports page): same stacked layout at any width. */
+.br-buckets-narrow .br-bucket-row { grid-template-columns: 1fr auto auto; gap: 0.1rem 0.6rem; }
+.br-buckets-narrow .br-bucket-track { grid-column: 1 / -1; grid-row: 2; }
+.br-buckets-narrow .br-bucket-amount { display: none; }
+.br-windows {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr));
+  gap: 0.5rem 2rem;
+  margin-top: 0.75rem;
+}
+.br-window h3 { font-size: 0.95rem; margin: 0 0 0.25rem; }
 
 
 /* ------------------------------------------------------------------

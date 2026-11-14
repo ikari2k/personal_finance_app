@@ -377,11 +377,23 @@ def test_month_report_waits_for_income_in_the_current_month(client):
     assert "Waiting for income" in text
 
 
-def test_reports_rolling_windows_use_the_strip_layout(client):
+def test_every_bucket_fill_class_the_bars_use_is_styled():
+    from pathlib import Path
+
+    css = (Path(__file__).parents[2] / "app/static/style.css").read_text()
+    for key in ("needs", "wants", "savings", "unclassified"):
+        assert f".br-{key}-bg" in css
+
+
+def test_reports_rolling_windows_show_bars_per_bucket(client):
+    _write_month(*_last_month(), needs=500, wants=300, savings=200)
+
     text = client.get("/reports").text
 
-    assert "br-months br-months-wide" in text
-    assert "Last 12 months" in text
+    for label in ("Last 3 months", "Last 6 months", "Last 12 months"):
+        assert label in text
+    assert text.count("br-window") >= 3
+    assert "br-buckets br-buckets-narrow" in text
 
 
 def test_month_report_title_is_sealed_when_the_month_met_the_rule(client):
