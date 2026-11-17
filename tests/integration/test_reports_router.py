@@ -1739,3 +1739,107 @@ def test_net_worth_fragment_shows_start_high_low_and_change(client):
     # The range opens on 1 Nov's closing balance (1,500), so it fell by 800.
     assert "−800.00" in stats
     assert "−53.33%" in stats
+
+
+def _two_expense_eras(client):
+    """Rent two years ago, Groceries today."""
+    _create_account(client)
+    today = date.today()
+    _create_transaction(
+        client,
+        date=date(today.year - 2, 1, 15).isoformat(),
+        type="expense",
+        category="Rent",
+        amount="900",
+    )
+    _create_transaction(
+        client,
+        date=today.isoformat(),
+        type="expense",
+        category="Groceries",
+        amount="20",
+    )
+
+
+def _table_and_treemap(html):
+    """The overview's category table and treemap sections' text, apart."""
+    table, treemap = html.split('aria-label="Spending breakdown period"')
+    return table.split('aria-label="Top spending categories period"')[1], treemap
+
+
+def test_spending_categories_period_tabs_filter_the_table(client):
+    _two_expense_eras(client)
+
+    table, _ = _table_and_treemap(client.get("/reports").text)
+    assert "Rent" in table and "Groceries" in table  # all time by default
+
+    table, _ = _table_and_treemap(
+        client.get("/reports", params={"cat_period": "1y"}).text
+    )
+    assert "Groceries" in table and "Rent" not in table
+
+
+def test_treemap_has_its_own_period_independent_of_the_table(client):
+    _two_expense_eras(client)
+
+    table, treemap = _table_and_treemap(
+        client.get("/reports", params={"tm_period": "1m"}).text
+    )
+
+    assert "Rent" in table  # table still all time
+    assert "Rent" not in treemap and "Groceries" in treemap
+
+
+def test_period_tabs_keep_the_other_cards_choice_and_sort(client):
+    _two_expense_eras(client)
+
+    text = client.get(
+        "/reports", params={"cat_period": "3m", "tm_period": "6m", "cat_sort": "count"}
+    ).text
+
+    assert "cat_sort=count&amp;cat_dir=desc&amp;cat_period=1y&amp;tm_period=6m" in text
+    assert "cat_period=3m&amp;tm_period=1m" in text
+
+
+def test_spending_categories_unknown_period_falls_back_to_all_time(client):
+    _two_expense_eras(client)
+
+    table, _ = _table_and_treemap(
+        client.get("/reports", params={"cat_period": "bogus"}).text
+    )
+
+    assert "Rent" in table
+
+
+def test_empty_period_keeps_the_tabs_so_the_filter_can_be_changed_back(client):
+    _create_account(client)
+    _create_transaction(
+        client,
+        date=date(date.today().year - 2, 1, 15).isoformat(),
+        type="expense",
+        category="Rent",
+        amount="900",
+    )
+
+    text = client.get("/reports", params={"cat_period": "1m"}).text
+
+    assert "No expenses in this period." in text
+    assert 'aria-label="Top spending categories period"' in text
+
+
+def test_category_links_carry_the_period_as_a_date_range(client):
+    _two_expense_eras(client)
+
+    text = client.get("/reports", params={"cat_period": "1m"}).text
+
+    assert f"date_to={date.today().isoformat()}" in text
+
+
+def test_period_tabs_and_sort_headers_swap_in_place_instead_of_reloading(client):
+    _two_expense_eras(client)
+
+    text = client.get("/reports").text
+
+    assert 'id="overview-categories"' in text
+    assert text.count('hx-select="#overview-categories"') >= 10  # 2x5 tabs + headers
+    assert 'hx-push-url="true"' in text

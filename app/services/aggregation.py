@@ -437,16 +437,29 @@ def category_totals_all_time(
 ) -> list[CategoryTotal]:
     """Return every category's whole-history total, sorted by total descending.
 
-    The unbounded counterpart to ``category_breakdown`` (one calendar
-    year) and ``category_totals_for_month`` (one month) — same shape,
-    but with no time bound at all. ``yoy_delta`` is always ``None``:
-    there's no "previous all-time period" to compare an all-time total
+    ``category_totals_since`` with no lower bound.
+    """
+    return category_totals_since(transactions, txn_type, None)
+
+
+def category_totals_since(
+    transactions: Iterable[Transaction],
+    txn_type: TransactionType,
+    since: date_ | None,
+) -> list[CategoryTotal]:
+    """Return every category's total from ``since`` (inclusive) on, largest first.
+
+    ``since=None`` is the whole history. Same shape as ``category_breakdown``
+    (one calendar year) and ``category_totals_for_month``, but open-ended.
+    ``yoy_delta`` is always ``None``: there's no previous period to compare
     against. Raises on ``TRANSFER``, same as ``category_breakdown``.
     """
     if txn_type is TransactionType.TRANSFER:
         raise ValueError("transfers have no category breakdown")
 
-    totals = _category_totals(transactions, txn_type, lambda _d: True)
+    totals = _category_totals(
+        transactions, txn_type, lambda d: since is None or d >= since
+    )
     result = []
     for category, subs in totals.items():
         total = sum((bucket.total for bucket in subs.values()), Decimal("0"))

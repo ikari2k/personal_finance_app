@@ -35,22 +35,37 @@
     {% include "budget_rule/_rolling.html" %}
   </section>
 
-  {% if spending_categories %}
+  {# Tabs and sort headers swap both category cards in place (so the page keeps
+     its scroll position); the href still works without JS. #}
+  {% macro swap_attrs(link) %}hx-get="{{ link }}" hx-target="#overview-categories" hx-select="#overview-categories" hx-swap="outerHTML" hx-push-url="true"{% endmacro %}
+  {% macro period_tabs(tabs, label) %}
+    <div class="nw-tabs" role="tablist" aria-label="{{ label }}">
+      {% for t in tabs %}
+        <a class="nw-tab" role="tab" href="{{ t.link }}" {{ swap_attrs(t.link) }} aria-selected="{{ 'true' if t.active else 'false' }}">{{ t.label }}</a>
+      {% endfor %}
+    </div>
+  {% endmacro %}
+
+  <div id="overview-categories">
+  {% if has_expenses %}
     <section class="report-card">
     <div class="dash-widget-head" style="margin-bottom: 0.15rem;">
       <h2 style="margin: 0;">Top spending categories</h2>
       <a class="table-link" href="/reports/categories{{ '?account_id=' + account_id if account_id }}">Full report &rsaquo;</a>
     </div>
+    {{ period_tabs(cat_period_tabs, "Top spending categories period") }}
     <p class="muted" style="margin-top: 0;">
-      Every all-time expense category. Click a column to sort by it, click again to reverse.
+      Every expense category{{ " over the last " ~ cat_period_label if cat_period_label != "All time" else ", all time" }}.
+      Click a column to sort by it, click again to reverse.
     </p>
+    {% if spending_categories %}
     <div class="table-scroll">
       <table>
         <thead>
           <tr>
             {% for header in spending_categories_headers %}
               <th>
-                <a class="table-link sortable-th-link" href="{{ header.link }}">{{ header.label }}{% if header.arrow %} {{ header.arrow }}{% endif %}</a>
+                <a class="table-link sortable-th-link" href="{{ header.link }}" {{ swap_attrs(header.link) }}>{{ header.label }}{% if header.arrow %} {{ header.arrow }}{% endif %}</a>
               </th>
             {% endfor %}
           </tr>
@@ -71,14 +86,23 @@
         </tbody>
       </table>
     </div>
+    {% else %}
+      <p class="muted">No expenses in this period.</p>
+    {% endif %}
 
     </section>
 
     <section class="report-card">
-      {% set treemap_caption = "Every expense category, all time." %}
-      {% include "reports/_treemap.html" %}
+      {{ period_tabs(tm_period_tabs, "Spending breakdown period") }}
+      {% if expense_treemap_pair %}
+        {% set treemap_caption = "Every expense category" ~ (" over the last " ~ tm_period_label if tm_period_label != "All time" else ", all time") ~ "." %}
+        {% include "reports/_treemap.html" %}
+      {% else %}
+        <p class="muted">No expenses in this period.</p>
+      {% endif %}
     </section>
   {% endif %}
+  </div>
 
   <section class="report-card">
     <h2>Net worth over time</h2>

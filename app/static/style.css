@@ -2787,6 +2787,7 @@ tr.is-met .br-check { margin-right: 0.4rem; }
   color: var(--pico-muted-color);
   font-weight: 600;
 }
+a.nw-tab { display: inline-block; text-decoration: none; }
 .nw-tab[aria-selected="true"] {
   color: var(--pico-primary);
   border-bottom-color: var(--pico-primary);

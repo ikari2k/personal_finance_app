@@ -18,6 +18,7 @@ this function and the template, not ``services.aggregation``'s data.
 import math
 import statistics
 from calendar import month_abbr, month_name, monthrange
+from collections.abc import Callable
 from datetime import date, timedelta
 from decimal import Decimal
 from urllib.parse import quote
@@ -43,8 +44,8 @@ from app.services.aggregation import (
     category_recent_monthly_totals,
     category_subcategory_monthly_series,
     category_subcategory_shares,
-    category_totals_all_time,
     category_totals_for_month,
+    category_totals_since,
     category_yearly_series,
     forecast_month_end,
     monthly_totals_with_mom,
@@ -1829,8 +1830,58 @@ _SPENDING_CATEGORIES_LABELS = {
 }
 
 
+# Period tabs for the overview's category table and treemap: key -> (label,
+# months back from today; None = all time). Each card keeps its own choice.
+_CATEGORY_PERIODS: dict[str, tuple[str, int | None]] = {
+    "1m": ("1 month", 1),
+    "3m": ("3 months", 3),
+    "6m": ("6 months", 6),
+    "1y": ("1 year", 12),
+    "all": ("All time", None),
+}
+_DEFAULT_CATEGORY_PERIOD = "all"
+
+
+def _period_start(today: date, months: int | None) -> date | None:
+    """First day of a window reaching ``months`` back from ``today`` (None = all)."""
+    if months is None:
+        return None
+    index = today.year * 12 + today.month - 1 - months
+    year, month0 = divmod(index, 12)
+    anchor = date(year, month0 + 1, min(today.day, monthrange(year, month0 + 1)[1]))
+    return anchor + timedelta(days=1)
+
+
+def _overview_url(
+    account_id: str, sort: str, direction: str, cat_period: str, tm_period: str
+) -> str:
+    """Link to ``/reports`` carrying every table/treemap control's current value."""
+    query = (
+        f"cat_sort={sort}&cat_dir={direction}"
+        f"&cat_period={cat_period}&tm_period={tm_period}"
+    )
+    if account_id:
+        query += f"&account_id={quote(account_id)}"
+    return f"/reports?{query}"
+
+
+def _period_tabs(
+    active: str, link_for: Callable[[str], str]
+) -> list[dict[str, str | bool]]:
+    """One tab per period; ``link_for(key)`` builds that tab's URL."""
+    return [
+        {"key": key, "label": label, "link": link_for(key), "active": key == active}
+        for key, (label, _months) in _CATEGORY_PERIODS.items()
+    ]
+
+
 def _spending_categories_sort_link(
-    column: str, current_sort: str, current_dir: str, account_id: str
+    column: str,
+    current_sort: str,
+    current_dir: str,
+    account_id: str,
+    cat_period: str = _DEFAULT_CATEGORY_PERIOD,
+    tm_period: str = _DEFAULT_CATEGORY_PERIOD,
 ) -> str:
     """Build one column header's sort link for the Top spending categories table.
 
@@ -1845,14 +1896,15 @@ def _spending_categories_sort_link(
         if column == current_sort
         else _SPENDING_CATEGORIES_DEFAULT_DIR[column]
     )
-    query = f"cat_sort={column}&cat_dir={next_dir}"
-    if account_id:
-        query += f"&account_id={quote(account_id)}"
-    return f"/reports?{query}"
+    return _overview_url(account_id, column, next_dir, cat_period, tm_period)
 
 
 def _spending_categories_headers(
-    current_sort: str, current_dir: str, account_id: str
+    current_sort: str,
+    current_dir: str,
+    account_id: str,
+    cat_period: str = _DEFAULT_CATEGORY_PERIOD,
+    tm_period: str = _DEFAULT_CATEGORY_PERIOD,
 ) -> list[dict]:
     """Return one header cell per sortable column, in display order."""
     return [
@@ -1860,7 +1912,7 @@ def _spending_categories_headers(
             "column": column,
             "label": _SPENDING_CATEGORIES_LABELS[column],
             "link": _spending_categories_sort_link(
-                column, current_sort, current_dir, account_id
+                column, current_sort, current_dir, account_id, cat_period, tm_period
             ),
             "arrow": (
                 ("▲" if current_dir == "asc" else "▼") if column == current_sort else ""
@@ -1899,6 +1951,8 @@ def reports_overview(
     account_id: str | None = None,
     cat_sort: str = "total",
     cat_dir: str = "desc",
+    cat_period: str = _DEFAULT_CATEGORY_PERIOD,
+    tm_period: str = _DEFAULT_CATEGORY_PERIOD,
 ) -> HTMLResponse:
     """Render the reports landing page: net worth chart + annual summary.
 
@@ -1907,10 +1961,14 @@ def reports_overview(
     independently of this) — plain strings, not enums, so a stale or
     hand-edited link falls back to the default rather than 404ing, same
     convention as ``categories_index``'s own ``sort`` param.
+    ``cat_period`` and ``tm_period`` pick the window (1 month ... all time)
+    the table and the treemap each cover.
     """
     account_id = resolve_account(request, account_id)
     resolved_sort = cat_sort if cat_sort in _SPENDING_CATEGORIES_COLUMNS else "total"
     resolved_dir = cat_dir if cat_dir in ("asc", "desc") else "desc"
+    cat_period = cat_period if cat_period in _CATEGORY_PERIODS else "all"
+    tm_period = tm_period if tm_period in _CATEGORY_PERIODS else "all"
 
     accounts = read_accounts()
     ledger = read_ledger()
@@ -1929,33 +1987,36 @@ def reports_overview(
         )
         for y in years
     }
-    # "Top spending categories" — every expense category's whole-history
-    # total (this page is all-time stats only; per-year/YTD figures live
-    # on /reports/{year} and the category detail page instead), sortable
-    # by any column via cat_sort/cat_dir.
-    all_time_expense_breakdown = category_totals_all_time(
-        transactions, TransactionType.EXPENSE
-    )
-    expense_all_time_total = sum(
-        (c.total for c in all_time_expense_breakdown), Decimal("0")
-    )
+
+    # "Top spending categories" and the treemap below it: every expense
+    # category over a window each card picks for itself (1 month ... all
+    # time), the table sortable by any column via cat_sort/cat_dir.
+    def period_view(period: str):
+        label, months = _CATEGORY_PERIODS[period]
+        since = _period_start(today, months)
+        breakdown = category_totals_since(transactions, TransactionType.EXPENSE, since)
+        total = sum((c.total for c in breakdown), Decimal("0"))
+        return breakdown, total, since, label
+
+    has_expenses = any(t.type is TransactionType.EXPENSE for t in transactions)
+    cat_breakdown, cat_total, cat_since, cat_label = period_view(cat_period)
+    date_from = cat_since.isoformat() if cat_since else ""
+    date_to = today.isoformat() if cat_since else ""
     spending_categories = [
         {
             "name": c.name,
             "total": c.total,
-            "pct": (
-                float(c.total / expense_all_time_total * 100)
-                if expense_all_time_total
-                else 0.0
-            ),
+            "pct": float(c.total / cat_total * 100) if cat_total else 0.0,
             "count": c.count,
             "link": breadcrumbs.transactions_link(
                 category=c.name,
                 txn_type=TransactionType.EXPENSE.value,
                 account_id=account_id,
+                date_from=date_from,
+                date_to=date_to,
             ),
         }
-        for c in all_time_expense_breakdown
+        for c in cat_breakdown
     ]
     spending_categories.sort(
         key=lambda r: (
@@ -1964,10 +2025,32 @@ def reports_overview(
         reverse=(resolved_dir == "desc"),
     )
     spending_categories_headers = _spending_categories_headers(
-        resolved_sort, resolved_dir, account_id
+        resolved_sort, resolved_dir, account_id, cat_period, tm_period
     )
-    expense_treemap_pair = _treemap_pair(
-        all_time_expense_breakdown, expense_config, account_id, expense_all_time_total
+    cat_period_tabs = _period_tabs(
+        cat_period,
+        lambda key: _overview_url(
+            account_id, resolved_sort, resolved_dir, key, tm_period
+        ),
+    )
+    tm_breakdown, tm_total, tm_since, tm_label = period_view(tm_period)
+    expense_treemap_pair = (
+        _treemap_pair(
+            tm_breakdown,
+            expense_config,
+            account_id,
+            tm_total,
+            date_from=tm_since.isoformat() if tm_since else "",
+            date_to=today.isoformat() if tm_since else "",
+        )
+        if tm_breakdown
+        else None
+    )
+    tm_period_tabs = _period_tabs(
+        tm_period,
+        lambda key: _overview_url(
+            account_id, resolved_sort, resolved_dir, cat_period, key
+        ),
     )
 
     # All-time hero stats — no delta alongside them, since there's no
@@ -2005,8 +2088,13 @@ def reports_overview(
             "account_id": account_id,
             "year_txn_links": year_txn_links,
             "year_stats": _year_stats(years, today),
+            "has_expenses": has_expenses,
             "spending_categories": spending_categories,
             "spending_categories_headers": spending_categories_headers,
+            "cat_period_tabs": cat_period_tabs,
+            "cat_period_label": cat_label,
+            "tm_period_tabs": tm_period_tabs,
+            "tm_period_label": tm_label,
             "expense_treemap_pair": expense_treemap_pair,
             "expense_config": expense_config,
             "all_time_stats": all_time_stats,
