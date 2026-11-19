@@ -1278,6 +1278,7 @@ def _monthly_bars_chart(
 # starts on Jan 1, not a fixed number of days back).
 NET_WORTH_RANGES: dict[str, int | None] = {
     "1M": 30,
+    "3M": 91,
     "6M": 182,
     "YTD": None,
     "1Y": 365,

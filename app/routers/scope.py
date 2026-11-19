@@ -74,7 +74,9 @@ def transactions_period(date_from: str, date_to: str, today: date) -> dict:
     Reflects the list's *actual* date range: a month stepper when the range
     is exactly one month, otherwise just an empty month picker (arrows
     disabled) so the user can jump into month mode from "all dates" or a
-    custom range.
+    custom range. In month mode a "All dates" link clears the range (an
+    explicit empty ``date_from``/``date_to`` beats the sticky cookies) so
+    the list is never stuck on a month.
     """
     current = month_key(today.year, today.month)
     picker = {
@@ -100,4 +102,6 @@ def transactions_period(date_from: str, date_to: str, today: date) -> dict:
         ),
         "next_label": month_key(next_year, next_month),
         "picker": picker,
+        "clear_url": "/transactions?date_from=&date_to=",
+        "clear_label": "All dates",
     }

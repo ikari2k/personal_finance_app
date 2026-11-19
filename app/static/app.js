@@ -266,3 +266,120 @@
     if (chart && !chart.contains(e.relatedTarget)) hide(chart);
   });
 })();
+
+/*
+ * Year/month chooser (`[data-month-picker]` in _scope_bar.html): a button
+ * opens a popover with a year stepper and a 3x4 month grid; picking a month
+ * sets the form's hidden input to YYYY-MM and submits. Months after
+ * `data-max` are disabled. Delegated like everything above, since htmx swaps
+ * the scope bar out-of-band.
+ */
+(function () {
+  "use strict";
+
+  var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+  function parse(key) {
+    var m = /^(\d{4})-(\d{2})$/.exec(key || "");
+    return m ? { y: +m[1], m: +m[2] } : null;
+  }
+
+  function pad(n) {
+    return (n < 10 ? "0" : "") + n;
+  }
+
+  function button(text, className, attrs) {
+    var b = document.createElement("button");
+    b.type = "button";
+    b.className = className;
+    b.textContent = text;
+    Object.keys(attrs || {}).forEach(function (k) {
+      b.setAttribute(k, attrs[k]);
+    });
+    return b;
+  }
+
+  function render(picker, year) {
+    var pop = picker.querySelector(".month-pop");
+    var max = parse(picker.dataset.max);
+    var sel = parse(picker.querySelector("input[type=hidden]").value);
+    picker.dataset.year = year;
+
+    var head = document.createElement("div");
+    head.className = "month-pop-head";
+    var prev = button("\u2039", "month-pop-step", { "data-step": "-1", "aria-label": "Previous year" });
+    var next = button("\u203a", "month-pop-step", { "data-step": "1", "aria-label": "Next year" });
+    if (max && year >= max.y) next.disabled = true;
+    var label = document.createElement("span");
+    label.textContent = year;
+    head.append(prev, label, next);
+
+    var grid = document.createElement("div");
+    grid.className = "month-pop-grid";
+    MONTHS.forEach(function (name, i) {
+      var key = year + "-" + pad(i + 1);
+      var b = button(name, "month-pop-month", { "data-key": key });
+      b.setAttribute("aria-pressed", sel && sel.y === year && sel.m === i + 1 ? "true" : "false");
+      if (max && (year > max.y || (year === max.y && i + 1 > max.m))) b.disabled = true;
+      grid.append(b);
+    });
+    pop.textContent = "";
+    pop.append(head, grid);
+  }
+
+  function close(picker, refocus) {
+    var pop = picker.querySelector(".month-pop");
+    var trigger = picker.querySelector(".month-pick");
+    pop.hidden = true;
+    trigger.setAttribute("aria-expanded", "false");
+    if (refocus) trigger.focus();
+  }
+
+  function closeAll(except) {
+    document.querySelectorAll("[data-month-picker]").forEach(function (p) {
+      if (p !== except) close(p, false);
+    });
+  }
+
+  document.addEventListener("click", function (e) {
+    var picker = e.target.closest && e.target.closest("[data-month-picker]");
+    if (!picker) {
+      closeAll(null);
+      return;
+    }
+    closeAll(picker);
+    var pop = picker.querySelector(".month-pop");
+
+    if (e.target.closest(".month-pick")) {
+      if (!pop.hidden) return close(picker, false);
+      var sel = parse(picker.querySelector("input[type=hidden]").value);
+      var max = parse(picker.dataset.max);
+      render(picker, sel ? sel.y : max ? max.y : new Date().getFullYear());
+      pop.hidden = false;
+      picker.querySelector(".month-pick").setAttribute("aria-expanded", "true");
+      var active = pop.querySelector("[aria-pressed=true]") || pop.querySelector(".month-pop-month:not(:disabled)");
+      if (active) active.focus();
+      return;
+    }
+
+    var step = e.target.closest(".month-pop-step");
+    if (step) {
+      render(picker, +picker.dataset.year + +step.dataset.step);
+      var again = pop.querySelector('[data-step="' + step.dataset.step + '"]');
+      if (again && !again.disabled) again.focus();
+      return;
+    }
+
+    var month = e.target.closest(".month-pop-month");
+    if (month && !month.disabled) {
+      picker.querySelector("input[type=hidden]").value = month.dataset.key;
+      picker.submit();
+    }
+  });
+
+  document.addEventListener("keydown", function (e) {
+    if (e.key !== "Escape") return;
+    var open = document.querySelector("[data-month-picker] .month-pop:not([hidden])");
+    if (open) close(open.closest("[data-month-picker]"), true);
+  });
+})();

@@ -237,7 +237,7 @@ def test_overview_net_worth_line_has_range_tabs_and_headline(client):
 
     assert response.status_code == 200
     assert "nw-tab" in response.text
-    for key in ("1M", "6M", "YTD", "1Y", "5Y", "Max"):
+    for key in ("1M", "3M", "6M", "YTD", "1Y", "5Y", "Max"):
         assert f">{key}</button>" in response.text
     assert 'class="nw-value">700.00' in response.text
 
@@ -1843,3 +1843,39 @@ def test_period_tabs_and_sort_headers_swap_in_place_instead_of_reloading(client)
     assert 'id="overview-categories"' in text
     assert text.count('hx-select="#overview-categories"') >= 10  # 2x5 tabs + headers
     assert 'hx-push-url="true"' in text
+
+
+def test_net_worth_three_month_range_sits_between_one_and_six_and_trims_older_days(
+    client,
+):
+    from datetime import timedelta
+
+    _create_account(client, starting_balance="0.00")
+    today = date.today()
+    _create_transaction(
+        client,
+        date=(today - timedelta(days=150)).isoformat(),
+        type="income",
+        category="Salary",
+        amount="100",
+    )
+    _create_transaction(
+        client,
+        date=(today - timedelta(days=10)).isoformat(),
+        type="income",
+        category="Salary",
+        amount="50",
+    )
+
+    three = client.get("/reports/net-worth?range=3M&account_id=").text
+    six = client.get("/reports/net-worth?range=6M&account_id=").text
+
+    tabs = [k for k in ("1M", "3M", "6M") if f">{k}</button>" in three]
+    assert tabs == ["1M", "3M", "6M"]
+    assert three.index(">3M<") < three.index(">6M<")
+    points = lambda html: html.split("data-points")[1].split("'>")[0]  # noqa: E731
+    # The 150-day-old step is outside 3M's window but inside 6M's.
+    old = today - timedelta(days=150)
+    label = f"{old.day} {old:%b} {old.year}"
+    assert label not in points(three)
+    assert label in points(six)

@@ -291,13 +291,13 @@
       other current value in its own hx-vals, same round-tripping rule
       as every other control here.
     #}
-    <span class="date-range-group">
-      <input type="date" name="date_from" value="{{ date_from }}" aria-label="From date"
+    <span class="date-range-group"{% if month_in_bar %} title="The month above sets the range. Choose All dates to use a custom range."{% endif %}>
+      <input type="date" name="date_from" value="{{ date_from }}" aria-label="From date"{% if month_in_bar %} disabled{% endif %}
           hx-get="/transactions" hx-target="#transactions-table-wrapper" hx-swap="outerHTML"
           hx-push-url="true" hx-trigger="change"
           hx-vals='{"by_month": "{{ 'true' if by_month else 'false' }}", "by_type": "{{ 'true' if by_type else 'false' }}", "account_id": "{{ account_id }}", "category": "{{ category }}", "subcategory": "{{ subcategory }}", "txn_type": "{{ txn_type }}", "search": "{{ search }}", "date_to": "{{ date_to }}"}'>
       <span class="date-range-sep">&ndash;</span>
-      <input type="date" name="date_to" value="{{ date_to }}" aria-label="To date"
+      <input type="date" name="date_to" value="{{ date_to }}" aria-label="To date"{% if month_in_bar %} disabled{% endif %}
           hx-get="/transactions" hx-target="#transactions-table-wrapper" hx-swap="outerHTML"
           hx-push-url="true" hx-trigger="change"
           hx-vals='{"by_month": "{{ 'true' if by_month else 'false' }}", "by_type": "{{ 'true' if by_type else 'false' }}", "account_id": "{{ account_id }}", "category": "{{ category }}", "subcategory": "{{ subcategory }}", "txn_type": "{{ txn_type }}", "search": "{{ search }}", "date_from": "{{ date_from }}"}'>

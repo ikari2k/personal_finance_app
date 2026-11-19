@@ -16,6 +16,7 @@ from app.routers.scope import (
     month_bounds,
     month_key,
     parse_month_key,
+    single_month_of,
     transactions_period,
 )
 from app.services.aggregation import grouped_transaction_view
@@ -273,6 +274,18 @@ def list_transactions(
         date_from, date_to = first.isoformat(), last.isoformat()
 
     cookie_by_month, cookie_by_type = _grouping_from_cookies(request)
+    # Entering month mode (a month applied while the list was not already on
+    # exactly one month) is a fresh monthly view, so grouping goes back to its
+    # default (month and type). Stepping between months keeps whatever
+    # grouping was chosen since.
+    entering_month_mode = applied_month is not None and (
+        single_month_of(
+            request.cookies.get("date_from", ""), request.cookies.get("date_to", "")
+        )
+        is None
+    )
+    if entering_month_mode:
+        cookie_by_month = cookie_by_type = True
     resolved_by_month = by_month if by_month is not None else cookie_by_month
     resolved_by_type = by_type if by_type is not None else cookie_by_type
     resolved_account_id = (

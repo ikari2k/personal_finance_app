@@ -186,7 +186,9 @@ tests/unit/     tmp_path-isolated; tests/integration/  TestClient, conftest redi
   The Dashboard follows the account (its 50/30/20 widget and transfer nudge always use all
   accounts). The month is the `scope_month` cookie, recorded when a month report or
   `/reports/budget-rule?month=` is visited; Transactions turns it into a date range *once* per
-  change (`scope_month_applied` marker), then its own date filters win. `?scope_month=` on
+  change (`scope_month_applied` marker), then its own date filters win. While the range is exactly one month the From/To inputs are
+  disabled (the bar owns the range; "All dates" leaves month mode), and entering month mode resets
+  grouping to month & type. `?scope_month=` on
   `/transactions` applies a month explicitly. The Transactions bar mirrors the list's real
   range (an exact calendar month = stepper, anything else = empty picker) and is refreshed
   out-of-band after HTMX filter changes.

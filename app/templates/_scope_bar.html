@@ -2,9 +2,12 @@
 
    period_stepper(p): ‹ label › — `p` is a dict with prev_url, prev_label,
    next_url (None disables the arrow), next_label, and either `picker`
-   ({key, max, action}: a month input that jumps straight to a month),
+   ({key, max, action[, name]}: a year/month chooser that jumps straight to a
+   month — a button opening a popover (app.js, `[data-month-picker]`) that
+   submits the form with `name` (default "month") set to YYYY-MM),
    `heading` (render the label as the page's <h1>), or neither (plain label);
-   optional today_url adds a "Back to current month" link.
+   optional today_url adds a "Back to current month" link, and optional
+   clear_url (with clear_label) a link out of month mode, e.g. "All dates".
 
    global_scope(accounts, account_id, period): the one band under the nav on
    Dashboard, Transactions and Reports — a month stepper (when the page has a
@@ -18,9 +21,13 @@
       <span class="step disabled" aria-hidden="true">&lsaquo;</span>
     {% endif %}
     {% if p.picker %}
-      <form method="get" action="{{ p.picker.action }}" class="period-picker">
-        <input type="month" name="{{ p.picker.name or 'month' }}" value="{{ p.picker.key }}" max="{{ p.picker.max }}"
-               aria-label="Month" onchange="if (this.value) this.form.submit()">
+      {% set month_names = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"] %}
+      <form method="get" action="{{ p.picker.action }}" class="period-picker" data-month-picker data-max="{{ p.picker.max }}">
+        <input type="hidden" name="{{ p.picker.name or 'month' }}" value="{{ p.picker.key }}">
+        <button type="button" class="outline secondary month-pick" aria-haspopup="dialog" aria-expanded="false">
+          {{ month_names[p.picker.key[5:7]|int - 1] ~ " " ~ p.picker.key[:4] if p.picker.key else "Choose month" }}
+        </button>
+        <div class="month-pop" role="dialog" aria-label="Choose month" hidden></div>
       </form>
     {% elif p.heading %}
       <h1 class="period-title">{{ p.label }}</h1>
@@ -33,6 +40,7 @@
       <span class="step disabled" aria-hidden="true">&rsaquo;</span>
     {% endif %}
     {% if p.today_url %}<a class="period-today" href="{{ p.today_url }}">Back to current month</a>{% endif %}
+    {% if p.clear_url %}<a class="period-today" href="{{ p.clear_url }}">{{ p.clear_label or "Clear" }}</a>{% endif %}
   </div>
 {% endmacro %}
 

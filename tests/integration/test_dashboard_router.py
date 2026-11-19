@@ -506,6 +506,7 @@ def test_dashboard_hero_shows_net_worth_line_without_duplicate_headline(client):
     # The hero already shows the value, so the chart's own headline is dropped.
     assert "nw-value" not in response.text
     assert "compact=1" in response.text
+    assert ">3M</button>" in response.text
 
 
 def test_net_worth_fragment_compact_hides_headline(client):
