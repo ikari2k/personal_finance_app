@@ -1661,15 +1661,50 @@ def test_inline_payee_refuses_transfers_and_unknown_ids(client):
     assert all(t.payee == "" for t in read_ledger(config.LEDGER_PATH))
 
 
-def test_list_has_a_payee_input_per_expense_row_and_a_datalist(client):
+def test_list_has_a_payee_dropdown_per_expense_row_with_the_banks_text(client):
     _create_account(client)
-    _add_expense(client, payee="Lidl")
+    _add_expense(client, description="PayU 99", payee="Cinema City")
 
     text = client.get("/transactions").text
 
-    assert 'class="desc-inline-input payee-inline-input"' in text
-    assert 'hx-post="/transactions/' in text and "/payee" in text
-    assert '<datalist id="payee-options"><option value="Lidl">' in text
+    assert 'class="payee-combo" data-txn-id="' in text
+    assert 'value="Cinema City" data-value="Cinema City"' in text
+    assert 'data-bank="PayU 99"' in text  # offered first in the dropdown
+    assert 'class="payee-combo-list"' in text
+    assert 'list="payee-options"' not in text  # no longer the native datalist
+
+
+def test_payee_options_are_one_shared_template_most_used_first(client):
+    _create_account(client)
+    _add_expense(client, description="a", payee="Lidl", date="2026-01-10")
+    _add_expense(client, description="b", payee="Zabka", date="2026-01-11")
+    _add_expense(client, description="c", payee="Zabka", date="2026-01-12")
+
+    text = client.get("/transactions").text
+
+    template = text.split('<template id="payee-options-list">')[1].split("</template>")[
+        0
+    ]
+    assert template.index(">Zabka<") < template.index(">Lidl<")
+    assert text.count('<template id="payee-options-list">') == 1  # not repeated per row
+
+
+def test_transfer_rows_have_no_payee_dropdown(client):
+    _create_account(client, "chk")
+    _create_account(client, "sav")
+    client.post(
+        "/transfers",
+        data={
+            "from_account_id": "chk",
+            "to_account_id": "sav",
+            "date": "2026-01-15",
+            "amount": "50.00",
+            "description": "",
+            "notes": "",
+        },
+    )
+
+    assert 'class="payee-combo"' not in client.get("/transactions").text
 
 
 def test_search_also_matches_the_payee(client):

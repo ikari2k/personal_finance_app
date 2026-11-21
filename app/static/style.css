@@ -147,6 +147,14 @@
   max-width: 100%;
 }
 
+/* The Payee cell's dropdown (app.js) shares the category combo's list look. */
+.payee-combo {
+  position: relative;
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+}
+
 /* min-width: 0 overrides a flex item's default "never shrink below its
  * content's natural size" so it truncates via text-overflow instead of
  * overflowing/wrapping when the icon + input's natural width exceeds
@@ -206,7 +214,8 @@
 /* Floating option list — escapes the fixed-width column entirely rather
  * than trying to fit inside it, same reasoning as the row-action glyphs
  * floating outside the table (see CLAUDE.md's UI-conventions section). */
-.cat-combo-list {
+.cat-combo-list,
+.payee-combo-list {
   position: absolute;
   top: 100%;
   left: 0;
@@ -224,7 +233,8 @@
   font-size: 0.85rem;
 }
 
-.cat-combo-group-label {
+.cat-combo-group-label,
+.payee-group-label {
   padding: 0.2rem 0.7rem;
   font-size: 0.7rem;
   color: var(--pico-muted-color);
@@ -232,7 +242,8 @@
   letter-spacing: 0.03em;
 }
 
-.cat-combo-option {
+.cat-combo-option,
+.payee-option {
   padding: 0.3rem 0.7rem;
   cursor: pointer;
   white-space: nowrap;
@@ -240,7 +251,8 @@
   text-overflow: ellipsis;
 }
 
-.cat-combo-option.active {
+.cat-combo-option.active,
+.payee-option.active {
   background-color: var(--pico-primary-background);
   color: var(--pico-primary-inverse);
 }

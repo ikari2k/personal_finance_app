@@ -199,6 +199,207 @@
 })();
 
 /*
+ * Payee dropdown in the transactions list's Payee cell (`.payee-combo`,
+ * transactions/_table.html): the Category combobox's feel, for free text.
+ * Focusing opens the list (existing payees, with this row's own bank text
+ * first); typing narrows it; arrows/Enter or a click pick an option. Unlike
+ * a category, typed text that matches nothing is a valid value, so Enter or
+ * moving focus away saves it, and Escape reverts. Saving POSTs only the
+ * payee to /transactions/{id}/payee and swaps the row. Delegated on
+ * `document`, like the combobox above, since htmx replaces rows.
+ */
+(function () {
+  "use strict";
+
+  function comboOf(el) {
+    return el.closest(".payee-combo");
+  }
+
+  function input(combo) {
+    return combo.querySelector(".payee-combo-input");
+  }
+
+  function list(combo) {
+    var el = combo.querySelector(".payee-combo-list");
+    // Rows ship an empty list; the shared options come from one <template>.
+    if (!el.firstChild) {
+      var tpl = document.getElementById("payee-options-list");
+      if (tpl) el.appendChild(tpl.content.cloneNode(true));
+    }
+    return el;
+  }
+
+  function allOptions(combo) {
+    return combo.querySelectorAll(".payee-option");
+  }
+
+  function visibleOptions(combo) {
+    return Array.prototype.filter.call(allOptions(combo), function (o) {
+      return !o.hidden;
+    });
+  }
+
+  function clearActive(combo) {
+    Array.prototype.forEach.call(allOptions(combo), function (o) {
+      o.classList.remove("active");
+    });
+  }
+
+  // This row's own bank text, offered first unless it is already the value.
+  function syncBankOption(combo) {
+    var el = list(combo);
+    Array.prototype.forEach.call(el.querySelectorAll(".payee-bank"), function (n) {
+      n.remove();
+    });
+    var field = input(combo);
+    var bank = field.dataset.bank;
+    if (!bank || bank === field.dataset.value) return;
+    var label = document.createElement("div");
+    label.className = "payee-group-label payee-bank";
+    label.textContent = "From the bank";
+    var option = document.createElement("div");
+    option.className = "payee-option payee-bank";
+    option.setAttribute("role", "option");
+    option.tabIndex = -1;
+    option.textContent = bank;
+    option.title = bank;
+    el.prepend(label, option);
+  }
+
+  function openList(combo) {
+    list(combo).hidden = false;
+  }
+
+  function closeList(combo) {
+    list(combo).hidden = true;
+    clearActive(combo);
+  }
+
+  // `showAll` lists everything (on focus, before anything is typed);
+  // otherwise the typed text narrows the options by substring.
+  function filterList(combo, showAll) {
+    var query = showAll ? "" : input(combo).value.trim().toLowerCase();
+    Array.prototype.forEach.call(allOptions(combo), function (o) {
+      o.hidden = query !== "" && o.textContent.toLowerCase().indexOf(query) === -1;
+    });
+    // A group label is hidden once none of the options after it are visible.
+    Array.prototype.forEach.call(
+      combo.querySelectorAll(".payee-group-label"),
+      function (label) {
+        var sibling = label.nextElementSibling;
+        var anyVisible = false;
+        while (sibling && !sibling.classList.contains("payee-group-label")) {
+          if (!sibling.hidden) anyVisible = true;
+          sibling = sibling.nextElementSibling;
+        }
+        label.hidden = !anyVisible;
+      }
+    );
+    clearActive(combo);
+    openList(combo);
+  }
+
+  function moveActive(combo, delta) {
+    var opts = visibleOptions(combo);
+    if (!opts.length) return;
+    var activeIndex = opts.findIndex(function (o) {
+      return o.classList.contains("active");
+    });
+    var nextIndex =
+      activeIndex === -1
+        ? delta > 0
+          ? 0
+          : opts.length - 1
+        : Math.min(Math.max(activeIndex + delta, 0), opts.length - 1);
+    clearActive(combo);
+    opts[nextIndex].classList.add("active");
+    opts[nextIndex].scrollIntoView({ block: "nearest" });
+  }
+
+  function revert(combo) {
+    var el = input(combo);
+    el.value = el.dataset.value;
+  }
+
+  function commit(combo, text) {
+    var el = input(combo);
+    text = text.trim();
+    var changed = text !== el.dataset.value;
+    el.value = text;
+    el.dataset.value = text;
+    closeList(combo);
+    if (!changed) return;
+    window.htmx.ajax("POST", "/transactions/" + combo.dataset.txnId + "/payee", {
+      target: combo.closest("tr"),
+      swap: "outerHTML",
+      values: { payee: text },
+    });
+  }
+
+  document.addEventListener("focusin", function (e) {
+    if (!e.target.matches || !e.target.matches(".payee-combo-input")) return;
+    var combo = comboOf(e.target);
+    e.target.select();
+    syncBankOption(combo);
+    filterList(combo, true);
+  });
+
+  document.addEventListener("input", function (e) {
+    if (!e.target.matches || !e.target.matches(".payee-combo-input")) return;
+    filterList(comboOf(e.target), false);
+  });
+
+  document.addEventListener("keydown", function (e) {
+    if (!e.target.matches || !e.target.matches(".payee-combo-input")) return;
+    var combo = comboOf(e.target);
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      openList(combo);
+      moveActive(combo, 1);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      openList(combo);
+      moveActive(combo, -1);
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      var active = visibleOptions(combo).find(function (o) {
+        return o.classList.contains("active");
+      });
+      commit(combo, active ? active.textContent : e.target.value);
+      e.target.blur();
+    } else if (e.key === "Escape") {
+      revert(combo);
+      closeList(combo);
+      e.target.blur();
+    }
+  });
+
+  // mousedown (not click) fires before the input's blur; preventDefault keeps
+  // focus on the input so the focusout handler below doesn't save the old text.
+  document.addEventListener("mousedown", function (e) {
+    var option = e.target.closest && e.target.closest(".payee-option");
+    if (!option) return;
+    e.preventDefault();
+    var combo = comboOf(option);
+    commit(combo, option.textContent);
+    input(combo).blur();
+  });
+
+  document.addEventListener("focusout", function (e) {
+    if (!e.target.matches || !e.target.matches(".payee-combo-input")) return;
+    var combo = comboOf(e.target);
+    // Deferred one tick so a click on an option (which keeps focus here) is
+    // not undone by this handler.
+    setTimeout(function () {
+      if (combo.contains(document.activeElement)) return;
+      var field = input(combo);
+      if (field.value.trim() !== field.dataset.value) commit(combo, field.value);
+      else closeList(combo);
+    }, 0);
+  });
+})();
+
+/*
  * Net worth line chart hover (reports/_net_worth_line.html, `.nw-chart`):
  * a crosshair, dot and tooltip snapped to the nearest daily point. The
  * points ship as JSON in `data-points` ([x, y, date, value] in SVG

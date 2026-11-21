@@ -112,12 +112,22 @@
     </td>
     <td class="payee-cell">
       {% if txn.type.value != 'transfer' %}
-        {# Clean name of whoever was paid / paid you; blank until named. Writes only ``payee``. #}
-        <input type="text" class="desc-inline-input payee-inline-input" name="payee"
-               value="{{ txn.payee }}" placeholder="Payee" list="payee-options"
-               autocomplete="off" aria-label="Payee"
-               hx-post="/transactions/{{ txn.id }}/payee" hx-trigger="change"
-               hx-target="closest tr" hx-swap="outerHTML">
+        {#
+          Clean name of whoever was paid / paid you; blank until named. A
+          type-to-filter dropdown like the Category cell (app/static/app.js),
+          but a payee is free text: a typed name is saved on Enter or when
+          focus leaves, a picked option is saved on click. The options are
+          the payees already used (one shared <template>, below) plus this
+          row's own bank text (`data-bank`) on top. Writes only ``payee``
+          (POST /transactions/{id}/payee).
+        #}
+        <span class="payee-combo" data-txn-id="{{ txn.id }}">
+          <input type="text" class="desc-inline-input payee-combo-input"
+                 value="{{ txn.payee }}" data-value="{{ txn.payee }}"
+                 data-bank="{{ txn.description }}" placeholder="Payee"
+                 autocomplete="off" spellcheck="false" aria-label="Payee">
+          <div class="payee-combo-list" role="listbox" hidden></div>
+        </span>
       {% endif %}
     </td>
     <td>
@@ -375,7 +385,10 @@
   {% endif %}
   {% if categories is defined %}{{ cat_option_templates(categories) }}{% endif %}
   {% if payees is defined %}
-    <datalist id="payee-options">{% for name in payees %}<option value="{{ name }}">{% endfor %}</datalist>
+    <template id="payee-options-list">
+      <div class="payee-group-label">Used before</div>
+      {% for name in payees %}<div class="payee-option" role="option" tabindex="-1">{{ name }}</div>{% endfor %}
+    </template>
   {% endif %}
   {% if error %}<p class="error">{{ error }}</p>{% endif %}
   {% for month in months %}

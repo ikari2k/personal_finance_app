@@ -98,8 +98,8 @@ tests/unit/     tmp_path-isolated; tests/integration/  TestClient, conftest redi
   duplicate detection and rule matching), `notes` = personal, `payee` = the clean name of who was
   paid / paid you (free text, blank for transfers — `merge_into_transfer` clears it,
   `update_transaction_payee` refuses transfer legs). Filled by a rule, the mapping's payee
-  column, the import preview's box or by hand; the transactions list has an inline payee input
-  and search matches it. Never use it in duplicate detection.
+  column, the import preview's box or by hand; the transactions list has an inline payee dropdown
+  (`.payee-combo`: existing payees plus the row's bank text; free text is valid) and search matches it. Never use it in duplicate detection.
 - **Lock every write** to ledger/config files via `app.storage.lock.file_lock` (PID lockfile,
   stale locks auto-cleared). `LockError` is handled app-wide in `app/main.py` (toast +
   `HX-Reswap: none`).
@@ -239,7 +239,7 @@ tests/unit/     tmp_path-isolated; tests/integration/  TestClient, conftest redi
 - **Known simplifications**: create/transfer success always re-renders the transactions table
   with default grouping/filters; dashboard quick-add dialogs' oob table swap silently no-ops
   there (dialog + toast still work); subcategory-level YoY isn't computed.
-- **Custom JS** (`app/static/app.js`, e.g. the `.cat-combo` combobox) uses listeners delegated on
+- **Custom JS** (`app/static/app.js`, e.g. the `.cat-combo` and `.payee-combo` comboboxes) uses listeners delegated on
   `document`, since htmx swaps orphan per-element listeners.
 
 ## Code style
