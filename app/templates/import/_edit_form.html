@@ -43,6 +43,16 @@
     </label>
   </div>
   <div class="form-grid-2">
+    {% for n in (1, 2) %}
+      {% set key = "description_extra_" ~ n %}
+      <label title="Appended to the description after the primary/fallback text">
+        Extra description column {{ n }} (optional)
+        <input type="number" name="{{ key }}_column" min="0"
+               value="{{ mapping.columns[key] if key in mapping.columns else '' }}">
+      </label>
+    {% endfor %}
+  </div>
+  <div class="form-grid-2">
     <label>Account number column (optional)
       <input type="number" name="account_number_column" min="0"
              value="{{ mapping.columns.account_number if mapping.columns.account_number is defined else '' }}">

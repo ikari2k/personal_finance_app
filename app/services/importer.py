@@ -35,6 +35,12 @@ from app.services.categorizer import categorize
 DEFAULT_CATEGORY = "Uncategorized"
 
 
+# Optional mapping columns appended to the description, in this order, and the
+# text put between them.
+DESCRIPTION_EXTRA_KEYS = ("description_extra_1", "description_extra_2")
+DESCRIPTION_JOINER = " | "
+
+
 @dataclass
 class ParsedRow:
     """One parsed-but-not-yet-committed CSV row."""
@@ -44,6 +50,12 @@ class ParsedRow:
     amount: Decimal
     account_number: str = ""
     counterparty_account: str = ""
+    # ``description`` plus any ``description_extra_*`` columns, joined for
+    # display; "" when nothing was appended. Only ever shown (the preview
+    # pre-fills it, and keeping it makes it the transaction's note):
+    # ``description`` stays the bank's own text, because that is what keys
+    # duplicate detection and rule matching.
+    display_description: str = ""
 
 
 def parse_amount(raw: str, decimal_separator: str) -> Decimal:
@@ -102,6 +114,9 @@ def parse_rows(csv_text: str, mapping: ImportMapping) -> list[ParsedRow]:
     amount_idx = mapping.columns["amount"]
     account_idx = mapping.columns.get("account_number")
     description_fallback_idx = mapping.columns.get("description_fallback")
+    description_extra_idxs = [
+        mapping.columns[key] for key in DESCRIPTION_EXTRA_KEYS if key in mapping.columns
+    ]
     counterparty_idx = mapping.columns.get("counterparty_account")
     counterparty_fallback_idx = mapping.columns.get("counterparty_account_fallback")
 
@@ -127,6 +142,16 @@ def parse_rows(csv_text: str, mapping: ImportMapping) -> list[ParsedRow]:
         description = row[description_idx].strip()
         if not description and description_fallback_idx is not None:
             description = row[description_fallback_idx].strip()
+        # Optional extra columns are appended, each in turn, to whatever the
+        # primary/fallback gave, to help the user recognise the row. They go
+        # into ``display_description`` only, never ``description`` itself. A
+        # value already in the text is not repeated.
+        parts = [description] if description else []
+        for idx in description_extra_idxs:
+            extra = row[idx].strip()
+            if extra and extra not in parts:
+                parts.append(extra)
+        display_description = DESCRIPTION_JOINER.join(parts) if len(parts) > 1 else ""
         # A bank export typically names the counterparty in one of two
         # mutually-exclusive columns depending on transaction direction
         # (e.g. Credit Agricole: "Rachunek nadawcy"/sender for an inbound
@@ -143,6 +168,7 @@ def parse_rows(csv_text: str, mapping: ImportMapping) -> list[ParsedRow]:
                 date=parse_date(row[date_idx], mapping.date_format),
                 description=description,
                 amount=amount,
+                display_description=display_description,
                 account_number=row[account_idx].strip()
                 if account_idx is not None
                 else "",
@@ -216,7 +242,9 @@ def find_duplicates(
     account with the same date, amount, and description (exact match,
     case/whitespace-insensitive on description) — the closest a CSV row
     (no natural id) has to a stable identity, guarding against
-    re-importing the same or an overlapping statement.
+    re-importing the same or an overlapping statement. Always the bank's own
+    ``description``: ``description_extra_*`` text never takes part, so adding
+    extras to a mapping does not change what counts as already imported.
     """
     existing_keys = {
         (txn.date, txn.amount, txn.description.strip().lower())
@@ -260,7 +288,10 @@ def build_transactions(
                 amount=row.amount,
                 type=txn_type,
                 transfer_id=None,
-                notes=None,
+                # Preview-only: pre-fills the editable description box. The
+                # confirm step saves it as the note when it differs from
+                # ``description`` (see ``apply_note_edits``).
+                notes=row.display_description or None,
                 counterparty_account=row.counterparty_account,
             )
         )

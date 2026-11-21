@@ -31,11 +31,12 @@
             <td>{{ txn.date }}</td>
             <td>
               {% if dry_run %}
-                {{ txn.description }}
+                {{ txn.notes or txn.description }}
               {% else %}
-                {# Like /transactions: edits become the note, never the description (it keys duplicate detection). #}
+                {# Like /transactions: edits become the note, never the description (it keys duplicate detection).
+                   Extra description columns arrive here as txn.notes, so they are saved as the note unless edited away. #}
                 <input type="text" class="desc-inline-input" name="row_notes" form="import-confirm-form"
-                       value="{{ txn.description }}" aria-label="Description">
+                       value="{{ txn.notes or txn.description }}" aria-label="Description">
               {% endif %}
             </td>
             <td>

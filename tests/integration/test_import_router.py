@@ -417,6 +417,40 @@ def test_saving_edited_mapping_persists_unconditionally(client):
     assert mapping.columns == {"date": 5, "description": 6, "amount": 7}
 
 
+def test_saving_edited_mapping_persists_the_extra_description_columns(client):
+    _create_account(client, account_id="chk", number="1234")
+    _create_mapping(client)
+
+    client.post(
+        "/import/mappings/Test%20Bank/edit",
+        data={
+            "delimiter": ";",
+            "encoding": "utf-8",
+            "date_format": "%d/%m/%Y",
+            "decimal_separator": ",",
+            "date_column": "5",
+            "description_column": "6",
+            "amount_column": "7",
+            "description_extra_1_column": "8",
+            "description_extra_2_column": "",
+        },
+    )
+
+    mapping = read_mapping("Test Bank", config.IMPORT_MAPPINGS_DIR)
+    assert mapping.columns["description_extra_1"] == 8
+    assert "description_extra_2" not in mapping.columns  # blank means none
+
+
+def test_edit_form_shows_the_extra_description_columns(client):
+    _create_account(client, account_id="chk", number="1234")
+    _create_mapping(client)
+
+    text = client.get("/import/mappings/Test%20Bank/edit").text
+
+    assert 'name="description_extra_1_column"' in text
+    assert 'name="description_extra_2_column"' in text
+
+
 def test_dry_run_edited_mapping_is_read_only(client):
     """Dry run against edited-but-unsaved settings never writes to the ledger."""
     _create_account(client, account_id="chk", number="1234")
@@ -606,6 +640,91 @@ def test_confirm_applies_picked_categories_but_never_creates_new_ones(client):
         "Coffee",
     )
     assert by_description["Paycheck"].category == "Uncategorized"
+
+
+_EXTRAS_CSV = (
+    "date,description,amount,account,site,detail\n"
+    "2026-09-01,PayU,-9.00,1234,cinema.pl,Godzilla\n"
+    "2026-09-02,Zabka,-3.00,1234,,\n"
+)
+
+
+def _save_extras_mapping(client, *, with_extras: bool):
+    setup = _upload_new(client, bank="X Bank", content=_EXTRAS_CSV)
+    data = {
+        "bank": "X Bank",
+        "account_id": "chk",
+        "file_content_b64": _extract_hidden_value(setup.text, "file_content_b64"),
+        "delimiter": ",",
+        "encoding": "utf-8",
+        "date_format": "%Y-%m-%d",
+        "decimal_separator": ".",
+        "date_column": "0",
+        "description_column": "1",
+        "amount_column": "2",
+        "account_number_column": "3",
+    }
+    if with_extras:
+        data["description_extra_1_column"] = "4"
+        data["description_extra_2_column"] = "5"
+    return client.post("/import/mapping-setup/save", data=data)
+
+
+def test_extra_description_columns_prefill_the_preview_and_save_as_the_note(client):
+    _create_account(client, account_id="chk", number="1234")
+
+    preview = _save_extras_mapping(client, with_extras=True)
+
+    assert 'value="PayU | cinema.pl | Godzilla"' in preview.text
+    assert 'value="Zabka"' in preview.text  # nothing extra to show
+    rows_payload = _extract_hidden_value(preview.text, "rows_payload")
+    _confirm(
+        client,
+        account_id="chk",
+        bank="X Bank",
+        rows_payload=rows_payload,
+        row_notes=["PayU | cinema.pl | Godzilla", "Zabka"],  # what the form submits
+    )
+    by_description = {t.description: t for t in read_ledger(config.LEDGER_PATH)}
+    assert by_description["PayU"].notes == "PayU | cinema.pl | Godzilla"
+    assert by_description["Zabka"].notes is None
+
+
+def test_adding_extras_later_does_not_reimport_what_is_already_there(client):
+    _create_account(client, account_id="chk", number="1234")
+    first = _save_extras_mapping(client, with_extras=False)
+    _confirm(
+        client,
+        account_id="chk",
+        bank="X Bank",
+        rows_payload=_extract_hidden_value(first.text, "rows_payload"),
+    )
+    assert len(read_ledger(config.LEDGER_PATH)) == 2
+
+    client.post(  # the user edits the saved mapping to add the extra columns
+        "/import/mappings/X%20Bank/edit",
+        data={
+            "delimiter": ",",
+            "encoding": "utf-8",
+            "date_format": "%Y-%m-%d",
+            "decimal_separator": ".",
+            "date_column": "0",
+            "description_column": "1",
+            "amount_column": "2",
+            "account_number_column": "3",
+            "description_extra_1_column": "4",
+            "description_extra_2_column": "5",
+        },
+    )
+
+    second = client.post(
+        "/import/mappings/X%20Bank/run",
+        data={"account_id": "chk"},
+        files={"file": ("statement.csv", _EXTRAS_CSV, "text/csv")},
+    )
+
+    assert "0 new transaction" in second.text
+    assert "2 duplicates skipped" in second.text
 
 
 def test_confirm_stores_an_edited_description_as_a_note_only(client):

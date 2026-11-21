@@ -137,6 +137,102 @@ def test_parse_rows_prefers_primary_description_over_fallback():
     assert rows[0].description == "ZABKA Z8540"
 
 
+def _extras_mapping(**columns) -> ImportMapping:
+    return ImportMapping(
+        bank="Credit Agricole",
+        delimiter=";",
+        date_format="%d.%m.%Y",
+        decimal_separator=",",
+        columns={
+            "date": 3,
+            "description": 2,
+            "amount": 1,
+            "description_fallback": 4,
+            "description_extra_1": 5,
+            "description_extra_2": 6,
+            **columns,
+        },
+    )
+
+
+_EXTRAS_HEADER = "account;amount;description;date;payee;site;detail\n"
+
+
+def test_parse_rows_collects_extra_columns_for_display_without_changing_description():
+    csv_text = _EXTRAS_HEADER + "1;-1,00 PLN;PayU;11.09.2026;x;cinema.pl;Godzilla\n"
+
+    rows = parse_rows(csv_text, _extras_mapping())
+
+    assert rows[0].description == "PayU"  # still the bank's own text
+    assert rows[0].display_description == "PayU | cinema.pl | Godzilla"
+
+
+def test_parse_rows_skips_blank_and_repeated_extras():
+    csv_text = (
+        _EXTRAS_HEADER
+        + "1;-1,00 PLN;PayU;11.09.2026;x;;Godzilla\n"
+        + "2;-2,00 PLN;PayU;12.09.2026;x;PayU;\n"
+    )
+
+    rows = parse_rows(csv_text, _extras_mapping())
+
+    assert rows[0].display_description == "PayU | Godzilla"
+    assert rows[1].display_description == ""  # nothing new to add
+    assert rows[1].description == "PayU"
+
+
+def test_parse_rows_extras_follow_the_fallback_when_the_primary_is_blank():
+    csv_text = _EXTRAS_HEADER + "1;-1,00 PLN;;11.09.2026;Tauron;;Faktura 5\n"
+
+    rows = parse_rows(csv_text, _extras_mapping())
+
+    assert rows[0].description == "Tauron"
+    assert rows[0].display_description == "Tauron | Faktura 5"
+
+
+def test_parse_rows_without_extra_columns_has_no_display_description():
+    mapping = _extras_mapping()
+    for key in ("description_extra_1", "description_extra_2"):
+        del mapping.columns[key]
+    csv_text = _EXTRAS_HEADER + "1;-1,00 PLN;PayU;11.09.2026;x;cinema.pl;Godzilla\n"
+
+    rows = parse_rows(csv_text, mapping)
+
+    assert rows[0].description == "PayU"
+    assert rows[0].display_description == ""
+
+
+def test_build_transactions_carries_the_display_text_as_the_preview_note():
+    rows = [
+        ParsedRow(
+            date(2026, 9, 10),
+            "PayU",
+            Decimal("-5.00"),
+            display_description="PayU | cinema.pl",
+        ),
+        ParsedRow(date(2026, 9, 11), "Zabka", Decimal("-3.00")),
+    ]
+
+    with_extras, plain = build_transactions(rows, "chk", [])
+
+    assert with_extras.description == "PayU"
+    assert with_extras.notes == "PayU | cinema.pl"
+    assert plain.notes is None
+
+
+def test_find_duplicates_ignores_the_extra_description_text():
+    row = ParsedRow(
+        date(2026, 9, 10),
+        "Zabka",
+        Decimal("-5.99"),
+        display_description="Zabka | zabka.pl",
+    )
+    stored = _txn(description="Zabka", notes="Zabka | zabka.pl")
+
+    assert find_duplicates([row], [stored], "chk") == ([], [row])
+    assert find_duplicates([row], [], "chk") == ([row], [])
+
+
 def test_parse_rows_skips_blank_and_zero_amount_rows():
     csv_text = (
         "account;amount;description;date\n"

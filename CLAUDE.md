@@ -77,7 +77,10 @@ tests/unit/     tmp_path-isolated; tests/integration/  TestClient, conftest redi
 - `config/import_mappings/<bank>.toml` — `bank, delimiter, encoding, date_format,
   decimal_separator`, `columns` = ledger field → **0-based column index** (not name; real exports
   have duplicate headers). Required: `date, description, amount`. Optional: `account_number`,
-  `description_fallback`, `counterparty_account`, `counterparty_account_fallback`.
+  `description_fallback`, `description_extra_1`/`_2` (appended to the primary/fallback text joined with ` | `, skipping
+  blanks and repeats; shown as `ParsedRow.display_description`, saved as the row's *note*, never
+  folded into `description`, so duplicate detection and rules still see the bank's own text), `counterparty_account`,
+  `counterparty_account_fallback`.
 - `data/import_history.toml` — append-only `[[imports]]` log; independent snapshots, not live refs.
 - `config/rules.toml` — `[[rules]]`: `pattern, field, category, subcategory, priority`, plus
   optional `min_amount`/`max_amount` (inclusive, vs `abs(amount)`, stored as quoted strings;

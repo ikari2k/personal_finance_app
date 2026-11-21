@@ -100,6 +100,20 @@
       </label>
     </div>
     <div class="form-grid-2">
+      {% for n in (1, 2) %}
+        {% set selected = selected_description_extra_1_column if n == 1 else selected_description_extra_2_column %}
+        <label title="Appended to the description after the primary/fallback text (e.g. a merchant's web address or a detailed-description column), so a terse description gets more context">
+          Extra description column {{ n }} (optional)
+          <select name="description_extra_{{ n }}_column">
+            <option value="" {{ 'selected' if selected is none }}>— none —</option>
+            {% for col in columns %}
+              <option value="{{ col.index }}" {{ 'selected' if col.index == selected }}>{{ col.index }}: {{ col.header }} ({{ col.sample }})</option>
+            {% endfor %}
+          </select>
+        </label>
+      {% endfor %}
+    </div>
+    <div class="form-grid-2">
       <label>Account number column (optional)
         <select name="account_number_column">
           <option value="" {{ 'selected' if selected_account_number_column is none }}>— none —</option>

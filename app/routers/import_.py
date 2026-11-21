@@ -45,6 +45,7 @@ from app.models.import_mapping import ImportMapping
 from app.models.transaction import Transaction, TransactionType
 from app.routers.htmx_events import toast
 from app.services.importer import (
+    DESCRIPTION_EXTRA_KEYS,
     apply_category_picks,
     apply_note_edits,
     build_transactions,
@@ -106,6 +107,16 @@ def _set_counterparty_columns(
     fallback_idx = _to_column_index(counterparty_fallback)
     if fallback_idx is not None:
         columns["counterparty_account_fallback"] = fallback_idx
+
+
+def _set_description_extra_columns(
+    columns: dict[str, int], extra_1: str, extra_2: str
+) -> None:
+    """Add the optional ``description_extra_1``/``_2`` keys, if set."""
+    for key, value in zip(DESCRIPTION_EXTRA_KEYS, (extra_1, extra_2)):
+        idx = _to_column_index(value)
+        if idx is not None:
+            columns[key] = idx
 
 
 # ---------------------------------------------------------------------------
@@ -306,6 +317,8 @@ def _render_mapping_setup(
     selected_date_column: int | None = None,
     selected_description_column: int | None = None,
     selected_description_fallback_column: int | None = None,
+    selected_description_extra_1_column: int | None = None,
+    selected_description_extra_2_column: int | None = None,
     selected_amount_column: int | None = None,
     selected_account_number_column: int | None = None,
     selected_counterparty_account_column: int | None = None,
@@ -379,6 +392,8 @@ def _render_mapping_setup(
             "selected_description_fallback_column": (
                 selected_description_fallback_column
             ),
+            "selected_description_extra_1_column": selected_description_extra_1_column,
+            "selected_description_extra_2_column": selected_description_extra_2_column,
             "selected_amount_column": selected_amount_column,
             "selected_account_number_column": selected_account_number_column,
             "selected_counterparty_account_column": (
@@ -408,6 +423,8 @@ def reparse_mapping_setup(
     date_column: str = Form(""),
     description_column: str = Form(""),
     description_fallback_column: str = Form(""),
+    description_extra_1_column: str = Form(""),
+    description_extra_2_column: str = Form(""),
     amount_column: str = Form(""),
     account_number_column: str = Form(""),
     counterparty_account_column: str = Form(""),
@@ -429,6 +446,12 @@ def reparse_mapping_setup(
         selected_description_column=_to_column_index(description_column),
         selected_description_fallback_column=_to_column_index(
             description_fallback_column
+        ),
+        selected_description_extra_1_column=_to_column_index(
+            description_extra_1_column
+        ),
+        selected_description_extra_2_column=_to_column_index(
+            description_extra_2_column
         ),
         selected_amount_column=_to_column_index(amount_column),
         selected_account_number_column=_to_column_index(account_number_column),
@@ -455,6 +478,8 @@ def save_mapping_setup(
     date_column: int = Form(...),
     description_column: int = Form(...),
     description_fallback_column: str = Form(""),
+    description_extra_1_column: str = Form(""),
+    description_extra_2_column: str = Form(""),
     amount_column: int = Form(...),
     account_number_column: str = Form(""),
     counterparty_account_column: str = Form(""),
@@ -486,6 +511,9 @@ def save_mapping_setup(
     )
     if description_fallback_idx is not None:
         columns["description_fallback"] = description_fallback_idx
+    _set_description_extra_columns(
+        columns, description_extra_1_column, description_extra_2_column
+    )
     _set_counterparty_columns(
         columns, counterparty_account_column, counterparty_account_fallback_column
     )
@@ -516,6 +544,12 @@ def save_mapping_setup(
             selected_date_column=date_column,
             selected_description_column=description_column,
             selected_description_fallback_column=description_fallback_idx,
+            selected_description_extra_1_column=_to_column_index(
+                description_extra_1_column
+            ),
+            selected_description_extra_2_column=_to_column_index(
+                description_extra_2_column
+            ),
             selected_amount_column=amount_column,
             selected_account_number_column=account_number_idx,
             selected_counterparty_account_column=_to_column_index(
@@ -776,6 +810,8 @@ def _mapping_from_edit_form(
     account_number_column: str,
     counterparty_account_column: str = "",
     counterparty_account_fallback_column: str = "",
+    description_extra_1_column: str = "",
+    description_extra_2_column: str = "",
 ) -> ImportMapping:
     columns = {
         "date": date_column,
@@ -786,6 +822,9 @@ def _mapping_from_edit_form(
         columns["account_number"] = int(account_number_column)
     if description_fallback_column.strip():
         columns["description_fallback"] = int(description_fallback_column)
+    _set_description_extra_columns(
+        columns, description_extra_1_column, description_extra_2_column
+    )
     _set_counterparty_columns(
         columns, counterparty_account_column, counterparty_account_fallback_column
     )
@@ -810,6 +849,8 @@ def save_edited_mapping(
     date_column: int = Form(...),
     description_column: int = Form(...),
     description_fallback_column: str = Form(""),
+    description_extra_1_column: str = Form(""),
+    description_extra_2_column: str = Form(""),
     amount_column: int = Form(...),
     account_number_column: str = Form(""),
     counterparty_account_column: str = Form(""),
@@ -833,6 +874,8 @@ def save_edited_mapping(
         account_number_column=account_number_column,
         counterparty_account_column=counterparty_account_column,
         counterparty_account_fallback_column=counterparty_account_fallback_column,
+        description_extra_1_column=description_extra_1_column,
+        description_extra_2_column=description_extra_2_column,
     )
     write_mapping(mapping)
     return _render_edit_form(request, mapping, headers=toast("Mapping saved"))
@@ -851,6 +894,8 @@ async def dry_run_mapping(
     date_column: int = Form(...),
     description_column: int = Form(...),
     description_fallback_column: str = Form(""),
+    description_extra_1_column: str = Form(""),
+    description_extra_2_column: str = Form(""),
     amount_column: int = Form(...),
     account_number_column: str = Form(""),
     counterparty_account_column: str = Form(""),
@@ -876,6 +921,8 @@ async def dry_run_mapping(
         account_number_column=account_number_column,
         counterparty_account_column=counterparty_account_column,
         counterparty_account_fallback_column=counterparty_account_fallback_column,
+        description_extra_1_column=description_extra_1_column,
+        description_extra_2_column=description_extra_2_column,
     )
     if file is None or not file.filename:
         return _render_edit_form(

@@ -33,6 +33,15 @@ class ImportMapping(BaseModel):
       Never used when the primary column has *any* value, blank or not
       — this is a fallback for a sparse primary column, not a second
       column to append.
+    - ``description_extra_1``, ``description_extra_2`` — columns appended
+      (after the primary/fallback text, joined with `` | ``) to help the
+      user recognise a row, e.g. a merchant's web address or a
+      detailed-description column. They never change ``description``
+      (which keys duplicate detection and rule matching): the combined
+      text pre-fills the import preview's description box and is saved as
+      the row's note. Blank cells and values already in the text are
+      skipped. Unlike the fallback these are appended even when the
+      primary column has a value.
 
     ``decimal_separator`` normalizes amounts like ``"-5,99 PLN"`` before
     parsing: everything except digits, ``-``, and this separator is
