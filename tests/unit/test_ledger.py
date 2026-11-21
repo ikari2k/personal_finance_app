@@ -90,3 +90,25 @@ def test_read_ledger_tolerates_a_file_written_before_counterparty_account_existe
     [transaction] = read_ledger(path)
 
     assert transaction.counterparty_account == ""
+
+
+def test_write_then_read_round_trips_payee(tmp_path):
+    path = tmp_path / "ledger.csv"
+    transaction = _transaction(payee="Cinema City")
+
+    write_ledger([transaction], path)
+
+    assert read_ledger(path) == [transaction]
+
+
+def test_read_ledger_tolerates_a_file_written_before_payee_existed(tmp_path):
+    path = tmp_path / "ledger.csv"
+    path.write_text(
+        "id,date,account_id,category,subcategory,description,amount,type,"
+        "transfer_id,notes,counterparty_account\n"
+        "t1,2026-01-15,chk,Groceries,Supermarket,Trader Joe's,-42.17,expense,,,\n"
+    )
+
+    [transaction] = read_ledger(path)
+
+    assert transaction.payee == ""

@@ -52,6 +52,31 @@ def _amount_matches(rule: Rule, magnitude: Decimal) -> bool:
     return True
 
 
+def find_matching_rule(
+    description: str, amount: Decimal, txn_type: TransactionType, rules: list[Rule]
+) -> Rule | None:
+    """Return the first rule matching this row, or ``None``.
+
+    The matching behind ``categorize``, public so import can read the rule's
+    other outputs (its ``payee``) too. See ``categorize`` for what makes a rule
+    match and in which order candidates are tried.
+    """
+    candidates = sorted(
+        (rule for rule in rules if rule.field == "description"),
+        key=lambda rule: rule.priority,
+        reverse=True,
+    )
+    magnitude = abs(amount)
+    for rule in candidates:
+        if rule.type is not None and rule.type is not txn_type:
+            continue
+        if not _amount_matches(rule, magnitude):
+            continue
+        if _compile(rule).search(description):
+            return rule
+    return None
+
+
 def categorize(
     description: str, amount: Decimal, txn_type: TransactionType, rules: list[Rule]
 ) -> tuple[str, str]:
@@ -83,20 +108,8 @@ def categorize(
     matches or none exist — the caller decides the fallback (see
     ``services.importer.DEFAULT_CATEGORY``).
     """
-    candidates = sorted(
-        (rule for rule in rules if rule.field == "description"),
-        key=lambda rule: rule.priority,
-        reverse=True,
-    )
-    magnitude = abs(amount)
-    for rule in candidates:
-        if rule.type is not None and rule.type is not txn_type:
-            continue
-        if not _amount_matches(rule, magnitude):
-            continue
-        if _compile(rule).search(description):
-            return rule.category, rule.subcategory
-    return "", ""
+    rule = find_matching_rule(description, amount, txn_type, rules)
+    return (rule.category, rule.subcategory) if rule else ("", "")
 
 
 @dataclass

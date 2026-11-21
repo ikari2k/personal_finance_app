@@ -88,6 +88,7 @@ def new_transaction(
     amount: Decimal,
     type: TransactionType,
     notes: str | None = None,
+    payee: str = "",
 ) -> Transaction:
     """Build a new income/expense ``Transaction``.
 
@@ -111,6 +112,7 @@ def new_transaction(
         type=type,
         transfer_id=None,
         notes=notes,
+        payee=payee.strip(),
     )
 
 
@@ -127,6 +129,7 @@ def update_transaction(
     amount: Decimal,
     type: TransactionType,
     notes: str | None = None,
+    payee: str = "",
 ) -> list[Transaction]:
     """Return ``transactions`` with ``transaction_id``'s row replaced.
 
@@ -149,17 +152,21 @@ def update_transaction(
     signed_amount = _signed_amount(
         account_ids, account_id=account_id, amount=amount, type=type
     )
-    updated = Transaction(
-        id=transaction_id,
-        date=date,
-        account_id=account_id,
-        category=category,
-        subcategory=subcategory,
-        description=description,
-        amount=signed_amount,
-        type=type,
-        transfer_id=None,
-        notes=notes,
+    # model_copy keeps what the form never edits, i.e. ``counterparty_account``,
+    # which only import captures.
+    updated = existing.model_copy(
+        update={
+            "date": date,
+            "account_id": account_id,
+            "category": category,
+            "subcategory": subcategory,
+            "description": description,
+            "amount": signed_amount,
+            "type": type,
+            "transfer_id": None,
+            "notes": notes,
+            "payee": payee.strip(),
+        }
     )
     return [updated if t.id == transaction_id else t for t in transactions]
 
@@ -218,6 +225,40 @@ def update_transaction_notes(
         raise ValueError(f"no transaction with id '{transaction_id}'")
     updated = existing.model_copy(update={"notes": notes or None})
     return [updated if t.id == transaction_id else t for t in transactions]
+
+
+def update_transaction_payee(
+    transactions: list[Transaction], transaction_id: str, *, payee: str
+) -> list[Transaction]:
+    """Return ``transactions`` with only ``transaction_id``'s payee changed.
+
+    The narrow inline-edit path for ``payee``, like
+    ``update_transaction_notes``: nothing else about the row changes
+    (``description`` in particular keys duplicate detection and rule
+    matching). The payee is trimmed; blank clears it. Raises ``ValueError``
+    if no transaction with ``transaction_id`` exists, or it is a transfer
+    leg — a transfer has no payee, just two accounts.
+    """
+    existing = next((t for t in transactions if t.id == transaction_id), None)
+    if existing is None:
+        raise ValueError(f"no transaction with id '{transaction_id}'")
+    if existing.type is TransactionType.TRANSFER:
+        raise ValueError("a transfer has no payee")
+    updated = existing.model_copy(update={"payee": payee.strip()})
+    return [updated if t.id == transaction_id else t for t in transactions]
+
+
+def distinct_payees(transactions: list[Transaction]) -> list[str]:
+    """Every payee already in use, most frequent first, ties alphabetical.
+
+    Backs the payee inputs' autocomplete so the same name is reused rather
+    than re-typed in slightly different spellings.
+    """
+    counts: dict[str, int] = {}
+    for t in transactions:
+        if t.payee:
+            counts[t.payee] = counts.get(t.payee, 0) + 1
+    return sorted(counts, key=lambda name: (-counts[name], name.lower()))
 
 
 def update_transfer_pair(
@@ -487,8 +528,9 @@ def merge_into_transfer(
 
     Each row keeps its own ``id``, ``date``, ``account_id``, ``amount``,
     and ``description`` — only ``type``, ``category``/``subcategory``,
-    and the new shared ``transfer_id`` change. Raises ``ValueError`` if
-    either row no longer exists or is already a transfer leg (deleted or
+    the new shared ``transfer_id`` and a cleared ``payee`` change. Raises
+    ``ValueError`` if either row no longer exists or is already a transfer
+    leg (deleted or
     merged since the match was computed — mirrors
     ``update_transfer_pair``'s same guard).
     """
@@ -511,6 +553,7 @@ def merge_into_transfer(
         "category": category,
         "subcategory": subcategory,
         "transfer_id": transfer_id,
+        "payee": "",  # a transfer has no payee, just two accounts
     }
     replacements = {
         outflow.id: outflow.model_copy(update=updates),

@@ -48,6 +48,9 @@
               {%- for key in ("description_extra_1", "description_extra_2") if key in mapping.columns %}
                 + {{ mapping.columns[key] }}
               {%- endfor %}
+              {%- if mapping.columns.payee is defined %}
+                (payee: {{ mapping.columns.payee }}{% if mapping.columns.payee_fallback is defined %}, fallback {{ mapping.columns.payee_fallback }}{% endif %})
+              {%- endif %}
             </td>
             <td>{{ mapping.columns.amount }}</td>
             <td>{{ mapping.columns.account_number if mapping.columns.account_number is defined else '—' }}</td>

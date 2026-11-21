@@ -42,6 +42,7 @@ def _to_dict(rule: Rule) -> dict[str, str | int]:
         "min_amount": str(rule.min_amount) if rule.min_amount is not None else "",
         "max_amount": str(rule.max_amount) if rule.max_amount is not None else "",
         "type": rule.type.value if rule.type is not None else "",
+        "payee": rule.payee,
     }
 
 
@@ -49,8 +50,9 @@ def _from_dict(entry: dict) -> Rule:
     """Build a ``Rule`` from one TOML table, parsing its amount bounds and type.
 
     ``entry.get(..., "")`` covers a rules.toml written before
-    ``min_amount``/``max_amount``/``type`` existed — a missing key means
-    "no bound"/"no type filter", same as an explicit empty string.
+    ``min_amount``/``max_amount``/``type``/``payee`` existed — a missing key
+    means "no bound"/"no type filter"/"no payee", same as an explicit empty
+    string.
     """
     min_amount = entry.get("min_amount", "")
     max_amount = entry.get("max_amount", "")
@@ -64,6 +66,7 @@ def _from_dict(entry: dict) -> Rule:
         min_amount=Decimal(min_amount) if min_amount else None,
         max_amount=Decimal(max_amount) if max_amount else None,
         type=TransactionType(txn_type) if txn_type else None,
+        payee=entry.get("payee", ""),
     )
 
 

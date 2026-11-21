@@ -1542,3 +1542,142 @@ def test_new_transaction_does_not_wipe_category_bucket(client):
     food = read_categories()["expense"]["Food"]
     assert food["bucket"] == "need"
     assert "Bakery" in food["subcategories"]
+
+
+def _add_expense(client, *, description="Lidl 4471", payee="", date="2026-01-15"):
+    client.post(
+        "/transactions",
+        data={
+            "account_id": "chk",
+            "date": date,
+            "type": "expense",
+            "category": "Groceries",
+            "subcategory": "",
+            "description": description,
+            "amount": "10.00",
+            "payee": payee,
+            "notes": "",
+        },
+    )
+
+
+def test_create_transaction_stores_the_payee_apart_from_the_description(client):
+    _create_account(client)
+
+    _add_expense(client, payee="  Lidl ")
+
+    [txn] = read_ledger(config.LEDGER_PATH)
+    assert txn.payee == "Lidl"
+    assert txn.description == "Lidl 4471"
+
+
+def test_entry_and_edit_forms_offer_a_payee_with_names_already_used(client):
+    _create_account(client)
+    _add_expense(client, payee="Lidl")
+    transaction_id = read_ledger(config.LEDGER_PATH)[0].id
+
+    new_form = client.get("/transactions/new/expense").text
+    edit_form = client.get(f"/transactions/{transaction_id}/edit").text
+
+    assert 'name="payee"' in new_form
+    assert '<option value="Lidl">' in new_form  # autocomplete from existing payees
+    assert 'name="payee"' in edit_form and 'value="Lidl"' in edit_form
+
+
+def test_editing_a_transaction_changes_the_payee_but_never_the_description(client):
+    _create_account(client)
+    _add_expense(client, payee="Lidl")
+    transaction_id = read_ledger(config.LEDGER_PATH)[0].id
+
+    client.post(
+        f"/transactions/{transaction_id}",
+        data={
+            "account_id": "chk",
+            "date": "2026-01-15",
+            "type": "expense",
+            "category": "Groceries",
+            "subcategory": "",
+            "amount": "10.00",
+            "payee": "Lidl Polska",
+            "notes": "",
+            "description": "ignored",
+        },
+    )
+
+    [txn] = read_ledger(config.LEDGER_PATH)
+    assert txn.payee == "Lidl Polska"
+    assert txn.description == "Lidl 4471"
+
+
+def test_inline_payee_update_sets_only_the_payee(client):
+    _create_account(client)
+    _add_expense(client)
+    transaction_id = read_ledger(config.LEDGER_PATH)[0].id
+
+    response = client.post(
+        f"/transactions/{transaction_id}/payee", data={"payee": " Lidl "}
+    )
+
+    assert response.status_code == 200
+    [txn] = read_ledger(config.LEDGER_PATH)
+    assert txn.payee == "Lidl"
+    assert txn.description == "Lidl 4471"
+    assert 'value="Lidl"' in response.text  # the re-rendered row
+
+
+def test_inline_payee_blank_clears_it(client):
+    _create_account(client)
+    _add_expense(client, payee="Lidl")
+    transaction_id = read_ledger(config.LEDGER_PATH)[0].id
+
+    client.post(f"/transactions/{transaction_id}/payee", data={"payee": ""})
+
+    assert read_ledger(config.LEDGER_PATH)[0].payee == ""
+
+
+def test_inline_payee_refuses_transfers_and_unknown_ids(client):
+    _create_account(client, "chk")
+    _create_account(client, "sav")
+    client.post(
+        "/transfers",
+        data={
+            "from_account_id": "chk",
+            "to_account_id": "sav",
+            "date": "2026-01-15",
+            "amount": "50.00",
+            "description": "",
+            "notes": "",
+        },
+    )
+    leg_id = read_ledger(config.LEDGER_PATH)[0].id
+
+    assert (
+        client.post(f"/transactions/{leg_id}/payee", data={"payee": "x"}).status_code
+        == 404
+    )
+    assert (
+        client.post("/transactions/ghost/payee", data={"payee": "x"}).status_code == 404
+    )
+    assert all(t.payee == "" for t in read_ledger(config.LEDGER_PATH))
+
+
+def test_list_has_a_payee_input_per_expense_row_and_a_datalist(client):
+    _create_account(client)
+    _add_expense(client, payee="Lidl")
+
+    text = client.get("/transactions").text
+
+    assert 'class="desc-inline-input payee-inline-input"' in text
+    assert 'hx-post="/transactions/' in text and "/payee" in text
+    assert '<datalist id="payee-options"><option value="Lidl">' in text
+
+
+def test_search_also_matches_the_payee(client):
+    _create_account(client)
+    _add_expense(client, description="PayU 99", payee="Cinema City")
+    _add_expense(client, description="Other", payee="Lidl", date="2026-01-16")
+
+    text = client.get("/transactions?search=cinema").text
+
+    assert "PayU 99" in text
+    assert "Other" not in text

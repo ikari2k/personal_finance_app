@@ -23,12 +23,14 @@ from app.services.aggregation import grouped_transaction_view
 from app.services.categories import category_pair_exists
 from app.services.transactions import (
     convert_to_transfer,
+    distinct_payees,
     ensure_category,
     new_transaction,
     remove_transaction,
     update_transaction,
     update_transaction_category,
     update_transaction_notes,
+    update_transaction_payee,
 )
 from app.storage.accounts import read_accounts
 from app.storage.categories import read_categories, write_categories
@@ -107,13 +109,18 @@ def _filter_ledger(
     ``by_type`` *grouping* toggle, which only changes how an unfiltered
     list is split into sections, not which rows are shown at all.
     ``search`` is a case-insensitive substring match against
-    ``description`` — free text, not an equality filter like the others.
+    ``description`` or ``payee`` — free text, not an equality filter like
+    the others.
     ``date_from``/``date_to`` are inclusive ISO ``YYYY-MM-DD`` bounds,
     either or both may be unset independently.
     """
     if search:
         needle = search.strip().lower()
-        ledger = [t for t in ledger if needle in t.description.lower()]
+        ledger = [
+            t
+            for t in ledger
+            if needle in t.description.lower() or needle in t.payee.lower()
+        ]
     if account_id:
         ledger = [t for t in ledger if t.account_id == account_id]
     if category:
@@ -158,8 +165,9 @@ def render_table(
     search = request.cookies.get("search", "")
     date_from = request.cookies.get("date_from", "")
     date_to = request.cookies.get("date_to", "")
+    full_ledger = read_ledger()
     ledger = _filter_ledger(
-        read_ledger(),
+        full_ledger,
         account_id=account_id,
         category=category,
         subcategory=subcategory,
@@ -180,6 +188,7 @@ def render_table(
             "accounts_list": accounts_list,
             "categories": categories_tree,
             "categories_grouped": _categories_grouped(categories_tree),
+            "payees": distinct_payees(full_ledger),
             "by_month": by_month,
             "by_type": by_type,
             "account_id": account_id,
@@ -312,8 +321,9 @@ def list_transactions(
         date_to if date_to is not None else request.cookies.get("date_to", "")
     )
 
+    full_ledger = read_ledger()
     ledger = _filter_ledger(
-        read_ledger(),
+        full_ledger,
         account_id=resolved_account_id,
         category=resolved_category,
         subcategory=resolved_subcategory,
@@ -333,6 +343,7 @@ def list_transactions(
         "accounts_list": accounts_list,
         "categories": categories_tree,
         "categories_grouped": _categories_grouped(categories_tree),
+        "payees": distinct_payees(full_ledger),
         "by_month": resolved_by_month,
         "by_type": resolved_by_type,
         "account_id": resolved_account_id,
@@ -439,6 +450,7 @@ def _render_form(
             "subcategories": sorted(
                 {sub for entry in tree.values() for sub in entry["subcategories"]}
             ),
+            "payees": distinct_payees(read_ledger()),
             "values": values,
             "error": error,
             "dialog_id": f"{txn_type.value}-dialog",
@@ -461,6 +473,7 @@ def new_transaction_form(request: Request, txn_type: TransactionType) -> HTMLRes
         "subcategory": "",
         "description": "",
         "amount": "",
+        "payee": "",
         "notes": "",
     }
     return _render_form(request, txn_type=txn_type, values=values)
@@ -490,6 +503,7 @@ def edit_transaction_form(request: Request, transaction_id: str) -> HTMLResponse
         "subcategory": transaction.subcategory,
         "description": transaction.description,
         "amount": str(abs(transaction.amount)),
+        "payee": transaction.payee,
         "notes": transaction.notes or "",
     }
     return _render_form(
@@ -507,6 +521,7 @@ def create_transaction(
     subcategory: str = Form(""),
     description: str = Form(""),
     amount: str = Form(...),
+    payee: str = Form(""),
     notes: str = Form(""),
 ) -> HTMLResponse:
     """Record a new transaction.
@@ -523,6 +538,7 @@ def create_transaction(
         "subcategory": subcategory,
         "description": description,
         "amount": amount,
+        "payee": payee,
         "notes": notes,
     }
     account_ids = [account.id for account in read_accounts()]
@@ -538,6 +554,7 @@ def create_transaction(
             amount=parsed_amount,
             type=type,
             notes=notes or None,
+            payee=payee,
         )
     except (ValueError, InvalidOperation) as exc:
         return _render_form(request, txn_type=type, values=values, error=str(exc))
@@ -565,6 +582,7 @@ def update_transaction_route(
     category: str = Form(...),
     subcategory: str = Form(""),
     amount: str = Form(...),
+    payee: str = Form(""),
     notes: str = Form(""),
 ) -> HTMLResponse:
     """Update an existing income/expense transaction.
@@ -594,6 +612,7 @@ def update_transaction_route(
         "subcategory": subcategory,
         "description": description,
         "amount": amount,
+        "payee": payee,
         "notes": notes,
     }
     account_ids = [account.id for account in read_accounts()]
@@ -611,6 +630,7 @@ def update_transaction_route(
             amount=parsed_amount,
             type=type,
             notes=notes or None,
+            payee=payee,
         )
     except (ValueError, InvalidOperation) as exc:
         return _render_form(
@@ -725,6 +745,42 @@ def update_transaction_notes_route(
             "categories": read_categories(),
         },
         headers=toast("Note saved"),
+    )
+
+
+@router.post("/{transaction_id}/payee", response_class=HTMLResponse)
+def update_transaction_payee_route(
+    request: Request,
+    transaction_id: str,
+    payee: str = Form(""),
+) -> HTMLResponse:
+    """Quick-edit one transaction's payee inline from the table.
+
+    Touches nothing but ``payee`` (see
+    ``services.transactions.update_transaction_payee``); a blank value
+    clears it. A transfer has no payee, so its row offers no input and this
+    route refuses it. Re-renders just the one row, like the notes route.
+    """
+    ledger = read_ledger()
+    try:
+        ledger = update_transaction_payee(ledger, transaction_id, payee=payee)
+    except ValueError as exc:
+        return HTMLResponse(str(exc), status_code=404)
+    write_ledger(ledger)
+    updated = next(t for t in ledger if t.id == transaction_id)
+
+    accounts = {account.id: account for account in read_accounts()}
+    show_account = not request.cookies.get("account_id", "")
+    return templates.TemplateResponse(
+        request,
+        "transactions/_row.html",
+        {
+            "txn": updated,
+            "accounts": accounts,
+            "show_account": show_account,
+            "categories": read_categories(),
+        },
+        headers=toast("Payee saved"),
     )
 
 

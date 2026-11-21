@@ -114,6 +114,26 @@
       {% endfor %}
     </div>
     <div class="form-grid-2">
+      <label title="The bank's own name for the other party (e.g. a card export's merchant column). Saved as the transaction's payee unless a rule names one; you can edit it in the preview">
+        Payee column (optional)
+        <select name="payee_column">
+          <option value="" {{ 'selected' if selected_payee_column is none }}>— none —</option>
+          {% for col in columns %}
+            <option value="{{ col.index }}" {{ 'selected' if col.index == selected_payee_column }}>{{ col.index }}: {{ col.header }} ({{ col.sample }})</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label title="Used when the payee column above is blank for a row (e.g. a transfer's recipient or sender)">
+        Payee fallback column (optional)
+        <select name="payee_fallback_column">
+          <option value="" {{ 'selected' if selected_payee_fallback_column is none }}>— none —</option>
+          {% for col in columns %}
+            <option value="{{ col.index }}" {{ 'selected' if col.index == selected_payee_fallback_column }}>{{ col.index }}: {{ col.header }} ({{ col.sample }})</option>
+          {% endfor %}
+        </select>
+      </label>
+    </div>
+    <div class="form-grid-2">
       <label>Account number column (optional)
         <select name="account_number_column">
           <option value="" {{ 'selected' if selected_account_number_column is none }}>— none —</option>

@@ -33,6 +33,14 @@ class Transaction(BaseModel):
     only ever consulted afterward, by ``app.services.transactions
     .find_transfer_matches``, to spot rows whose counterparty is actually
     one of the user's own registered accounts.
+
+    ``payee`` is the clean name of whoever was paid (expense) or paid you
+    (income) — "Cinema City" rather than the bank's noisy
+    ``description``. Free text, optional, blank for transfers and for
+    anything not yet named; filled from a rule or the import mapping's
+    payee column at import time, or by hand. It is separate from
+    ``description`` (the bank's own text, read-only, keys duplicate
+    detection and rule matching) and ``notes`` (purely personal).
     """
 
     id: str
@@ -46,3 +54,4 @@ class Transaction(BaseModel):
     transfer_id: str | None = None
     notes: str | None = None
     counterparty_account: str = ""
+    payee: str = ""

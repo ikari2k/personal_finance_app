@@ -53,6 +53,18 @@
     {% endfor %}
   </div>
   <div class="form-grid-2">
+    <label title="The bank's own name for the other party; saved as the payee unless a rule names one">
+      Payee column (optional)
+      <input type="number" name="payee_column" min="0"
+             value="{{ mapping.columns.payee if mapping.columns.payee is defined else '' }}">
+    </label>
+    <label title="Used when the payee column above is blank for a row">
+      Payee fallback column (optional)
+      <input type="number" name="payee_fallback_column" min="0"
+             value="{{ mapping.columns.payee_fallback if mapping.columns.payee_fallback is defined else '' }}">
+    </label>
+  </div>
+  <div class="form-grid-2">
     <label>Account number column (optional)
       <input type="number" name="account_number_column" min="0"
              value="{{ mapping.columns.account_number if mapping.columns.account_number is defined else '' }}">

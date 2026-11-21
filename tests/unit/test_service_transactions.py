@@ -12,6 +12,7 @@ from app.services.transactions import (
     TransferMatch,
     apply_transfer_matches,
     convert_to_transfer,
+    distinct_payees,
     ensure_category,
     find_orphan_transfer_candidates,
     find_transfer_matches,
@@ -23,6 +24,7 @@ from app.services.transactions import (
     update_transaction,
     update_transaction_category,
     update_transaction_notes,
+    update_transaction_payee,
     update_transfer_pair,
 )
 
@@ -1084,3 +1086,117 @@ def test_ensure_category_adding_a_new_category_keeps_other_buckets():
 
     assert result["income"]["Refunds"]["bucket"] == "excluded"
     assert result["expense"]["Fun"]["bucket"] == ""
+
+
+def test_new_transaction_keeps_a_trimmed_payee():
+    txn = new_transaction(
+        ACCOUNT_IDS,
+        account_id="chk",
+        date=date(2026, 1, 1),
+        category="Fun",
+        subcategory="",
+        description="PayU",
+        amount=Decimal("9"),
+        type=TransactionType.EXPENSE,
+        payee="  Cinema City ",
+    )
+
+    assert txn.payee == "Cinema City"
+    assert txn.description == "PayU"
+
+
+def test_update_transaction_sets_the_payee():
+    existing = _txn(id="a")
+
+    [updated] = update_transaction(
+        [existing],
+        "a",
+        ACCOUNT_IDS,
+        account_id="chk",
+        date=date(2026, 1, 1),
+        category="Groceries",
+        subcategory="",
+        description="x",
+        amount=Decimal("10"),
+        type=TransactionType.EXPENSE,
+        payee="Zabka",
+    )
+
+    assert updated.payee == "Zabka"
+
+
+def test_update_transaction_payee_changes_only_the_payee():
+    [original] = [_txn(id="a", description="PayU", notes="mine")]
+
+    [updated] = update_transaction_payee([original], "a", payee=" Cinema City ")
+
+    assert updated.payee == "Cinema City"
+    assert updated.model_copy(update={"payee": ""}) == original.model_copy(
+        update={"payee": ""}
+    )
+
+
+def test_update_transaction_payee_blank_clears_it():
+    [updated] = update_transaction_payee([_txn(id="a", payee="Zabka")], "a", payee=" ")
+
+    assert updated.payee == ""
+
+
+def test_update_transaction_payee_rejects_unknown_ids_and_transfer_legs():
+    with pytest.raises(ValueError):
+        update_transaction_payee([_txn(id="a")], "nope", payee="x")
+    leg = _txn(id="a", type=TransactionType.TRANSFER, transfer_id="T")
+    with pytest.raises(ValueError):
+        update_transaction_payee([leg], "a", payee="x")
+
+
+def test_distinct_payees_orders_by_use_then_name():
+    txns = [
+        _txn(id="1", payee="Zabka"),
+        _txn(id="2", payee="Allegro"),
+        _txn(id="3", payee="Zabka"),
+        _txn(id="4", payee="biedronka"),
+        _txn(id="5", payee=""),
+    ]
+
+    assert distinct_payees(txns) == ["Zabka", "Allegro", "biedronka"]
+
+
+def test_merge_into_transfer_clears_any_payee():
+    out = _txn(id="a", account_id="chk", amount=Decimal("-50"), payee="Zabka")
+    inn = _txn(id="b", account_id="sav", amount=Decimal("50"), payee="Zabka")
+    match = TransferMatch(
+        from_transaction_id="a",
+        to_transaction_id="b",
+        date=date(2026, 1, 5),
+        from_account_id="chk",
+        to_account_id="sav",
+        amount=Decimal("50"),
+        from_description="x",
+        to_description="x",
+    )
+
+    updated = merge_into_transfer([out, inn], match)
+
+    assert [t.payee for t in updated] == ["", ""]
+
+
+def test_update_transaction_keeps_the_imported_counterparty_account():
+    existing = _txn(id="a", counterparty_account="85194010182000")
+
+    [updated] = update_transaction(
+        [existing],
+        "a",
+        ACCOUNT_IDS,
+        account_id="chk",
+        date=date(2026, 1, 2),
+        category="Groceries",
+        subcategory="",
+        description="x",
+        amount=Decimal("12"),
+        type=TransactionType.EXPENSE,
+    )
+
+    assert updated.counterparty_account == "85194010182000"
+    assert updated.amount == Decimal("-12")
+    assert updated.date == date(2026, 1, 2)

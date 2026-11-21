@@ -11,6 +11,7 @@ from app.models.transaction import Transaction, TransactionType
 from app.services.importer import (
     DEFAULT_CATEGORY,
     ParsedRow,
+    apply_payee_edits,
     build_transactions,
     count_blank_column_values,
     filter_by_account_number,
@@ -515,3 +516,71 @@ def test_build_transactions_never_produces_a_transfer():
 
     assert transactions[0].type is not TransactionType.TRANSFER
     assert transactions[0].transfer_id is None
+
+
+def test_build_transactions_takes_the_payee_from_a_matching_rule():
+    rules = [Rule(pattern="PayU", category="Fun", payee="Cinema City")]
+    rows = [ParsedRow(date(2026, 9, 10), "PayU", Decimal("-9"), payee="Bank name")]
+
+    [txn] = build_transactions(rows, "chk", rules)
+
+    assert txn.payee == "Cinema City"  # the curated name beats the bank's
+    assert txn.description == "PayU"
+
+
+def test_build_transactions_falls_back_to_the_banks_payee_without_a_rule_payee():
+    rules = [Rule(pattern="PayU", category="Fun")]  # categorises, names no payee
+    rows = [
+        ParsedRow(date(2026, 9, 10), "PayU", Decimal("-9"), payee=" Bank name "),
+        ParsedRow(date(2026, 9, 11), "Zabka", Decimal("-3"), payee="Zabka SA"),
+        ParsedRow(date(2026, 9, 12), "Other", Decimal("-1")),
+    ]
+
+    txns = build_transactions(rows, "chk", rules)
+
+    assert [t.payee for t in txns] == ["Bank name", "Zabka SA", ""]
+
+
+def _payee_mapping(**columns) -> ImportMapping:
+    return ImportMapping(
+        bank="X",
+        delimiter=";",
+        date_format="%d.%m.%Y",
+        decimal_separator=",",
+        columns={"date": 3, "description": 2, "amount": 1, **columns},
+    )
+
+
+def test_parse_rows_reads_the_payee_with_a_fallback():
+    csv_text = (
+        "acct;amount;description;date;merchant;recipient\n"
+        "1;-1,00 PLN;PayU;11.09.2026;Cinema City;\n"
+        "2;-2,00 PLN;Wire;12.09.2026;;Tauron SA\n"
+        "3;-3,00 PLN;Cash;13.09.2026;;\n"
+    )
+
+    rows = parse_rows(csv_text, _payee_mapping(payee=4, payee_fallback=5))
+
+    assert [r.payee for r in rows] == ["Cinema City", "Tauron SA", ""]
+    assert rows[0].description == "PayU"  # description untouched
+
+
+def test_parse_rows_without_payee_columns_has_no_payee():
+    csv_text = "acct;amount;description;date\n1;-1,00 PLN;PayU;11.09.2026\n"
+
+    assert parse_rows(csv_text, _payee_mapping())[0].payee == ""
+
+
+def test_apply_payee_edits_uses_what_was_typed_including_a_cleared_box():
+    rows = [{"payee": "Bank name"}, {"payee": "Other"}, {"payee": ""}]
+
+    result = apply_payee_edits(rows, [" Cinema City ", "", "Lidl"])
+
+    assert [r["payee"] for r in result] == ["Cinema City", "", "Lidl"]
+
+
+def test_apply_payee_edits_ignores_a_list_that_does_not_line_up():
+    rows = [{"payee": "Bank name"}]
+
+    assert apply_payee_edits(rows, []) == rows
+    assert apply_payee_edits(rows, ["a", "b"]) == rows

@@ -57,6 +57,27 @@ def test_create_rule_appears_in_table_and_is_persisted(client):
     assert rules[0].priority == 5
 
 
+def test_rule_payee_is_saved_shown_and_editable(client):
+    client.post(
+        "/rules",
+        data={
+            "pattern": "PAYU",
+            "category": "Fun",
+            "payee": " Cinema City ",
+        },
+    )
+
+    assert read_rules(config.RULES_PATH)[0].payee == "Cinema City"
+    assert "Cinema City" in client.get("/rules").text
+    assert 'value="Cinema City"' in client.get("/rules/0/edit").text
+
+    client.post(
+        "/rules/0",
+        data={"pattern": "PAYU", "category": "Fun", "payee": ""},
+    )
+    assert read_rules(config.RULES_PATH)[0].payee == ""
+
+
 def test_create_rule_rejects_invalid_regex(client):
     response = client.post(
         "/rules", data={"pattern": "[", "category": "Groceries", "priority": "0"}

@@ -8,7 +8,7 @@
     <table class="rules-table">
       <thead>
         <tr>
-          <th>Pattern</th><th>Category</th><th>Subcategory</th><th>Amount range</th><th>Type</th><th>Priority</th>
+          <th>Pattern</th><th>Category</th><th>Subcategory</th><th>Payee</th><th>Amount range</th><th>Type</th><th>Priority</th>
         </tr>
       </thead>
       <tbody>
@@ -30,6 +30,7 @@
             </td>
             <td>{{ rule.category }}</td>
             <td>{{ rule.subcategory or '—' }}</td>
+            <td>{{ rule.payee or '—' }}</td>
             <td>
               {% if rule.min_amount is none and rule.max_amount is none %}
                 —

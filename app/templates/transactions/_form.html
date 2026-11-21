@@ -58,6 +58,13 @@
       <input type="text" name="amount" value="{{ values.amount }}" required>
     </label>
   </div>
+  <label>Payee (who was paid, or paid you)
+    <input type="text" name="payee" list="payee-options-{{ values.type }}"
+           value="{{ values.payee }}" autocomplete="off">
+    <datalist id="payee-options-{{ values.type }}">
+      {% for name in payees %}<option value="{{ name }}">{% endfor %}
+    </datalist>
+  </label>
   <label>Notes
     <input type="text" name="notes" value="{{ values.notes }}">
   </label>

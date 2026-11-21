@@ -19,6 +19,10 @@
       </datalist>
     </label>
   </div>
+  <label>Payee (optional — the clean name an import gives matching transactions, e.g. "Cinema City")
+    <input type="text" name="payee" value="{{ values.payee }}" autocomplete="off"
+           placeholder="leave the bank's name as is">
+  </label>
   <label>Exact amount (optional — matches only this amount; leave blank to use a range instead)
     <input type="text" name="exact_amount" value="{{ values.exact_amount }}" placeholder="no exact amount">
   </label>

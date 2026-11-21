@@ -43,6 +43,12 @@ class ImportMapping(BaseModel):
       skipped. Unlike the fallback these are appended even when the
       primary column has a value.
 
+    - ``payee``, ``payee_fallback`` — the bank's own name for the other party
+      (e.g. a card export's merchant column, else its recipient/sender
+      column), same primary+fallback shape as ``description``. It becomes
+      ``Transaction.payee`` unless a matching rule names a payee, and the
+      import preview lets the user edit it before it is saved.
+
     ``decimal_separator`` normalizes amounts like ``"-5,99 PLN"`` before
     parsing: everything except digits, ``-``, and this separator is
     stripped, then the separator itself is normalized to ``.`` — this

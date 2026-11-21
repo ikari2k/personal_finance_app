@@ -48,6 +48,7 @@ from app.services.importer import (
     DESCRIPTION_EXTRA_KEYS,
     apply_category_picks,
     apply_note_edits,
+    apply_payee_edits,
     build_transactions,
     count_blank_column_values,
     filter_by_account_number,
@@ -56,7 +57,7 @@ from app.services.importer import (
     parse_date,
     parse_rows,
 )
-from app.services.transactions import ensure_category
+from app.services.transactions import distinct_payees, ensure_category
 from app.storage.accounts import read_accounts
 from app.storage.categories import read_categories, write_categories
 from app.storage.import_history import append_history_entry, read_history
@@ -107,6 +108,16 @@ def _set_counterparty_columns(
     fallback_idx = _to_column_index(counterparty_fallback)
     if fallback_idx is not None:
         columns["counterparty_account_fallback"] = fallback_idx
+
+
+def _set_payee_columns(columns: dict[str, int], payee: str, fallback: str) -> None:
+    """Add the optional ``payee``/``payee_fallback`` keys, if set."""
+    idx = _to_column_index(payee)
+    if idx is not None:
+        columns["payee"] = idx
+    fallback_idx = _to_column_index(fallback)
+    if fallback_idx is not None:
+        columns["payee_fallback"] = fallback_idx
 
 
 def _set_description_extra_columns(
@@ -319,6 +330,8 @@ def _render_mapping_setup(
     selected_description_fallback_column: int | None = None,
     selected_description_extra_1_column: int | None = None,
     selected_description_extra_2_column: int | None = None,
+    selected_payee_column: int | None = None,
+    selected_payee_fallback_column: int | None = None,
     selected_amount_column: int | None = None,
     selected_account_number_column: int | None = None,
     selected_counterparty_account_column: int | None = None,
@@ -394,6 +407,8 @@ def _render_mapping_setup(
             ),
             "selected_description_extra_1_column": selected_description_extra_1_column,
             "selected_description_extra_2_column": selected_description_extra_2_column,
+            "selected_payee_column": selected_payee_column,
+            "selected_payee_fallback_column": selected_payee_fallback_column,
             "selected_amount_column": selected_amount_column,
             "selected_account_number_column": selected_account_number_column,
             "selected_counterparty_account_column": (
@@ -425,6 +440,8 @@ def reparse_mapping_setup(
     description_fallback_column: str = Form(""),
     description_extra_1_column: str = Form(""),
     description_extra_2_column: str = Form(""),
+    payee_column: str = Form(""),
+    payee_fallback_column: str = Form(""),
     amount_column: str = Form(""),
     account_number_column: str = Form(""),
     counterparty_account_column: str = Form(""),
@@ -453,6 +470,8 @@ def reparse_mapping_setup(
         selected_description_extra_2_column=_to_column_index(
             description_extra_2_column
         ),
+        selected_payee_column=_to_column_index(payee_column),
+        selected_payee_fallback_column=_to_column_index(payee_fallback_column),
         selected_amount_column=_to_column_index(amount_column),
         selected_account_number_column=_to_column_index(account_number_column),
         selected_counterparty_account_column=_to_column_index(
@@ -480,6 +499,8 @@ def save_mapping_setup(
     description_fallback_column: str = Form(""),
     description_extra_1_column: str = Form(""),
     description_extra_2_column: str = Form(""),
+    payee_column: str = Form(""),
+    payee_fallback_column: str = Form(""),
     amount_column: int = Form(...),
     account_number_column: str = Form(""),
     counterparty_account_column: str = Form(""),
@@ -514,6 +535,7 @@ def save_mapping_setup(
     _set_description_extra_columns(
         columns, description_extra_1_column, description_extra_2_column
     )
+    _set_payee_columns(columns, payee_column, payee_fallback_column)
     _set_counterparty_columns(
         columns, counterparty_account_column, counterparty_account_fallback_column
     )
@@ -550,6 +572,8 @@ def save_mapping_setup(
             selected_description_extra_2_column=_to_column_index(
                 description_extra_2_column
             ),
+            selected_payee_column=_to_column_index(payee_column),
+            selected_payee_fallback_column=_to_column_index(payee_fallback_column),
             selected_amount_column=amount_column,
             selected_account_number_column=account_number_idx,
             selected_counterparty_account_column=_to_column_index(
@@ -614,6 +638,7 @@ def _render_preview(
                 "category": txn.category,
                 "subcategory": txn.subcategory,
                 "counterparty_account": txn.counterparty_account,
+                "payee": txn.payee,
             }
             for txn in transactions
         ]
@@ -634,6 +659,7 @@ def _render_preview(
             "total_rows": total_rows,
             "rows_payload": rows_payload,
             "category_options": read_categories(),
+            "payee_options": distinct_payees(existing),
             "restart_url": restart_url,
             "dry_run": dry_run,
         },
@@ -650,6 +676,7 @@ def confirm(
     rows_payload: str = Form(...),
     row_categories: list[str] = Form(default=[]),
     row_notes: list[str] = Form(default=[]),
+    row_payees: list[str] = Form(default=[]),
     restart_url: str = Form("/import/new/restart"),
 ) -> HTMLResponse:
     """Write the previewed transactions to the ledger and log the import.
@@ -661,6 +688,7 @@ def confirm(
     categories = read_categories()
     rows = apply_category_picks(json.loads(rows_payload), row_categories, categories)
     rows = apply_note_edits(rows, row_notes)
+    rows = apply_payee_edits(rows, row_payees)
     new_transactions = []
     for row in rows:
         amount = Decimal(row["amount"])
@@ -681,6 +709,7 @@ def confirm(
                 transfer_id=None,
                 notes=row.get("notes"),
                 counterparty_account=row.get("counterparty_account", ""),
+                payee=row.get("payee", ""),
             )
         )
     write_categories(categories)
@@ -812,6 +841,8 @@ def _mapping_from_edit_form(
     counterparty_account_fallback_column: str = "",
     description_extra_1_column: str = "",
     description_extra_2_column: str = "",
+    payee_column: str = "",
+    payee_fallback_column: str = "",
 ) -> ImportMapping:
     columns = {
         "date": date_column,
@@ -825,6 +856,7 @@ def _mapping_from_edit_form(
     _set_description_extra_columns(
         columns, description_extra_1_column, description_extra_2_column
     )
+    _set_payee_columns(columns, payee_column, payee_fallback_column)
     _set_counterparty_columns(
         columns, counterparty_account_column, counterparty_account_fallback_column
     )
@@ -851,6 +883,8 @@ def save_edited_mapping(
     description_fallback_column: str = Form(""),
     description_extra_1_column: str = Form(""),
     description_extra_2_column: str = Form(""),
+    payee_column: str = Form(""),
+    payee_fallback_column: str = Form(""),
     amount_column: int = Form(...),
     account_number_column: str = Form(""),
     counterparty_account_column: str = Form(""),
@@ -876,6 +910,8 @@ def save_edited_mapping(
         counterparty_account_fallback_column=counterparty_account_fallback_column,
         description_extra_1_column=description_extra_1_column,
         description_extra_2_column=description_extra_2_column,
+        payee_column=payee_column,
+        payee_fallback_column=payee_fallback_column,
     )
     write_mapping(mapping)
     return _render_edit_form(request, mapping, headers=toast("Mapping saved"))
@@ -896,6 +932,8 @@ async def dry_run_mapping(
     description_fallback_column: str = Form(""),
     description_extra_1_column: str = Form(""),
     description_extra_2_column: str = Form(""),
+    payee_column: str = Form(""),
+    payee_fallback_column: str = Form(""),
     amount_column: int = Form(...),
     account_number_column: str = Form(""),
     counterparty_account_column: str = Form(""),
@@ -923,6 +961,8 @@ async def dry_run_mapping(
         counterparty_account_fallback_column=counterparty_account_fallback_column,
         description_extra_1_column=description_extra_1_column,
         description_extra_2_column=description_extra_2_column,
+        payee_column=payee_column,
+        payee_fallback_column=payee_fallback_column,
     )
     if file is None or not file.filename:
         return _render_edit_form(

@@ -72,25 +72,34 @@ tests/unit/     tmp_path-isolated; tests/integration/  TestClient, conftest redi
 - `config/budget_rule.toml` — `needs, wants, savings` whole-percent targets (default 50/30/20,
   must sum to 100 via `services.budget_rule.validate_targets`).
 - `data/ledger.csv` — columns: `id, date, account_id, category, subcategory, description, amount,
-  type, transfer_id, notes, counterparty_account`. `amount` is signed; `type` ∈
+  type, transfer_id, notes, counterparty_account, payee`. `amount` is signed; `type` ∈
   income|expense|transfer. New columns are appended at the end so older files still read.
 - `config/import_mappings/<bank>.toml` — `bank, delimiter, encoding, date_format,
   decimal_separator`, `columns` = ledger field → **0-based column index** (not name; real exports
   have duplicate headers). Required: `date, description, amount`. Optional: `account_number`,
   `description_fallback`, `description_extra_1`/`_2` (appended to the primary/fallback text joined with ` | `, skipping
   blanks and repeats; shown as `ParsedRow.display_description`, saved as the row's *note*, never
-  folded into `description`, so duplicate detection and rules still see the bank's own text), `counterparty_account`,
+  folded into `description`, so duplicate detection and rules still see the bank's own text), `payee`/`payee_fallback` (the
+  bank's name for the other party, prefilled in the preview), `counterparty_account`,
   `counterparty_account_fallback`.
 - `data/import_history.toml` — append-only `[[imports]]` log; independent snapshots, not live refs.
 - `config/rules.toml` — `[[rules]]`: `pattern, field, category, subcategory, priority`, plus
   optional `min_amount`/`max_amount` (inclusive, vs `abs(amount)`, stored as quoted strings;
   `app.storage.rules` round-trips them manually) and `type` (income/expense/None; never transfer).
-  "Exact amount" in the form collapses to `min == max` in `_validate_rule`.
+  "Exact amount" in the form collapses to `min == max` in `_validate_rule`. Optional `payee`
+  names who matching rows were paid to; it is applied at **import time only** (bulk
+  reclassification never touches payees), and beats the mapping's payee column.
 
 ## Invariants — do not break
 
 - **Transfers are two linked rows** (opposite-sign, equal magnitude, shared `transfer_id`). Never
   model one as a single row; never edit/delete one leg without the other.
+- **`payee` is a third text field, kept apart.** `description` = the bank's text (read-only, keys
+  duplicate detection and rule matching), `notes` = personal, `payee` = the clean name of who was
+  paid / paid you (free text, blank for transfers — `merge_into_transfer` clears it,
+  `update_transaction_payee` refuses transfer legs). Filled by a rule, the mapping's payee
+  column, the import preview's box or by hand; the transactions list has an inline payee input
+  and search matches it. Never use it in duplicate detection.
 - **Lock every write** to ledger/config files via `app.storage.lock.file_lock` (PID lockfile,
   stale locks auto-cleared). `LockError` is handled app-wide in `app/main.py` (toast +
   `HX-Reswap: none`).

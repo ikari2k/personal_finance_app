@@ -45,6 +45,12 @@ class Rule(BaseModel):
     ``Decimal`` as an imprecise TOML float; ``type`` piggybacks on the same
     "empty string means unset" convention for consistency, even though it
     isn't itself a lossy-float risk).
+
+    ``payee`` (optional, blank = none) names who the matching transactions
+    were paid to (or came from), so an import fills ``Transaction.payee`` with
+    a clean name — "Cinema City" for a noisy "PayU | www.cinema-city.pl".
+    Applied at import time only; bulk reclassification of existing rows does
+    not touch payees.
     """
 
     pattern: str
@@ -55,3 +61,4 @@ class Rule(BaseModel):
     min_amount: Decimal | None = None
     max_amount: Decimal | None = None
     type: TransactionType | None = None
+    payee: str = ""

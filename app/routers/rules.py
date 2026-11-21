@@ -116,6 +116,7 @@ def new_rule_form(request: Request) -> HTMLResponse:
             "max_amount": "",
             "exact_amount": "",
             "type": "",
+            "payee": "",
         },
     )
 
@@ -148,6 +149,7 @@ def edit_rule_form(request: Request, index: int) -> HTMLResponse:
             ),
             "exact_amount": str(rule.min_amount) if is_exact else "",
             "type": rule.type.value if rule.type is not None else "",
+            "payee": rule.payee,
         },
     )
 
@@ -163,6 +165,7 @@ def create_rule(
     max_amount: str = Form(""),
     exact_amount: str = Form(""),
     type: str = Form(""),
+    payee: str = Form(""),
 ) -> HTMLResponse:
     """Create a new rule; close the dialog and refresh the table on success."""
     values = {
@@ -174,6 +177,7 @@ def create_rule(
         "max_amount": max_amount,
         "exact_amount": exact_amount,
         "type": type,
+        "payee": payee,
     }
     try:
         priority_value, min_value, max_value, type_value = validate_rule(
@@ -191,6 +195,7 @@ def create_rule(
             min_amount=min_value,
             max_amount=max_value,
             type=type_value,
+            payee=payee.strip(),
         )
     )
     write_rules(rules)
@@ -211,6 +216,7 @@ def update_rule(
     max_amount: str = Form(""),
     exact_amount: str = Form(""),
     type: str = Form(""),
+    payee: str = Form(""),
 ) -> HTMLResponse:
     """Update an existing rule; close the dialog and refresh the table on success."""
     values = {
@@ -222,6 +228,7 @@ def update_rule(
         "max_amount": max_amount,
         "exact_amount": exact_amount,
         "type": type,
+        "payee": payee,
     }
     rules = read_rules()
     if index < 0 or index >= len(rules):
@@ -240,6 +247,7 @@ def update_rule(
         min_amount=min_value,
         max_amount=max_value,
         type=type_value,
+        payee=payee.strip(),
     )
     write_rules(rules)
     return _render_table(

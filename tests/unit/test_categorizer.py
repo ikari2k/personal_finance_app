@@ -11,6 +11,7 @@ from app.services.categorizer import (
     apply_reclassification,
     categorize,
     compile_pattern,
+    find_matching_rule,
     plan_reclassification,
     rename_category_in_rules,
     rename_subcategory_in_rules,
@@ -371,3 +372,26 @@ def test_rename_subcategory_in_rules_no_op_when_names_match():
 
     assert renamed == rules
     assert renamed is not rules
+
+
+def test_find_matching_rule_returns_the_rule_categorize_would_use():
+    rules = [
+        Rule(pattern="PAYU", category="Fun", priority=1),
+        Rule(
+            pattern="PAYU.*CINEMA", category="Cinema", priority=5, payee="Cinema City"
+        ),
+    ]
+
+    rule = find_matching_rule("PayU | cinema-city.pl", Decimal("-9"), EXPENSE, rules)
+
+    assert rule is rules[1]
+    assert categorize("PayU | cinema-city.pl", Decimal("-9"), EXPENSE, rules) == (
+        "Cinema",
+        "",
+    )
+
+
+def test_find_matching_rule_is_none_without_a_match():
+    rules = [Rule(pattern="ZABKA", category="Groceries")]
+
+    assert find_matching_rule("Biedronka", Decimal("-1"), EXPENSE, rules) is None

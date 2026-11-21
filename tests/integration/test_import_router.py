@@ -727,6 +727,116 @@ def test_adding_extras_later_does_not_reimport_what_is_already_there(client):
     assert "2 duplicates skipped" in second.text
 
 
+_PAYEE_CSV = (
+    "date,description,amount,account,merchant,recipient\n"
+    "2026-09-01,PayU,-9.00,1234,Bank Cinema,\n"
+    "2026-09-02,Wire 5,-30.00,1234,,Tauron SA\n"
+    "2026-09-03,Cash,-4.00,1234,,\n"
+)
+
+
+def _save_payee_mapping(client, *, content=_PAYEE_CSV):
+    setup = _upload_new(client, bank="P Bank", content=content)
+    return client.post(
+        "/import/mapping-setup/save",
+        data={
+            "bank": "P Bank",
+            "account_id": "chk",
+            "file_content_b64": _extract_hidden_value(setup.text, "file_content_b64"),
+            "delimiter": ",",
+            "encoding": "utf-8",
+            "date_format": "%Y-%m-%d",
+            "decimal_separator": ".",
+            "date_column": "0",
+            "description_column": "1",
+            "amount_column": "2",
+            "account_number_column": "3",
+            "payee_column": "4",
+            "payee_fallback_column": "5",
+        },
+    )
+
+
+def test_payee_columns_prefill_the_preview_and_are_saved_on_confirm(client):
+    _create_account(client, account_id="chk", number="1234")
+
+    preview = _save_payee_mapping(client)
+
+    assert 'value="Bank Cinema"' in preview.text
+    assert 'value="Tauron SA"' in preview.text  # fallback column
+    assert 'name="row_payees"' in preview.text
+    _confirm(
+        client,
+        account_id="chk",
+        bank="P Bank",
+        rows_payload=_extract_hidden_value(preview.text, "rows_payload"),
+        row_payees=["Bank Cinema", "Tauron SA", ""],
+    )
+    by_description = {t.description: t for t in read_ledger(config.LEDGER_PATH)}
+    assert by_description["PayU"].payee == "Bank Cinema"
+    assert by_description["Wire 5"].payee == "Tauron SA"
+    assert by_description["Cash"].payee == ""
+
+
+def test_preview_payee_can_be_edited_before_confirming(client):
+    _create_account(client, account_id="chk", number="1234")
+    preview = _save_payee_mapping(client)
+
+    _confirm(
+        client,
+        account_id="chk",
+        bank="P Bank",
+        rows_payload=_extract_hidden_value(preview.text, "rows_payload"),
+        row_payees=["Cinema City", "", "Kiosk"],  # renamed, cleared, newly named
+    )
+
+    by_description = {t.description: t for t in read_ledger(config.LEDGER_PATH)}
+    assert by_description["PayU"].payee == "Cinema City"
+    assert by_description["Wire 5"].payee == ""
+    assert by_description["Cash"].payee == "Kiosk"
+
+
+def test_a_rule_payee_beats_the_banks_payee_in_the_preview(client):
+    from app.models.rule import Rule
+    from app.storage.rules import write_rules
+
+    _create_account(client, account_id="chk", number="1234")
+    write_rules(
+        [Rule(pattern="PayU", category="Fun", payee="Cinema City")], config.RULES_PATH
+    )
+
+    preview = _save_payee_mapping(client)
+
+    assert 'value="Cinema City"' in preview.text
+    assert 'value="Bank Cinema"' not in preview.text
+
+
+def test_edit_form_round_trips_the_payee_columns(client):
+    _create_account(client, account_id="chk", number="1234")
+    _create_mapping(client)
+
+    client.post(
+        "/import/mappings/Test%20Bank/edit",
+        data={
+            "delimiter": ",",
+            "encoding": "utf-8",
+            "date_format": "%Y-%m-%d",
+            "decimal_separator": ".",
+            "date_column": "0",
+            "description_column": "1",
+            "amount_column": "2",
+            "payee_column": "4",
+            "payee_fallback_column": "",
+        },
+    )
+
+    mapping = read_mapping("Test Bank", config.IMPORT_MAPPINGS_DIR)
+    assert mapping.columns["payee"] == 4
+    assert "payee_fallback" not in mapping.columns
+    form = client.get("/import/mappings/Test%20Bank/edit").text
+    assert 'name="payee_column"' in form and 'value="4"' in form
+
+
 def test_confirm_stores_an_edited_description_as_a_note_only(client):
     _create_account(client, account_id="chk", number="1234")
     preview_response = _create_mapping(client)

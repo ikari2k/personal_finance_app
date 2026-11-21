@@ -81,3 +81,21 @@ def test_write_then_read_round_trips_unset_type_as_none(tmp_path):
     [loaded] = read_rules(path)
 
     assert loaded.type is None
+
+
+def test_write_then_read_round_trips_payee(tmp_path):
+    path = tmp_path / "rules.toml"
+    rules = [Rule(pattern="PAYU", category="Fun", payee="Cinema City")]
+
+    write_rules(rules, path)
+
+    assert read_rules(path) == rules
+
+
+def test_read_rules_tolerates_a_file_written_before_payee_existed(tmp_path):
+    path = tmp_path / "rules.toml"
+    path.write_text('[[rules]]\npattern = "ZABKA"\ncategory = "Groceries"\n')
+
+    [rule] = read_rules(path)
+
+    assert rule.payee == ""

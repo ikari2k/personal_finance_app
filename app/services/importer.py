@@ -30,7 +30,7 @@ from app.models.category import CategoriesByType
 from app.models.import_mapping import ImportMapping
 from app.models.rule import Rule
 from app.models.transaction import Transaction, TransactionType
-from app.services.categorizer import categorize
+from app.services.categorizer import find_matching_rule
 
 DEFAULT_CATEGORY = "Uncategorized"
 
@@ -56,6 +56,9 @@ class ParsedRow:
     # ``description`` stays the bank's own text, because that is what keys
     # duplicate detection and rule matching.
     display_description: str = ""
+    # The bank's own name for the other party, when the mapping has a payee
+    # column; a matching rule's payee takes precedence over it.
+    payee: str = ""
 
 
 def parse_amount(raw: str, decimal_separator: str) -> Decimal:
@@ -117,6 +120,8 @@ def parse_rows(csv_text: str, mapping: ImportMapping) -> list[ParsedRow]:
     description_extra_idxs = [
         mapping.columns[key] for key in DESCRIPTION_EXTRA_KEYS if key in mapping.columns
     ]
+    payee_idx = mapping.columns.get("payee")
+    payee_fallback_idx = mapping.columns.get("payee_fallback")
     counterparty_idx = mapping.columns.get("counterparty_account")
     counterparty_fallback_idx = mapping.columns.get("counterparty_account_fallback")
 
@@ -163,12 +168,18 @@ def parse_rows(csv_text: str, mapping: ImportMapping) -> list[ParsedRow]:
         )
         if not counterparty and counterparty_fallback_idx is not None:
             counterparty = row[counterparty_fallback_idx].strip()
+        # The bank's name for the other party, same primary+fallback collapse
+        # as the description; a rule's payee still wins at build time.
+        payee = row[payee_idx].strip() if payee_idx is not None else ""
+        if not payee and payee_fallback_idx is not None:
+            payee = row[payee_fallback_idx].strip()
         parsed.append(
             ParsedRow(
                 date=parse_date(row[date_idx], mapping.date_format),
                 description=description,
                 amount=amount,
                 display_description=display_description,
+                payee=payee,
                 account_number=row[account_idx].strip()
                 if account_idx is not None
                 else "",
@@ -276,7 +287,10 @@ def build_transactions(
     transactions = []
     for row in rows:
         txn_type = TransactionType.EXPENSE if row.amount < 0 else TransactionType.INCOME
-        category, subcategory = categorize(row.description, row.amount, txn_type, rules)
+        rule = find_matching_rule(row.description, row.amount, txn_type, rules)
+        category, subcategory = (rule.category, rule.subcategory) if rule else ("", "")
+        # A rule's curated payee beats the bank's raw one.
+        payee = (rule.payee if rule and rule.payee else row.payee).strip()
         transactions.append(
             Transaction(
                 id=str(uuid.uuid4()),
@@ -293,6 +307,7 @@ def build_transactions(
                 # ``description`` (see ``apply_note_edits``).
                 notes=row.display_description or None,
                 counterparty_account=row.counterparty_account,
+                payee=payee,
             )
         )
     return transactions
@@ -327,6 +342,19 @@ def apply_category_picks(
             {**row, "category": category, "subcategory": subcategory} if valid else row
         )
     return result
+
+
+def apply_payee_edits(rows: list[dict], values: list[str]) -> list[dict]:
+    """Return ``rows`` with the payee the user typed (or cleared) in the preview.
+
+    ``values`` holds one text per row, in row order, pre-filled with the
+    payee the rule or mapping gave. The typed text, trimmed, is the payee,
+    blank included (clearing a suggestion is a choice). A list that doesn't
+    line up with ``rows`` is ignored, same as ``apply_note_edits``.
+    """
+    if len(values) != len(rows):
+        return rows
+    return [{**row, "payee": value.strip()} for row, value in zip(rows, values)]
 
 
 def apply_note_edits(rows: list[dict], values: list[str]) -> list[dict]:

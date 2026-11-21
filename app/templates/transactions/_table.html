@@ -110,6 +110,16 @@
       </span>
       {% endif %}
     </td>
+    <td class="payee-cell">
+      {% if txn.type.value != 'transfer' %}
+        {# Clean name of whoever was paid / paid you; blank until named. Writes only ``payee``. #}
+        <input type="text" class="desc-inline-input payee-inline-input" name="payee"
+               value="{{ txn.payee }}" placeholder="Payee" list="payee-options"
+               autocomplete="off" aria-label="Payee"
+               hx-post="/transactions/{{ txn.id }}/payee" hx-trigger="change"
+               hx-target="closest tr" hx-swap="outerHTML">
+      {% endif %}
+    </td>
     <td>
       {#
         Displays ``notes`` when set, falling back to the original
@@ -154,7 +164,8 @@
        that space went entirely to Description, leaving Category no wider
        than in the account-shown case despite the extra room actually
        available, which is exactly why it kept wrapping unnecessarily. #}
-    <col style="width: {{ '32%' if show_account else '44%' }}">
+    <col style="width: {{ '26%' if show_account else '34%' }}">
+    <col style="width: 16%">
     <col>
     <col style="width: calc(10ch + 2rem)">
   </colgroup>
@@ -363,6 +374,9 @@
     </div>
   {% endif %}
   {% if categories is defined %}{{ cat_option_templates(categories) }}{% endif %}
+  {% if payees is defined %}
+    <datalist id="payee-options">{% for name in payees %}<option value="{{ name }}">{% endfor %}</datalist>
+  {% endif %}
   {% if error %}<p class="error">{{ error }}</p>{% endif %}
   {% for month in months %}
     {% if by_month %}
