@@ -45,7 +45,10 @@
                      aria-label="Payee name for {{ count_label(g.spellings|length, 'bank spelling') }}">
               <span class="muted payee-stats">
                 {% if g.memo_like %}<span class="payee-memo">Looks like memo text</span>{% endif %}
-                {{ count_label(g.count, 'transaction') }} · {{ g.total|money }} · mostly {{ g.top_category or 'uncategorized' }}
+                {{ count_label(g.count, 'transaction') }}
+                {%- if g.spent %} · {{ g.spent|money }} spent{% endif %}
+                {%- if g.received %} · {{ g.received|money }} received{% endif %}
+                · mostly {{ g.top_category or 'uncategorized' }}
               </span>
             </div>
             <div class="payee-actions">

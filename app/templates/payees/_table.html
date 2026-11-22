@@ -17,7 +17,8 @@
             <th aria-label="Select"></th>
             <th>{{ sort_link('name', 'Payee') }}</th>
             <th class="num">{{ sort_link('count', 'Transactions') }}</th>
-            <th class="num">{{ sort_link('total', 'Spent') }}</th>
+            <th class="num">{{ sort_link('spent', 'Spent') }}</th>
+            <th class="num">{{ sort_link('received', 'Received') }}</th>
             <th>Usual category</th>
             <th>{{ sort_link('last', 'Last seen') }}</th>
             <th>Bank spellings</th>
@@ -35,7 +36,8 @@
                         hx-target="#payee-dialog-content" hx-swap="innerHTML">Rename</button>
               </td>
               <td class="num">{{ p.count }}</td>
-              <td class="num">{{ p.total|money }}</td>
+              <td class="num">{{ p.spent|money if p.spent else '—' }}</td>
+              <td class="num">{{ p.received|money if p.received else '—' }}</td>
               <td>{{ p.top_category or '—' }}</td>
               <td>{{ p.last_seen }}</td>
               <td>

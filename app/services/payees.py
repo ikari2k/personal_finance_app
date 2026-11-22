@@ -105,7 +105,8 @@ class UnnamedGroup:
     suggestion: str
     spellings: list[tuple[str, int]]  # (bank text, count), most common first
     count: int
-    total: Decimal
+    spent: Decimal  # expense rows, as a positive amount
+    received: Decimal  # income rows
     top_category: str
     last_seen: date
     memo_like: bool
@@ -117,7 +118,8 @@ class PayeeSummary:
 
     name: str
     count: int
-    total: Decimal
+    spent: Decimal  # expense rows, as a positive amount
+    received: Decimal  # income rows
     top_category: str
     last_seen: date
     spellings: list[tuple[str, int]]
@@ -126,6 +128,23 @@ class PayeeSummary:
 def _is_candidate(txn: Transaction) -> bool:
     """Whether ``txn`` can carry a payee at all (not a transfer)."""
     return txn.type is not TransactionType.TRANSFER
+
+
+def money_flow(transactions: list[Transaction]) -> tuple[Decimal, Decimal]:
+    """Return ``(spent, received)`` for ``transactions``, both positive.
+
+    A payee can sit on both sides (a shop that also refunds, an employer that
+    is also reimbursed), so the two are kept apart instead of netted or added.
+    """
+    spent = sum(
+        (-t.amount for t in transactions if t.type is TransactionType.EXPENSE),
+        Decimal("0"),
+    )
+    received = sum(
+        (t.amount for t in transactions if t.type is TransactionType.INCOME),
+        Decimal("0"),
+    )
+    return spent, received
 
 
 def _most_common(values: list[str]) -> str:
@@ -151,13 +170,15 @@ def unnamed_groups(
             continue
         counts = Counter(" ".join(t.description.split()) for t in members)
         spellings = counts.most_common()
+        spent, received = money_flow(members)
         groups.append(
             UnnamedGroup(
                 key=key,
                 suggestion=suggest_name(spellings),
                 spellings=spellings,
                 count=len(members),
-                total=sum((abs(t.amount) for t in members), Decimal("0")),
+                spent=spent,
+                received=received,
                 top_category=_most_common([t.category for t in members]),
                 last_seen=max(t.date for t in members),
                 memo_like=(
@@ -165,7 +186,7 @@ def unnamed_groups(
                 ),
             )
         )
-    groups.sort(key=lambda g: (-g.count, -g.total, g.key))
+    groups.sort(key=lambda g: (-g.count, -(g.spent + g.received), g.key))
     return groups
 
 
@@ -190,11 +211,13 @@ def payee_summaries(transactions: list[Transaction]) -> list[PayeeSummary]:
     summaries = []
     for name, members in buckets.items():
         counts = Counter(" ".join(t.description.split()) for t in members)
+        spent, received = money_flow(members)
         summaries.append(
             PayeeSummary(
                 name=name,
                 count=len(members),
-                total=sum((abs(t.amount) for t in members), Decimal("0")),
+                spent=spent,
+                received=received,
                 top_category=_most_common([t.category for t in members]),
                 last_seen=max(t.date for t in members),
                 spellings=counts.most_common(),

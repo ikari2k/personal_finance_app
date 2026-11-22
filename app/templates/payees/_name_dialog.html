@@ -6,7 +6,7 @@
     <p>
       <strong>{{ name }}</strong> will be saved on <strong>{{ count }}</strong>
       transaction{{ '' if count == 1 else 's' }}
-      ({{ spelling_count }} bank spelling{{ '' if spelling_count == 1 else 's' }}, {{ total|money }}).
+      ({{ spelling_count }} bank spelling{{ '' if spelling_count == 1 else 's' }}{% if spent %}, {{ spent|money }} spent{% endif %}{% if received %}, {{ received|money }} received{% endif %}).
       New imports with those spellings get it too. The bank text stays as it is, and transactions
       that already have a payee are not changed.
     </p>

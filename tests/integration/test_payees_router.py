@@ -225,7 +225,7 @@ def test_search_filters_by_name_or_bank_spelling_and_sorts(client):
     )
 
     by_spelling = client.get("/payees?part=table&q=weglarska").text
-    by_total = client.get("/payees?part=table&sort=total&dir=desc").text
+    by_total = client.get("/payees?part=table&sort=spent&dir=desc").text
     by_name = client.get("/payees?part=table&sort=name&dir=asc").text
 
     assert "Lidl" in by_spelling and "Żabka" not in by_spelling
@@ -256,3 +256,139 @@ def test_names_with_quotes_survive_the_rename_button_and_the_dialog(client):
     assert "Renames 1 transaction" in dialog
     client.post("/payees/rename", data={"old": 'Dom "Pod Lipą" & Co', "new": "Dom"})
     assert _payees_by_id() == {"1": "Dom"}
+
+
+def test_table_shows_spent_and_received_in_separate_columns(client):
+    _seed(
+        _txn("1", "Shop", payee="Shop", amount="-40"),
+        _txn("2", "Shop", payee="Shop", amount="15", type=TransactionType.INCOME),
+        _txn(
+            "3",
+            "Employer",
+            payee="Employer",
+            amount="3000",
+            type=TransactionType.INCOME,
+        ),
+    )
+
+    text = client.get("/payees").text
+
+    assert "Received" in text and "Spent" in text
+
+    def row(name):
+        return next(r for r in text.split("<tr>") if f'value="{name}"' in r)
+
+    assert "40.00" in row("Shop") and "15.00" in row("Shop")
+    assert "3,000.00" in row("Employer")
+    assert "—" in row("Employer")  # nothing spent
+
+
+def test_payees_sort_by_received(client):
+    _seed(
+        _txn("1", "a", payee="Small", amount="10", type=TransactionType.INCOME),
+        _txn("2", "b", payee="Big", amount="900", type=TransactionType.INCOME),
+    )
+
+    text = client.get("/payees?part=table&sort=received&dir=desc").text
+
+    assert text.index("Big") < text.index("Small")
+
+
+def test_queue_and_preview_show_what_was_spent_and_received(client):
+    _seed(
+        _txn("1", "ACME", amount="-10"),
+        _txn("2", "ACME", amount="90", type=TransactionType.INCOME),
+    )
+
+    page = client.get("/payees").text
+    preview = client.get("/payees/name-preview?key=acme&name=Acme").text
+
+    assert "10.00 spent" in page and "90.00 received" in page
+    assert "10.00 spent" in preview and "90.00 received" in preview
+
+
+def _order(text, *names):
+    """Positions of each payee's checkbox in the list, to compare row order."""
+    return [text.index(f'value="{name}"') for name in names]
+
+
+def _two_payees():
+    # Zabka has more transactions and more spending; Lidl comes first by name.
+    _seed(
+        _txn("1", "a", payee="Zabka", amount="-5"),
+        _txn("2", "b", payee="Zabka", amount="-5"),
+        _txn("3", "c", payee="Lidl", amount="-1"),
+    )
+
+
+def test_the_list_defaults_to_name_a_to_z(client):
+    _two_payees()
+
+    text = client.get("/payees").text
+
+    lidl, zabka = _order(text, "Lidl", "Zabka")
+    assert lidl < zabka
+
+
+def test_a_chosen_sort_is_remembered_on_the_next_visit(client):
+    _two_payees()
+
+    client.get("/payees?sort=count&dir=desc")
+    later = client.get("/payees").text
+
+    lidl, zabka = _order(later, "Lidl", "Zabka")
+    assert zabka < lidl  # most transactions first, as chosen earlier
+    assert 'id="payee-sort" name="sort" value="count"' in later
+
+
+def test_a_sort_in_the_url_beats_the_remembered_one(client):
+    _two_payees()
+    client.get("/payees?sort=count&dir=desc")
+
+    text = client.get("/payees?sort=name&dir=desc").text
+
+    lidl, zabka = _order(text, "Lidl", "Zabka")
+    assert zabka < lidl  # Z to A, as asked now
+    again = client.get("/payees").text
+    assert _order(again, "Zabka", "Lidl")[0] < _order(again, "Zabka", "Lidl")[1]
+
+
+def test_searching_and_swapping_the_list_keep_the_remembered_sort(client):
+    _two_payees()
+    client.get("/payees?sort=count&dir=desc")
+
+    fragment = client.get("/payees?part=table&q=").text
+
+    lidl, zabka = _order(fragment, "Lidl", "Zabka")
+    assert zabka < lidl
+
+
+def test_a_new_sort_without_a_direction_uses_its_own_natural_direction(client):
+    _two_payees()
+    client.get("/payees?sort=name&dir=asc")  # remembers "asc"
+
+    text = client.get("/payees?sort=count").text
+
+    lidl, zabka = _order(text, "Lidl", "Zabka")
+    assert zabka < lidl  # count's natural order is biggest first, not the old "asc"
+
+
+def test_unknown_remembered_values_fall_back_to_name_a_to_z(client):
+    _two_payees()
+    client.cookies.set("payee_sort", "bogus")
+    client.cookies.set("payee_dir", "sideways")
+
+    text = client.get("/payees").text
+
+    lidl, zabka = _order(text, "Lidl", "Zabka")
+    assert lidl < zabka
+
+
+def test_changes_refresh_the_list_in_the_remembered_order(client):
+    _two_payees()
+    client.get("/payees?sort=count&dir=desc")
+
+    response = client.post("/payees/rename", data={"old": "Lidl", "new": "Aldi"})
+
+    aldi, zabka = _order(response.text, "Aldi", "Zabka")
+    assert zabka < aldi  # still most transactions first, not renamed-name order

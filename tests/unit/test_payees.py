@@ -16,6 +16,7 @@ from app.services.payees import (
     group_key,
     group_members,
     merge_payees,
+    money_flow,
     name_group,
     payee_summaries,
     rename_payee,
@@ -101,7 +102,8 @@ def test_unnamed_groups_cluster_biggest_first_with_counts_and_totals():
 
     assert [g.key for g in groups] == ["zabka", "lidl weglarska"]
     zabka = groups[0]
-    assert zabka.count == 3 and zabka.total == Decimal("15")
+    assert zabka.count == 3
+    assert zabka.spent == Decimal("15") and zabka.received == Decimal("0")
     assert zabka.spellings == [("ZABKA Z8540 K.2", 2), ("ZABKA ZC026 K.1", 1)]
     assert zabka.suggestion == "Zabka"
     assert zabka.last_seen == date(2026, 1, 3)
@@ -220,7 +222,8 @@ def test_payee_summaries_report_usage_per_payee():
     [summary] = payee_summaries(ledger)
 
     assert summary.name == "Żabka"
-    assert summary.count == 3 and summary.total == Decimal("13")
+    assert summary.count == 3 and summary.spent == Decimal("13")
+    assert summary.received == Decimal("0")
     assert summary.top_category == "Food"
     assert summary.last_seen == date(2026, 1, 9)
     assert summary.spellings == [("ZABKA Z1", 2), ("ZABKA Z2", 1)]
@@ -234,3 +237,39 @@ def test_coverage_counts_named_over_all_non_transfer_rows():
     ]
 
     assert coverage(ledger) == (1, 2)
+
+
+def test_money_flow_keeps_spent_and_received_apart():
+    rows = [
+        _txn("1", "a", amount="-30"),
+        _txn("2", "b", amount="-20"),
+        _txn("3", "c", amount="25", type=TransactionType.INCOME),
+    ]
+
+    assert money_flow(rows) == (Decimal("50"), Decimal("25"))
+    assert money_flow([]) == (Decimal("0"), Decimal("0"))
+
+
+def test_a_payee_on_both_sides_reports_spent_and_received():
+    ledger = [
+        _txn("1", "Shop", payee="Shop", amount="-40"),
+        _txn(
+            "2", "Shop refund", payee="Shop", amount="15", type=TransactionType.INCOME
+        ),
+    ]
+
+    [summary] = payee_summaries(ledger)
+
+    assert summary.count == 2
+    assert summary.spent == Decimal("40") and summary.received == Decimal("15")
+
+
+def test_unnamed_group_reports_spent_and_received_and_ranks_by_both():
+    ledger = [
+        _txn("1", "ACME", amount="-10"),
+        _txn("2", "ACME", amount="90", type=TransactionType.INCOME),
+    ]
+
+    [group] = unnamed_groups(ledger, PayeeBook())
+
+    assert group.spent == Decimal("10") and group.received == Decimal("90")

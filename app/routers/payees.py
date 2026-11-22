@@ -13,7 +13,6 @@ overwritten by naming a cluster.
 """
 
 from collections.abc import Callable
-from decimal import Decimal
 
 from fastapi import APIRouter, Form, Query, Request
 from fastapi.responses import HTMLResponse
@@ -28,6 +27,7 @@ from app.services.payees import (
     coverage,
     group_members,
     merge_payees,
+    money_flow,
     name_group,
     payee_summaries,
     retarget_aliases,
@@ -53,15 +53,58 @@ def _transactions(count: int) -> str:
 _SORTS: dict[str, Callable[[PayeeSummary], object]] = {
     "name": lambda p: p.name.casefold(),
     "count": lambda p: p.count,
-    "total": lambda p: p.total,
+    "spent": lambda p: p.spent,
+    "received": lambda p: p.received,
     "last": lambda p: p.last_seen,
 }
-_DEFAULT_DIR = {"name": "asc", "count": "desc", "total": "desc", "last": "desc"}
+DEFAULT_SORT = "name"  # when nothing was ever chosen
+SORT_COOKIE = "payee_sort"
+DIR_COOKIE = "payee_dir"
+SORT_COOKIE_MAX_AGE = 60 * 60 * 24 * 365  # 1 year
+_DEFAULT_DIR = {
+    "name": "asc",
+    "count": "desc",
+    "spent": "desc",
+    "received": "desc",
+    "last": "desc",
+}
 
 
-def _content_context(q: str = "", sort: str = "count", direction: str = "") -> dict:
+def resolve_sort(
+    request: Request, sort: str | None, direction: str | None
+) -> tuple[str, str]:
+    """Pick the list's ``(sort, direction)``: the URL, else the remembered choice.
+
+    Same convention as the Transactions filters: a value in the URL always wins,
+    an absent one falls back to the cookie, and anything unknown falls back to
+    the default (name, A to Z). A new sort given without a direction takes that
+    sort's own natural direction instead of inheriting the old column's.
+    """
+    if sort in _SORTS:
+        chosen = sort
+        remembered_dir = None
+    else:
+        cookie_sort = request.cookies.get(SORT_COOKIE)
+        chosen = cookie_sort if cookie_sort in _SORTS else DEFAULT_SORT
+        remembered_dir = request.cookies.get(DIR_COOKIE)
+    for candidate in (direction, remembered_dir):
+        if candidate in ("asc", "desc"):
+            return chosen, candidate
+    return chosen, _DEFAULT_DIR[chosen]
+
+
+def _remember_sort(response: HTMLResponse, sort: str, direction: str) -> HTMLResponse:
+    """Store the list's sort so the next visit, and every swap, keeps it."""
+    response.set_cookie(SORT_COOKIE, sort, max_age=SORT_COOKIE_MAX_AGE)
+    response.set_cookie(DIR_COOKIE, direction, max_age=SORT_COOKIE_MAX_AGE)
+    return response
+
+
+def _content_context(
+    q: str = "", sort: str = DEFAULT_SORT, direction: str = ""
+) -> dict:
     """Everything ``payees/_content.html`` renders, from the ledger and the book."""
-    sort = sort if sort in _SORTS else "count"
+    sort = sort if sort in _SORTS else DEFAULT_SORT
     direction = direction if direction in ("asc", "desc") else _DEFAULT_DIR[sort]
     ledger = read_ledger()
     book = read_payee_book()
@@ -100,11 +143,15 @@ def _content_context(q: str = "", sort: str = "count", direction: str = "") -> d
 def _render_content(
     request: Request, *, oob: bool = False, headers: dict[str, str] | None = None
 ) -> HTMLResponse:
-    """Render the swappable page region (coverage, queue, list) afresh."""
+    """Render the swappable page region (coverage, queue, list) afresh.
+
+    The list keeps the sort the user last chose (read from the cookie).
+    """
+    sort, direction = resolve_sort(request, None, None)
     return templates.TemplateResponse(
         request,
         "payees/_content.html",
-        {**_content_context(), "oob": oob},
+        {**_content_context(sort=sort, direction=direction), "oob": oob},
         headers=headers,
     )
 
@@ -113,17 +160,24 @@ def _render_content(
 def payees_page(
     request: Request,
     q: str = "",
-    sort: str = "count",
-    direction: str = Query("", alias="dir"),
+    sort: str | None = None,
+    direction: str | None = Query(None, alias="dir"),
     part: str = "",
 ) -> HTMLResponse:
-    """Render the payee management page, or just its list for search and sorting."""
+    """Render the payee management page, or just its list for search and sorting.
+
+    The sort is remembered between visits (see ``resolve_sort``), so leaving the
+    page and coming back, or searching, keeps the order last chosen.
+    """
+    sort, direction = resolve_sort(request, sort, direction)
     context = _content_context(q, sort, direction)
     if part == "table":
-        return templates.TemplateResponse(request, "payees/_table.html", context)
-    return templates.TemplateResponse(
-        request, "payees/list.html", {**context, "oob": False}
-    )
+        response = templates.TemplateResponse(request, "payees/_table.html", context)
+    else:
+        response = templates.TemplateResponse(
+            request, "payees/list.html", {**context, "oob": False}
+        )
+    return _remember_sort(response, sort, direction)
 
 
 def _name_dialog(
@@ -149,7 +203,8 @@ def _name_dialog(
             "name": cleaned,
             "count": len(members),
             "spelling_count": len(spellings),
-            "total": sum((abs(t.amount) for t in members), Decimal("0")),
+            "spent": money_flow(members)[0],
+            "received": money_flow(members)[1],
             "sample": sorted(members, key=lambda t: t.date, reverse=True)[
                 :PREVIEW_ROWS
             ],
