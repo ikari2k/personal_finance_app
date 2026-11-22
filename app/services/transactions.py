@@ -304,29 +304,28 @@ def update_transfer_pair(
     if amount <= 0:
         raise ValueError("amount must be positive")
 
-    updated_outflow = Transaction(
-        id=outflow.id,
-        date=date,
-        account_id=from_account_id,
-        category=outflow.category,
-        subcategory=outflow.subcategory,
-        description=description,
-        amount=-amount,
-        type=TransactionType.TRANSFER,
-        transfer_id=transfer_id,
-        notes=notes,
+    # model_copy keeps what the dialog never edits (category, source, counterparty).
+    updated_outflow = outflow.model_copy(
+        update={
+            "date": date,
+            "account_id": from_account_id,
+            "description": description,
+            "amount": -amount,
+            "type": TransactionType.TRANSFER,
+            "transfer_id": transfer_id,
+            "notes": notes,
+        }
     )
-    updated_inflow = Transaction(
-        id=inflow.id,
-        date=date,
-        account_id=to_account_id,
-        category=inflow.category,
-        subcategory=inflow.subcategory,
-        description=description,
-        amount=amount,
-        type=TransactionType.TRANSFER,
-        transfer_id=transfer_id,
-        notes=notes,
+    updated_inflow = inflow.model_copy(
+        update={
+            "date": date,
+            "account_id": to_account_id,
+            "description": description,
+            "amount": amount,
+            "type": TransactionType.TRANSFER,
+            "transfer_id": transfer_id,
+            "notes": notes,
+        }
     )
     replacements = {outflow.id: updated_outflow, inflow.id: updated_inflow}
     return [replacements.get(t.id, t) for t in transactions]

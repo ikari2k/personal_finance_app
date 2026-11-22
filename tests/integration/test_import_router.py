@@ -853,3 +853,38 @@ def test_confirm_stores_an_edited_description_as_a_note_only(client):
     by_description = {t.description: t for t in read_ledger(config.LEDGER_PATH)}
     assert by_description["Coffee Shop"].notes == "Morning latte"
     assert by_description["Paycheck"].notes is None
+
+
+def test_confirmed_import_marks_every_row_with_the_mapping_it_came_from(client):
+    _create_account(client, account_id="chk", number="1234")
+    preview = _create_mapping(client)  # bank "Test Bank"
+
+    _confirm(
+        client,
+        account_id="chk",
+        bank="Test Bank",
+        rows_payload=_extract_hidden_value(preview.text, "rows_payload"),
+    )
+
+    ledger = read_ledger(config.LEDGER_PATH)
+    assert len(ledger) == 2
+    assert {t.source for t in ledger} == {"Test Bank"}
+
+
+def test_manual_entries_have_no_source(client):
+    _create_account(client, account_id="chk", number="1234")
+    client.post(
+        "/transactions",
+        data={
+            "account_id": "chk",
+            "date": "2026-01-15",
+            "type": "expense",
+            "category": "Food",
+            "subcategory": "",
+            "description": "cash",
+            "amount": "5.00",
+            "notes": "",
+        },
+    )
+
+    assert [t.source for t in read_ledger(config.LEDGER_PATH)] == [""]

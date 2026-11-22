@@ -276,6 +276,7 @@ def build_transactions(
     account_id: str,
     rules: list[Rule],
     aliases: dict[str, str] | None = None,
+    source: str = "",
 ) -> list[Transaction]:
     """Build ``Transaction`` rows from parsed CSV rows.
 
@@ -318,6 +319,7 @@ def build_transactions(
                 notes=row.display_description or None,
                 counterparty_account=row.counterparty_account,
                 payee=payee,
+                source=source,
             )
         )
     return transactions

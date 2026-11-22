@@ -41,6 +41,11 @@ class Transaction(BaseModel):
     payee column at import time, or by hand. It is separate from
     ``description`` (the bank's own text, read-only, keys duplicate
     detection and rule matching) and ``notes`` (purely personal).
+
+    ``source`` is the name of the import mapping that first added the row
+    (``"cred"``), blank for manual entries and rows created by the app itself.
+    It records provenance, so anything that depends on how a bank's export is
+    laid out can tell which bank a row came from. Never edited afterward.
     """
 
     id: str
@@ -55,3 +60,4 @@ class Transaction(BaseModel):
     notes: str | None = None
     counterparty_account: str = ""
     payee: str = ""
+    source: str = ""

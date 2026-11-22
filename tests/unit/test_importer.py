@@ -598,3 +598,13 @@ def test_build_transactions_uses_a_named_spelling_below_a_rule_and_above_the_ban
     txns = build_transactions(rows, "chk", rules, aliases)
 
     assert [t.payee for t in txns] == ["Cinema City", "Żabka", "Bank"]
+
+
+def test_build_transactions_records_which_import_added_each_row():
+    rows = [ParsedRow(date(2026, 9, 10), "Zabka", Decimal("-3"))]
+
+    [with_source] = build_transactions(rows, "chk", [], None, "cred")
+    [without] = build_transactions(rows, "chk", [])
+
+    assert with_source.source == "cred"
+    assert without.source == ""

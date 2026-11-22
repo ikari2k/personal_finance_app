@@ -1200,3 +1200,58 @@ def test_update_transaction_keeps_the_imported_counterparty_account():
     assert updated.counterparty_account == "85194010182000"
     assert updated.amount == Decimal("-12")
     assert updated.date == date(2026, 1, 2)
+
+
+def test_update_transaction_keeps_the_source():
+    existing = _txn(id="a", source="cred")
+
+    [updated] = update_transaction(
+        [existing],
+        "a",
+        ACCOUNT_IDS,
+        account_id="chk",
+        date=date(2026, 1, 2),
+        category="Groceries",
+        subcategory="",
+        description="x",
+        amount=Decimal("12"),
+        type=TransactionType.EXPENSE,
+    )
+
+    assert updated.source == "cred"
+
+
+def test_update_transfer_pair_keeps_the_legs_source_and_counterparty():
+    out = _txn(
+        id="o",
+        account_id="chk",
+        amount=Decimal("-50"),
+        type=TransactionType.TRANSFER,
+        transfer_id="T",
+        category="Transfer",
+        source="cred",
+        counterparty_account="123",
+    )
+    inn = _txn(
+        id="i",
+        account_id="sav",
+        amount=Decimal("50"),
+        type=TransactionType.TRANSFER,
+        transfer_id="T",
+        category="Transfer",
+        source="cred",
+    )
+
+    updated = update_transfer_pair(
+        [out, inn],
+        "T",
+        ACCOUNT_IDS,
+        from_account_id="chk",
+        to_account_id="sav",
+        date=date(2026, 2, 1),
+        amount=Decimal("75"),
+    )
+
+    assert [t.source for t in updated] == ["cred", "cred"]
+    assert updated[0].counterparty_account == "123"
+    assert updated[0].amount == Decimal("-75") and updated[1].amount == Decimal("75")

@@ -623,7 +623,7 @@ def _render_preview(
     new_rows, duplicate_rows = find_duplicates(kept, existing, account_id)
     rules = read_rules()
     transactions = build_transactions(
-        new_rows, account_id, rules, alias_lookup(read_payee_book())
+        new_rows, account_id, rules, alias_lookup(read_payee_book()), mapping.bank
     )
 
     blank_date, total_rows = count_blank_column_values(
@@ -714,6 +714,7 @@ def confirm(
                 notes=row.get("notes"),
                 counterparty_account=row.get("counterparty_account", ""),
                 payee=row.get("payee", ""),
+                source=bank,
             )
         )
     write_categories(categories)

@@ -76,7 +76,7 @@ tests/unit/     tmp_path-isolated; tests/integration/  TestClient, conftest redi
 - `config/budget_rule.toml` — `needs, wants, savings` whole-percent targets (default 50/30/20,
   must sum to 100 via `services.budget_rule.validate_targets`).
 - `data/ledger.csv` — columns: `id, date, account_id, category, subcategory, description, amount,
-  type, transfer_id, notes, counterparty_account, payee`. `amount` is signed; `type` ∈
+  type, transfer_id, notes, counterparty_account, payee, source`. `amount` is signed; `type` ∈
   income|expense|transfer. New columns are appended at the end so older files still read.
 - `config/import_mappings/<bank>.toml` — `bank, delimiter, encoding, date_format,
   decimal_separator`, `columns` = ledger field → **0-based column index** (not name; real exports
@@ -98,6 +98,9 @@ tests/unit/     tmp_path-isolated; tests/integration/  TestClient, conftest redi
 
 - **Transfers are two linked rows** (opposite-sign, equal magnitude, shared `transfer_id`). Never
   model one as a single row; never edit/delete one leg without the other.
+- **`source`** = the import mapping's name that first added a row (`cred`); blank for manual
+  entries and app-made rows; set once at import (`confirm` uses the posted `bank`) and carried
+  through edits via `model_copy`. Existing rows were set to `cred` in one pass on 2026-11-22.
 - **`payee` is a third text field, kept apart.** `description` = the bank's text (read-only, keys
   duplicate detection and rule matching), `notes` = personal, `payee` = the clean name of who was
   paid / paid you (free text, blank for transfers — `merge_into_transfer` clears it,
@@ -109,6 +112,8 @@ tests/unit/     tmp_path-isolated; tests/integration/  TestClient, conftest redi
   `description`. Every change (name, rename, merge) is previewed in a dialog from the same
   computation the apply step runs. Groups come from `group_key` (store numbers, legal suffixes and
   `com`/`www` dropped); a rename or merge also re-points the saved aliases so imports follow.
+  The list's sort is sticky like the Transactions filters (`payee_sort`/`payee_dir` cookies; a URL
+  value wins, default name A–Z) and every swap re-renders in the remembered order.
 - **Lock every write** to ledger/config files via `app.storage.lock.file_lock` (PID lockfile,
   stale locks auto-cleared). `LockError` is handled app-wide in `app/main.py` (toast +
   `HX-Reswap: none`).
