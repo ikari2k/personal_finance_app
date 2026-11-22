@@ -69,6 +69,10 @@ tests/unit/     tmp_path-isolated; tests/integration/  TestClient, conftest redi
   (subcategory `""` = inherit; resolve via `services.categories.effective_bucket`); income
   category `""`/`excluded` (left out of the income base), income subcategories have none. In
   `update_category`/`update_subcategory`, omitting `bucket` **keeps** it (opposite of `budget`).
+- `config/payee_aliases.toml` — the payee book: `[[aliases]]` (`spelling, payee`: an exact bank
+  spelling the user named; matched case- and spacing-insensitively via `services.payees.spelling_key`,
+  never as a pattern) and `skipped` (group keys left unnamed). Written only by `/payees`. Import
+  applies aliases to a row's `description`; precedence is rule payee > alias > mapping payee column.
 - `config/budget_rule.toml` — `needs, wants, savings` whole-percent targets (default 50/30/20,
   must sum to 100 via `services.budget_rule.validate_targets`).
 - `data/ledger.csv` — columns: `id, date, account_id, category, subcategory, description, amount,
@@ -100,10 +104,15 @@ tests/unit/     tmp_path-isolated; tests/integration/  TestClient, conftest redi
   `update_transaction_payee` refuses transfer legs). Filled by a rule, the mapping's payee
   column, the import preview's box or by hand; the transactions list has an inline payee dropdown
   (`.payee-combo`: existing payees plus the row's bank text; free text is valid) and search matches it. Never use it in duplicate detection.
+- **Payee view (`/payees`) rules.** Naming a group (`services.payees.name_group`) only fills rows whose
+  payee is blank — an existing payee is never overwritten — and never touches transfers or
+  `description`. Every change (name, rename, merge) is previewed in a dialog from the same
+  computation the apply step runs. Groups come from `group_key` (store numbers, legal suffixes and
+  `com`/`www` dropped); a rename or merge also re-points the saved aliases so imports follow.
 - **Lock every write** to ledger/config files via `app.storage.lock.file_lock` (PID lockfile,
   stale locks auto-cleared). `LockError` is handled app-wide in `app/main.py` (toast +
   `HX-Reswap: none`).
-- **Config writes leave backups**: `accounts/categories/rules` writers call
+- **Config writes leave backups**: `accounts/categories/rules/payee_aliases` writers call
   `storage.backup.backup_before_write` inside the lock — `<file>.bak` (previous version) plus
   `config/backups/<file>.<date>` (state before the day's first write, kept 30 days). The ledger
   and import history are not backed up. Restore by copying a backup over the file while the app

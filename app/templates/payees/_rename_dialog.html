@@ -1,0 +1,16 @@
+<form hx-post="/payees/rename" hx-target="#payee-dialog-content" hx-swap="innerHTML">
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <input type="hidden" name="old" value="{{ old }}">
+  <label>New name for “{{ old }}”
+    <input type="text" name="new" value="{{ new }}" autocomplete="off" required>
+  </label>
+  <p class="muted">
+    Renames {{ count }} transaction{{ '' if count == 1 else 's' }} and the bank spellings saved for it.
+    If another payee already has this name, the two become one.
+  </p>
+  <footer class="dialog-footer">
+    <button type="button" class="btn-outline"
+            onclick="document.getElementById('payee-dialog').close()">Cancel</button>
+    <button type="submit">Rename</button>
+  </footer>
+</form>

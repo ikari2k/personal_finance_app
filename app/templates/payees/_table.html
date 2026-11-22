@@ -1,0 +1,66 @@
+{% macro sort_link(key, label) %}
+  {% set next_dir = ('asc' if dir == 'desc' else 'desc') if sort == key else default_dir[key] %}
+  {% set url = '/payees?sort=' ~ key ~ '&dir=' ~ next_dir ~ '&q=' ~ (q|urlencode) %}
+  <a class="table-link sortable-th-link" href="{{ url }}"
+     hx-get="{{ url }}&part=table" hx-target="#payee-table" hx-swap="innerHTML">
+    {{ label }}{% if sort == key %} {{ '▲' if dir == 'asc' else '▼' }}{% endif %}
+  </a>
+{% endmacro %}
+<input type="hidden" id="payee-sort" name="sort" value="{{ sort }}">
+<input type="hidden" id="payee-dir" name="dir" value="{{ dir }}">
+{% if summaries %}
+  <form id="payee-merge-form" hx-post="/payees/merge-preview" hx-target="#payee-dialog-content" hx-swap="innerHTML">
+    <div class="table-scroll">
+      <table class="payee-table">
+        <thead>
+          <tr>
+            <th aria-label="Select"></th>
+            <th>{{ sort_link('name', 'Payee') }}</th>
+            <th class="num">{{ sort_link('count', 'Transactions') }}</th>
+            <th class="num">{{ sort_link('total', 'Spent') }}</th>
+            <th>Usual category</th>
+            <th>{{ sort_link('last', 'Last seen') }}</th>
+            <th>Bank spellings</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in summaries %}
+            <tr>
+              <td><input type="checkbox" class="payee-check" name="names" value="{{ p.name }}"
+                         data-count="{{ p.count }}" aria-label="Select {{ p.name }}"></td>
+              <td class="payee-name">
+                {{ p.name }}
+                <button type="button" class="payee-link"
+                        hx-get="/payees/rename" hx-vals='{{ {"name": p.name}|tojson }}'
+                        hx-target="#payee-dialog-content" hx-swap="innerHTML">Rename</button>
+              </td>
+              <td class="num">{{ p.count }}</td>
+              <td class="num">{{ p.total|money }}</td>
+              <td>{{ p.top_category or '—' }}</td>
+              <td>{{ p.last_seen }}</td>
+              <td>
+                <details class="payee-spell">
+                  <summary>{{ p.spellings|length }} spelling{{ '' if p.spellings|length == 1 else 's' }}</summary>
+                  <ul>
+                    {% for spelling, n in p.spellings[:12] %}<li><span>{{ spelling }}</span> <span class="muted">{{ n }}×</span></li>{% endfor %}
+                    {% if p.spellings|length > 12 %}<li class="muted">+ {{ p.spellings|length - 12 }} more</li>{% endif %}
+                  </ul>
+                </details>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="payee-mergebar" id="payee-mergebar" hidden>
+      <strong id="payee-merge-count"></strong>
+      <label for="payee-merge-name" class="muted">into</label>
+      <input type="text" id="payee-merge-name" name="name" autocomplete="off">
+      <button type="submit">Preview merge</button>
+    </div>
+  </form>
+{% elif q %}
+  <p class="muted">No payee matches “{{ q }}”.</p>
+{% else %}
+  <p class="muted">No payees yet. Name a group above and it appears here.</p>
+{% endif %}

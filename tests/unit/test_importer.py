@@ -584,3 +584,17 @@ def test_apply_payee_edits_ignores_a_list_that_does_not_line_up():
 
     assert apply_payee_edits(rows, []) == rows
     assert apply_payee_edits(rows, ["a", "b"]) == rows
+
+
+def test_build_transactions_uses_a_named_spelling_below_a_rule_and_above_the_bank():
+    rules = [Rule(pattern="PayU", category="Fun", payee="Cinema City")]
+    aliases = {"zabka z8540 k.2": "Żabka", "payu": "Alias loses to the rule"}
+    rows = [
+        ParsedRow(date(2026, 9, 10), "PayU", Decimal("-9"), payee="Bank"),
+        ParsedRow(date(2026, 9, 11), "ZABKA  Z8540 K.2", Decimal("-3"), payee="Bank"),
+        ParsedRow(date(2026, 9, 12), "Other", Decimal("-1"), payee="Bank"),
+    ]
+
+    txns = build_transactions(rows, "chk", rules, aliases)
+
+    assert [t.payee for t in txns] == ["Cinema City", "Żabka", "Bank"]

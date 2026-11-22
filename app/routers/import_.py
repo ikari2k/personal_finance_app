@@ -57,6 +57,7 @@ from app.services.importer import (
     parse_date,
     parse_rows,
 )
+from app.services.payees import alias_lookup
 from app.services.transactions import distinct_payees, ensure_category
 from app.storage.accounts import read_accounts
 from app.storage.categories import read_categories, write_categories
@@ -68,6 +69,7 @@ from app.storage.import_mappings import (
     write_mapping,
 )
 from app.storage.ledger import read_ledger, write_ledger
+from app.storage.payees import read_payee_book
 from app.storage.rules import read_rules
 from app.templating import templates
 
@@ -620,7 +622,9 @@ def _render_preview(
     existing = read_ledger()
     new_rows, duplicate_rows = find_duplicates(kept, existing, account_id)
     rules = read_rules()
-    transactions = build_transactions(new_rows, account_id, rules)
+    transactions = build_transactions(
+        new_rows, account_id, rules, alias_lookup(read_payee_book())
+    )
 
     blank_date, total_rows = count_blank_column_values(
         text, mapping.delimiter, mapping.columns["date"]

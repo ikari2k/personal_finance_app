@@ -1,0 +1,17 @@
+<form hx-post="/payees/merge" hx-target="#payee-dialog-content" hx-swap="innerHTML">
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  {% if not error %}
+    {% for n in names %}<input type="hidden" name="names" value="{{ n }}">{% endfor %}
+    <input type="hidden" name="name" value="{{ name }}">
+    <p>
+      Merge <strong>{{ names|join(', ') }}</strong> into <strong>{{ name }}</strong>.
+      This renames <strong>{{ moved }}</strong> transaction{{ '' if moved == 1 else 's' }} and
+      points their saved bank spellings at the new name.
+    </p>
+  {% endif %}
+  <footer class="dialog-footer">
+    <button type="button" class="btn-outline"
+            onclick="document.getElementById('payee-dialog').close()">Cancel</button>
+    {% if not error %}<button type="submit">Merge into {{ name }}</button>{% endif %}
+  </footer>
+</form>

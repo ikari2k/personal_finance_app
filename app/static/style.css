@@ -2932,3 +2932,201 @@ a.nw-tab { display: inline-block; text-decoration: none; }
 .report-columns > .report-card { margin-bottom: 0; }
 .report-columns { margin-bottom: 2rem; }
 .report-card.report-stat { margin-bottom: 0; padding: 0.85rem 1rem 1rem; }
+
+
+/* ==========================================================================
+   Payee management (app/templates/payees/): coverage meter, the "Name these"
+   queue whose bracket folds a payee's bank spellings into one name, and the
+   list of named payees.
+   ========================================================================== */
+.payee-cover-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+}
+.payee-meter {
+  position: relative;
+  height: 0.55rem;
+  margin-bottom: 1.6rem;
+  border-radius: 999px;
+  background: var(--pico-muted-border-color);
+}
+.payee-meter-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 999px;
+  background: var(--pico-primary);
+}
+.payee-meter-goal {
+  position: absolute;
+  top: -0.25rem;
+  bottom: -0.25rem;
+  border-left: 2px dashed var(--pico-muted-color);
+}
+.payee-meter-goal-label {
+  position: absolute;
+  top: 0.85rem;
+  transform: translateX(-50%);
+  font-size: 0.72rem;
+  color: var(--pico-muted-color);
+}
+.payee-order {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: payee-step;
+}
+.payee-order li {
+  position: relative;
+  padding: 0.55rem 0.8rem 0.6rem;
+  border: var(--pico-border-width) solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+  background: var(--pico-background-color);
+  font-size: 0.8rem;
+  color: var(--pico-muted-color);
+}
+.payee-order li strong {
+  display: block;
+  color: var(--pico-color);
+  font-size: 0.86rem;
+}
+.payee-order li strong::before {
+  counter-increment: payee-step;
+  content: counter(payee-step) ". ";
+  color: var(--pico-primary);
+}
+.payee-order li + li::before {
+  content: "";
+  position: absolute;
+  left: -0.5rem;
+  top: 50%;
+  width: 0.5rem;
+  border-top: 1px solid var(--pico-muted-color);
+}
+
+.payee-group {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0 0.7rem;
+  margin: 0;
+  padding: 0.7rem 0;
+  border-top: var(--pico-border-width) solid var(--pico-muted-border-color);
+}
+.payee-group:first-child { border-top: 0; }
+.payee-spellings {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.payee-spellings li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.6rem;
+  min-width: 0;
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--pico-muted-color);
+}
+.payee-spellings li span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.payee-spellings li span:last-child { flex: none; font-variant-numeric: tabular-nums; }
+.payee-spellings .more { font-style: italic; }
+/* The bracket: the spellings on the left fold into the one name on the right. */
+.payee-fold {
+  position: relative;
+  align-self: stretch;
+  margin-block: 0.25rem;
+  border: 2px solid var(--pico-muted-color);
+  border-left: 0;
+  border-radius: 0 8px 8px 0;
+  opacity: 0.55;
+}
+.payee-fold::after {
+  content: "";
+  position: absolute;
+  left: 100%;
+  top: 50%;
+  width: 0.7rem;
+  border-top: 2px solid var(--pico-muted-color);
+}
+.payee-namebox { display: grid; gap: 0.2rem; min-width: 0; padding-left: 0.5rem; }
+.payee-namebox input {
+  height: var(--control-h);
+  margin: 0;
+  font-weight: 600;
+}
+.payee-stats { font-size: 0.78rem; }
+.payee-memo {
+  display: inline-block;
+  margin-right: 0.3rem;
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  background: rgba(154, 91, 0, 0.14);
+  color: var(--pico-color);
+  font-weight: 600;
+}
+.payee-actions { display: flex; gap: 0.4rem; justify-content: flex-end; flex-wrap: wrap; }
+.payee-actions button { width: auto; height: var(--control-h); margin: 0; padding: 0 0.85rem; font-size: 0.85rem; }
+.payee-foot {
+  margin: 0.6rem 0 0;
+  padding-top: 0.6rem;
+  border-top: var(--pico-border-width) solid var(--pico-muted-border-color);
+}
+.payee-link {
+  display: inline;
+  width: auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--pico-primary);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.payee-link:hover { background: none; text-decoration: underline; }
+.payee-search { display: flex; align-items: center; gap: 0.5rem; margin: 0; }
+.payee-search input { width: 15rem; max-width: 100%; height: var(--control-h); margin: 0; }
+.payee-table th, .payee-table td { white-space: nowrap; }
+.payee-table td.payee-name { font-weight: 600; white-space: normal; min-width: 11rem; }
+.payee-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.payee-spell summary { cursor: pointer; font-size: 0.85rem; }
+.payee-spell ul { margin: 0.3rem 0 0; padding: 0; list-style: none; font-size: 0.8rem; color: var(--pico-muted-color); }
+.payee-spell li { margin: 0; white-space: normal; }
+.payee-sample { font-size: 0.85rem; }
+.payee-sample .num { text-align: right; }
+.payee-mergebar {
+  position: sticky;
+  bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem 0.9rem;
+  flex-wrap: wrap;
+  margin-top: 0.75rem;
+  padding: 0.7rem 1rem;
+  border: 1px solid var(--pico-primary);
+  border-radius: calc(var(--pico-border-radius) * 2);
+  background: var(--pico-card-sectioning-background-color);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.22);
+}
+.payee-mergebar input[type="text"] { width: 16rem; max-width: 100%; height: var(--control-h); margin: 0; font-weight: 600; }
+.payee-mergebar button { width: auto; height: var(--control-h); margin: 0; padding: 0 0.9rem; font-size: 0.85rem; }
+
+@media (max-width: 52rem) {
+  .payee-order { grid-template-columns: 1fr; }
+  .payee-order li + li::before { display: none; }
+  .payee-group { grid-template-columns: minmax(0, 1fr) 16px minmax(0, 1fr); row-gap: 0.55rem; }
+  .payee-actions { grid-column: 1 / -1; justify-content: flex-start; }
+}

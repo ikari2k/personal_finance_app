@@ -20,6 +20,7 @@ from app.routers import (
     categories,
     dashboard,
     import_,
+    payees,
     reports,
     rules,
     transactions,
@@ -74,6 +75,7 @@ app.include_router(transfers.router)
 app.include_router(import_.router)
 app.include_router(transfer_detection.router)
 app.include_router(rules.router)
+app.include_router(payees.router)
 app.include_router(reports.router)
 app.include_router(budget_rule.router)
 

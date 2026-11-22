@@ -31,6 +31,7 @@ from app.models.import_mapping import ImportMapping
 from app.models.rule import Rule
 from app.models.transaction import Transaction, TransactionType
 from app.services.categorizer import find_matching_rule
+from app.services.payees import spelling_key
 
 DEFAULT_CATEGORY = "Uncategorized"
 
@@ -271,7 +272,10 @@ def find_duplicates(
 
 
 def build_transactions(
-    rows: list[ParsedRow], account_id: str, rules: list[Rule]
+    rows: list[ParsedRow],
+    account_id: str,
+    rules: list[Rule],
+    aliases: dict[str, str] | None = None,
 ) -> list[Transaction]:
     """Build ``Transaction`` rows from parsed CSV rows.
 
@@ -289,8 +293,14 @@ def build_transactions(
         txn_type = TransactionType.EXPENSE if row.amount < 0 else TransactionType.INCOME
         rule = find_matching_rule(row.description, row.amount, txn_type, rules)
         category, subcategory = (rule.category, rule.subcategory) if rule else ("", "")
-        # A rule's curated payee beats the bank's raw one.
-        payee = (rule.payee if rule and rule.payee else row.payee).strip()
+        # Payee precedence: a rule's curated name, then a spelling the user
+        # already named in the payee view (``aliases``: spelling key -> payee),
+        # then the bank's own name for the other party.
+        payee = (
+            (rule.payee if rule and rule.payee else "")
+            or (aliases or {}).get(spelling_key(row.description), "")
+            or row.payee
+        ).strip()
         transactions.append(
             Transaction(
                 id=str(uuid.uuid4()),

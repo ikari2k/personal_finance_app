@@ -584,3 +584,40 @@
     if (open) close(open.closest("[data-month-picker]"), true);
   });
 })();
+
+/*
+ * Merge bar on the Payees page (`.payee-check`, `#payee-mergebar`): appears once
+ * two or more payees are ticked, and pre-fills the target name with the most
+ * used of them (until the user types one). Delegated on `document`: htmx
+ * replaces the list on every search and sort.
+ */
+(function () {
+  "use strict";
+
+  function sync() {
+    var bar = document.getElementById("payee-mergebar");
+    if (!bar) return;
+    var checked = Array.prototype.slice.call(document.querySelectorAll(".payee-check:checked"));
+    bar.hidden = checked.length < 2;
+    if (checked.length < 2) return;
+    document.getElementById("payee-merge-count").textContent = "Merge " + checked.length + " payees";
+    var field = document.getElementById("payee-merge-name");
+    if (field.dataset.touched) return;
+    var top = checked.reduce(function (best, el) {
+      return +el.dataset.count > +best.dataset.count ? el : best;
+    });
+    field.value = top.value;
+  }
+
+  document.addEventListener("change", function (e) {
+    if (e.target.matches && e.target.matches(".payee-check")) {
+      var field = document.getElementById("payee-merge-name");
+      if (field) delete field.dataset.touched;
+      sync();
+    }
+  });
+
+  document.addEventListener("input", function (e) {
+    if (e.target.id === "payee-merge-name") e.target.dataset.touched = "1";
+  });
+})();

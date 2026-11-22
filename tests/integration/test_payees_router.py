@@ -1,0 +1,258 @@
+"""Integration tests for the payee management view."""
+
+import json
+from datetime import date
+from decimal import Decimal
+
+from app import config
+from app.models.transaction import Transaction, TransactionType
+from app.storage.ledger import read_ledger, write_ledger
+from app.storage.payees import read_payee_book
+
+
+def _txn(id_, description, *, payee="", amount="-10", **overrides) -> Transaction:
+    fields = {
+        "id": id_,
+        "date": date(2026, 3, 5),
+        "account_id": "chk",
+        "category": "Food",
+        "subcategory": "",
+        "description": description,
+        "amount": Decimal(amount),
+        "type": TransactionType.EXPENSE,
+        "payee": payee,
+    }
+    fields.update(overrides)
+    return Transaction(**fields)
+
+
+def _seed(*txns):
+    write_ledger(list(txns), config.LEDGER_PATH)
+
+
+def _toast(response) -> str:
+    """The toast message carried in the HX-Trigger header (JSON, so decode it)."""
+    return json.loads(response.headers["HX-Trigger"])["toast"]
+
+
+def _payees_by_id():
+    return {t.id: t.payee for t in read_ledger(config.LEDGER_PATH)}
+
+
+def test_page_renders_empty(client):
+    response = client.get("/payees")
+
+    assert response.status_code == 200
+    assert "Payees" in response.text
+    assert "No payees yet" in response.text
+    assert "0%" in response.text
+
+
+def test_page_lists_groups_to_name_with_suggestion_and_counts(client):
+    _seed(
+        _txn("1", "ZABKA Z8540 K.2"),
+        _txn("2", "ZABKA Z8540 K.1"),
+        _txn("3", "LIDL WEGLARSKA"),
+    )
+
+    text = client.get("/payees").text
+
+    assert "Name these" in text
+    assert 'value="Zabka"' in text  # suggested from the most common spelling
+    assert "Name 2 transactions" in text
+    assert "ZABKA Z8540 K.2" in text and "ZABKA Z8540 K.1" in text
+    assert 'name="key" value="zabka"' in text
+
+
+def test_name_preview_shows_what_would_change_without_writing(client):
+    _seed(
+        _txn("1", "ZABKA Z1"), _txn("2", "ZABKA Z2"), _txn("3", "ZABKA Z3", payee="X")
+    )
+
+    text = client.get("/payees/name-preview?key=zabka&name=Żabka").text
+
+    assert "<strong>2</strong>" in text  # the row that has a payee is left out
+    assert "2 bank spellings" in text
+    assert "ZABKA Z1" in text and "ZABKA Z3" not in text
+    assert _payees_by_id() == {"1": "", "2": "", "3": "X"}
+
+
+def test_name_preview_rejects_a_blank_name_and_a_stale_group(client):
+    _seed(_txn("1", "ZABKA"))
+
+    blank = client.get("/payees/name-preview?key=zabka&name=%20")
+    stale = client.get("/payees/name-preview?key=nothing&name=Foo")
+
+    assert "enter a payee name" in blank.text
+    assert "Nothing left to name" in stale.text
+
+
+def test_naming_a_group_names_rows_remembers_spellings_and_keeps_description(client):
+    _seed(
+        _txn("1", "ZABKA Z8540 K.2"),
+        _txn("2", "ZABKA Z8540 K.1"),
+        _txn("3", "LIDL"),
+        _txn("4", "ZABKA Z9", payee="Keep me"),
+    )
+
+    response = client.post("/payees/name", data={"key": "zabka", "name": " Żabka "})
+
+    assert response.status_code == 200
+    assert _payees_by_id() == {"1": "Żabka", "2": "Żabka", "3": "", "4": "Keep me"}
+    assert {t.description for t in read_ledger(config.LEDGER_PATH)} >= {
+        "ZABKA Z8540 K.2",
+        "ZABKA Z8540 K.1",
+    }
+    book = read_payee_book(config.PAYEE_ALIASES_PATH)
+    assert {a.spelling for a in book.aliases} == {"ZABKA Z8540 K.2", "ZABKA Z8540 K.1"}
+    assert {a.payee for a in book.aliases} == {"Żabka"}
+    assert _toast(response) == "Named 2 transactions as Żabka"
+    assert 'hx-swap-oob="true"' in response.text  # the page region refreshes
+
+
+def test_naming_with_a_blank_name_changes_nothing(client):
+    _seed(_txn("1", "ZABKA"))
+
+    response = client.post("/payees/name", data={"key": "zabka", "name": ""})
+
+    assert "enter a payee name" in response.text
+    assert _payees_by_id() == {"1": ""}
+    assert read_payee_book(config.PAYEE_ALIASES_PATH).aliases == []
+
+
+def test_named_payees_appear_in_the_list_with_usage(client):
+    _seed(
+        _txn("1", "ZABKA Z1", amount="-5"),
+        _txn("2", "ZABKA Z2", amount="-7"),
+    )
+    client.post("/payees/name", data={"key": "zabka", "name": "Żabka"})
+
+    text = client.get("/payees").text
+
+    assert "Żabka" in text
+    assert "2 spellings" in text
+    assert "100%" in text  # every transaction has a payee now
+
+
+def test_skipping_a_group_hides_it_and_can_be_undone(client):
+    _seed(_txn("1", "ZABKA"), _txn("2", "LIDL"))
+
+    client.post("/payees/skip", data={"key": "zabka"})
+    hidden = client.get("/payees").text
+    client.post("/payees/unskip")
+    restored = client.get("/payees").text
+
+    assert 'name="key" value="zabka"' not in hidden
+    assert 'name="key" value="lidl"' in hidden
+    assert "1 group left unnamed" in hidden
+    assert 'name="key" value="zabka"' in restored
+
+
+def test_rename_updates_transactions_and_saved_spellings(client):
+    _seed(_txn("1", "ZABKA Z1"), _txn("2", "LIDL", payee="Lidl"))
+    client.post("/payees/name", data={"key": "zabka", "name": "Zabka"})
+
+    response = client.post("/payees/rename", data={"old": "Zabka", "new": "Żabka"})
+
+    assert response.status_code == 200
+    assert _payees_by_id() == {"1": "Żabka", "2": "Lidl"}
+    assert [a.payee for a in read_payee_book(config.PAYEE_ALIASES_PATH).aliases] == [
+        "Żabka"
+    ]
+    assert _toast(response) == "Renamed 1 transaction to Żabka"
+
+
+def test_rename_dialog_and_validation(client):
+    _seed(_txn("1", "x", payee="Lidl"))
+
+    form = client.get("/payees/rename?name=Lidl").text
+    same = client.post("/payees/rename", data={"old": "Lidl", "new": "Lidl"}).text
+    blank = client.post("/payees/rename", data={"old": "Lidl", "new": " "}).text
+
+    assert "Renames 1 transaction" in form
+    assert "already its name" in same
+    assert "enter a payee name" in blank
+    assert _payees_by_id() == {"1": "Lidl"}
+
+
+def test_merge_preview_counts_what_would_move_then_merge_applies_it(client):
+    _seed(
+        _txn("1", "a", payee="Lidl"),
+        _txn("2", "b", payee="LIDL Polska"),
+        _txn("3", "c", payee="Lidl Krakow"),
+        _txn("4", "d", payee="Zabka"),
+    )
+    data = {"names": ["Lidl", "LIDL Polska", "Lidl Krakow"], "name": "Lidl"}
+
+    preview = client.post("/payees/merge-preview", data=data)
+    assert "<strong>2</strong> transaction" in preview.text  # the Lidl row stays
+    assert _payees_by_id()["2"] == "LIDL Polska"  # preview wrote nothing
+
+    response = client.post("/payees/merge", data=data)
+
+    assert _payees_by_id() == {"1": "Lidl", "2": "Lidl", "3": "Lidl", "4": "Zabka"}
+    assert _toast(response) == "Merged into Lidl: 2 transactions"
+
+
+def test_merge_needs_two_payees_and_a_name(client):
+    _seed(_txn("1", "a", payee="Lidl"))
+
+    one = client.post("/payees/merge-preview", data={"names": ["Lidl"], "name": "X"})
+    blank = client.post(
+        "/payees/merge-preview", data={"names": ["Lidl", "Other"], "name": ""}
+    )
+
+    assert "Tick at least two payees" in one.text
+    assert "enter a payee name" in blank.text
+
+
+def test_merge_retargets_saved_spellings(client):
+    _seed(_txn("1", "ZABKA Z1"), _txn("2", "LIDL"))
+    client.post("/payees/name", data={"key": "zabka", "name": "Zabka"})
+    client.post("/payees/name", data={"key": "lidl", "name": "Lidl"})
+
+    client.post("/payees/merge", data={"names": ["Zabka", "Lidl"], "name": "Groceries"})
+
+    book = read_payee_book(config.PAYEE_ALIASES_PATH)
+    assert {a.payee for a in book.aliases} == {"Groceries"}
+
+
+def test_search_filters_by_name_or_bank_spelling_and_sorts(client):
+    _seed(
+        _txn("1", "ZABKA Z1", payee="Żabka", amount="-5"),
+        _txn("2", "LIDL WEGLARSKA", payee="Lidl", amount="-50"),
+        _txn("3", "LIDL 2043", payee="Lidl", amount="-50"),
+    )
+
+    by_spelling = client.get("/payees?part=table&q=weglarska").text
+    by_total = client.get("/payees?part=table&sort=total&dir=desc").text
+    by_name = client.get("/payees?part=table&sort=name&dir=asc").text
+
+    assert "Lidl" in by_spelling and "Żabka" not in by_spelling
+    assert by_total.index("Lidl") < by_total.index("Żabka")
+    assert by_name.index("Lidl") < by_name.index("Żabka")
+    assert 'id="payees-content"' not in by_total  # the table fragment only
+
+
+def test_transfers_never_show_up_for_naming(client):
+    _seed(_txn("1", "TO SAVINGS", type=TransactionType.TRANSFER, transfer_id="T"))
+
+    text = client.get("/payees").text
+
+    assert 'name="key"' not in text
+
+
+def test_nav_links_to_the_payees_page(client):
+    assert 'href="/payees"' in client.get("/dashboard").text
+
+
+def test_names_with_quotes_survive_the_rename_button_and_the_dialog(client):
+    _seed(_txn("1", "x", payee='Dom "Pod Lipą" & Co'))
+
+    page = client.get("/payees").text
+    dialog = client.get("/payees/rename", params={"name": 'Dom "Pod Lipą" & Co'}).text
+
+    assert "\\u0022Pod Lip" in page or "&#34;Pod Lip" in page  # encoded, not raw
+    assert "Renames 1 transaction" in dialog
+    client.post("/payees/rename", data={"old": 'Dom "Pod Lipą" & Co', "new": "Dom"})
+    assert _payees_by_id() == {"1": "Dom"}

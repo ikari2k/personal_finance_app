@@ -1,0 +1,29 @@
+<form hx-post="/payees/name" hx-target="#payee-dialog-content" hx-swap="innerHTML">
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  {% if not error %}
+    <input type="hidden" name="key" value="{{ key }}">
+    <input type="hidden" name="name" value="{{ name }}">
+    <p>
+      <strong>{{ name }}</strong> will be saved on <strong>{{ count }}</strong>
+      transaction{{ '' if count == 1 else 's' }}
+      ({{ spelling_count }} bank spelling{{ '' if spelling_count == 1 else 's' }}, {{ total|money }}).
+      New imports with those spellings get it too. The bank text stays as it is, and transactions
+      that already have a payee are not changed.
+    </p>
+    <div class="table-scroll">
+      <table class="payee-sample">
+        <tbody>
+          {% for t in sample %}
+            <tr><td>{{ t.date }}</td><td>{{ t.description }}</td><td class="num">{{ t.amount|money }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if count > sample|length %}<p class="muted">… and {{ count - sample|length }} more.</p>{% endif %}
+  {% endif %}
+  <footer class="dialog-footer">
+    <button type="button" class="btn-outline"
+            onclick="document.getElementById('payee-dialog').close()">Cancel</button>
+    {% if not error %}<button type="submit">Name {{ count }} transaction{{ '' if count == 1 else 's' }}</button>{% endif %}
+  </footer>
+</form>
