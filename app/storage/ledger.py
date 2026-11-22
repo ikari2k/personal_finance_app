@@ -7,6 +7,7 @@ rename so a crash mid-write can never leave a truncated ledger on disk.
 """
 
 import csv
+import json
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -28,6 +29,7 @@ LEDGER_FIELDNAMES = [
     "counterparty_account",
     "payee",
     "source",
+    "payee_fields",
 ]
 
 
@@ -47,7 +49,25 @@ def _to_row(transaction: Transaction) -> dict[str, str]:
         "counterparty_account": transaction.counterparty_account,
         "payee": transaction.payee,
         "source": transaction.source,
+        "payee_fields": (
+            json.dumps(transaction.payee_fields, ensure_ascii=False)
+            if transaction.payee_fields
+            else ""
+        ),
     }
+
+
+def _parse_payee_fields(raw: str | None) -> dict[str, str]:
+    """Read the JSON ``payee_fields`` cell; blank or unreadable means no fields."""
+    if not raw:
+        return {}
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {str(k): str(v) for k, v in data.items() if str(v).strip()}
 
 
 def _from_row(row: dict[str, str]) -> Transaction:
@@ -73,6 +93,7 @@ def _from_row(row: dict[str, str]) -> Transaction:
         counterparty_account=row.get("counterparty_account") or "",
         payee=row.get("payee") or "",
         source=row.get("source") or "",
+        payee_fields=_parse_payee_fields(row.get("payee_fields")),
     )
 
 

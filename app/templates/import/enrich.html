@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Fill payee fields — Finance Tracker{% endblock %}
+{% block content %}
+  <h1>Fill payee fields</h1>
+  <p><a href="/import">&larr; Back to import</a></p>
+  <div id="import-wizard">
+    {% include "import/_enrich_upload.html" %}
+  </div>
+{% endblock %}

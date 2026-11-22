@@ -5,6 +5,7 @@ from datetime import date
 from decimal import Decimal
 
 from app import config
+from app.models.payee import DESCRIPTION_FIELD
 from app.models.transaction import Transaction, TransactionType
 from app.storage.ledger import read_ledger, write_ledger
 from app.storage.payees import read_payee_book
@@ -72,7 +73,7 @@ def test_name_preview_shows_what_would_change_without_writing(client):
     text = client.get("/payees/name-preview?key=zabka&name=Żabka").text
 
     assert "<strong>2</strong>" in text  # the row that has a payee is left out
-    assert "2 bank spellings" in text
+    assert "<strong>2</strong> rule" in text  # one per distinct description
     assert "ZABKA Z1" in text and "ZABKA Z3" not in text
     assert _payees_by_id() == {"1": "", "2": "", "3": "X"}
 
@@ -87,7 +88,7 @@ def test_name_preview_rejects_a_blank_name_and_a_stale_group(client):
     assert "Nothing left to name" in stale.text
 
 
-def test_naming_a_group_names_rows_remembers_spellings_and_keeps_description(client):
+def test_naming_a_group_names_rows_saves_rules_and_keeps_description(client):
     _seed(
         _txn("1", "ZABKA Z8540 K.2"),
         _txn("2", "ZABKA Z8540 K.1"),
@@ -104,8 +105,11 @@ def test_naming_a_group_names_rows_remembers_spellings_and_keeps_description(cli
         "ZABKA Z8540 K.1",
     }
     book = read_payee_book(config.PAYEE_ALIASES_PATH)
-    assert {a.spelling for a in book.aliases} == {"ZABKA Z8540 K.2", "ZABKA Z8540 K.1"}
-    assert {a.payee for a in book.aliases} == {"Żabka"}
+    assert {r.fields[DESCRIPTION_FIELD] for r in book.rules} == {
+        "ZABKA Z8540 K.2",
+        "ZABKA Z8540 K.1",
+    }
+    assert {r.payee for r in book.rules} == {"Żabka"}
     assert _toast(response) == "Named 2 transactions as Żabka"
     assert 'hx-swap-oob="true"' in response.text  # the page region refreshes
 
@@ -117,7 +121,7 @@ def test_naming_with_a_blank_name_changes_nothing(client):
 
     assert "enter a payee name" in response.text
     assert _payees_by_id() == {"1": ""}
-    assert read_payee_book(config.PAYEE_ALIASES_PATH).aliases == []
+    assert read_payee_book(config.PAYEE_ALIASES_PATH).rules == []
 
 
 def test_named_payees_appear_in_the_list_with_usage(client):
@@ -148,7 +152,7 @@ def test_skipping_a_group_hides_it_and_can_be_undone(client):
     assert 'name="key" value="zabka"' in restored
 
 
-def test_rename_updates_transactions_and_saved_spellings(client):
+def test_rename_updates_transactions_and_saved_rules(client):
     _seed(_txn("1", "ZABKA Z1"), _txn("2", "LIDL", payee="Lidl"))
     client.post("/payees/name", data={"key": "zabka", "name": "Zabka"})
 
@@ -156,7 +160,7 @@ def test_rename_updates_transactions_and_saved_spellings(client):
 
     assert response.status_code == 200
     assert _payees_by_id() == {"1": "Żabka", "2": "Lidl"}
-    assert [a.payee for a in read_payee_book(config.PAYEE_ALIASES_PATH).aliases] == [
+    assert [r.payee for r in read_payee_book(config.PAYEE_ALIASES_PATH).rules] == [
         "Żabka"
     ]
     assert _toast(response) == "Renamed 1 transaction to Żabka"
@@ -206,7 +210,7 @@ def test_merge_needs_two_payees_and_a_name(client):
     assert "enter a payee name" in blank.text
 
 
-def test_merge_retargets_saved_spellings(client):
+def test_merge_retargets_saved_rules(client):
     _seed(_txn("1", "ZABKA Z1"), _txn("2", "LIDL"))
     client.post("/payees/name", data={"key": "zabka", "name": "Zabka"})
     client.post("/payees/name", data={"key": "lidl", "name": "Lidl"})
@@ -214,7 +218,7 @@ def test_merge_retargets_saved_spellings(client):
     client.post("/payees/merge", data={"names": ["Zabka", "Lidl"], "name": "Groceries"})
 
     book = read_payee_book(config.PAYEE_ALIASES_PATH)
-    assert {a.payee for a in book.aliases} == {"Groceries"}
+    assert {r.payee for r in book.rules} == {"Groceries"}
 
 
 def test_search_filters_by_name_or_bank_spelling_and_sorts(client):
@@ -392,3 +396,96 @@ def test_changes_refresh_the_list_in_the_remembered_order(client):
 
     aldi, zabka = _order(response.text, "Aldi", "Zabka")
     assert zabka < aldi  # still most transactions first, not renamed-name order
+
+
+# ---------------------------------------------------------------------------
+# Naming with fields
+# ---------------------------------------------------------------------------
+
+
+def _web(id_, description, site, **kw):
+    return _txn(id_, description, payee_fields={"Web address": site}, **kw)
+
+
+def test_the_dialog_offers_every_field_with_the_defaults_ticked(client):
+    _seed(_web("1", "PayU", "cinema-city.pl"), _web("2", "PayU", "cinema-city.pl"))
+
+    text = client.get("/payees/name-preview?key=cinema city&name=Cinema City").text
+
+    assert 'name="fields" value="Description"' in text
+    assert 'name="fields" value="Web address"' in text
+    assert 'value="Web address"\n               checked' in text  # grouped on it
+    assert 'value="Description"\n               checked' not in text
+    assert "on 2 of 2 rows" in text
+
+
+def test_the_dialog_previews_a_changed_choice_of_fields(client):
+    _seed(
+        _web("1", "PayU", "cinema-city.pl"),
+        _web("2", "PayU", "allegro.pl"),
+    )
+    url = "/payees/name-preview?key=cinema city&name=Cinema City&chosen=1"
+
+    def read(extra):
+        return " ".join(client.get(url + extra).text.split())
+
+    by_web = read("&fields=Web address")
+    by_description = read("&fields=Description")
+    both = read("&fields=Description&fields=Web address")
+
+    assert "<strong>1</strong> transaction (" in by_web  # only cinema-city.pl
+    assert "<strong>2</strong> transactions (" in by_description  # PayU is on both
+    assert "<strong>1</strong> transaction (" in both
+    assert "Description + Web address" in both
+    assert _payees_by_id() == {"1": "", "2": ""}  # a preview writes nothing
+
+
+def test_unticking_every_field_asks_for_at_least_one(client):
+    _seed(_web("1", "PayU", "cinema-city.pl"))
+
+    text = client.get("/payees/name-preview?key=cinema city&name=X&chosen=1").text
+
+    assert "Pick at least one field" in text
+    client.post("/payees/name", data={"key": "cinema city", "name": "X", "chosen": "1"})
+    assert _payees_by_id() == {"1": ""}
+
+
+def test_naming_by_web_address_names_other_descriptions_and_saves_a_field_rule(client):
+    _seed(
+        _web("1", "PayU", "cinema-city.pl"),
+        _web("2", "Przelewy24", "cinema-city.pl"),
+        _web("3", "PayU", "allegro.pl"),
+    )
+
+    response = client.post(
+        "/payees/name",
+        data={
+            "key": "cinema city",
+            "name": "Cinema City",
+            "chosen": "1",
+            "fields": ["Web address"],
+        },
+    )
+
+    assert _payees_by_id() == {"1": "Cinema City", "2": "Cinema City", "3": ""}
+    [rule] = read_payee_book(config.PAYEE_ALIASES_PATH).rules
+    assert rule.fields == {"Web address": "cinema-city.pl"}
+    assert _toast(response) == "Named 2 transactions as Cinema City"
+
+
+def test_a_field_missing_from_the_group_cannot_be_ticked_into_a_rule(client):
+    _seed(_txn("1", "ZABKA"))
+
+    text = client.get("/payees/name-preview?key=zabka&name=Zabka").text
+
+    assert 'name="fields" value="Web address"' not in text  # not in these rows
+    assert 'name="fields" value="Counterparty account"' not in text
+
+
+def test_the_queue_says_which_field_a_group_was_formed_on(client):
+    _seed(_web("1", "PayU", "cinema-city.pl"), _txn("2", "ZABKA"))
+
+    text = client.get("/payees").text
+
+    assert "by Web address" in text
+    assert text.count("payee-by") == 1  # description groups need no tag

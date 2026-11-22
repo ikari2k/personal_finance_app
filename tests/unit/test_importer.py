@@ -5,20 +5,24 @@ from decimal import Decimal
 
 import pytest
 
-from app.models.import_mapping import ImportMapping
+from app.models.import_mapping import ImportMapping, PayeeFieldColumn
+from app.models.payee import DESCRIPTION_FIELD, PayeeRule
 from app.models.rule import Rule
 from app.models.transaction import Transaction, TransactionType
 from app.services.importer import (
     DEFAULT_CATEGORY,
     ParsedRow,
+    apply_enrichment,
     apply_payee_edits,
     build_transactions,
     count_blank_column_values,
     filter_by_account_number,
     find_duplicates,
+    merge_payee_fields,
     parse_amount,
     parse_date,
     parse_rows,
+    plan_enrichment,
 )
 
 
@@ -586,18 +590,76 @@ def test_apply_payee_edits_ignores_a_list_that_does_not_line_up():
     assert apply_payee_edits(rows, ["a", "b"]) == rows
 
 
-def test_build_transactions_uses_a_named_spelling_below_a_rule_and_above_the_bank():
+def test_build_transactions_payee_precedence_rule_then_payee_rule_then_bank():
     rules = [Rule(pattern="PayU", category="Fun", payee="Cinema City")]
-    aliases = {"zabka z8540 k.2": "Żabka", "payu": "Alias loses to the rule"}
+    payee_rules = [
+        PayeeRule(fields={DESCRIPTION_FIELD: "ZABKA Z8540 K.2"}, payee="Żabka"),
+        PayeeRule(fields={DESCRIPTION_FIELD: "PayU"}, payee="Loses to the rule"),
+    ]
     rows = [
         ParsedRow(date(2026, 9, 10), "PayU", Decimal("-9"), payee="Bank"),
         ParsedRow(date(2026, 9, 11), "ZABKA  Z8540 K.2", Decimal("-3"), payee="Bank"),
         ParsedRow(date(2026, 9, 12), "Other", Decimal("-1"), payee="Bank"),
     ]
 
-    txns = build_transactions(rows, "chk", rules, aliases)
+    txns = build_transactions(rows, "chk", rules, payee_rules)
 
     assert [t.payee for t in txns] == ["Cinema City", "Żabka", "Bank"]
+
+
+def test_build_transactions_matches_payee_rules_on_the_captured_fields():
+    payee_rules = [
+        PayeeRule(fields={DESCRIPTION_FIELD: "PayU"}, payee="PayU"),
+        PayeeRule(
+            fields={DESCRIPTION_FIELD: "PayU", "Web address": "cinema-city.pl"},
+            payee="Cinema City",
+        ),
+    ]
+    rows = [
+        ParsedRow(
+            date(2026, 9, 10),
+            "PayU",
+            Decimal("-9"),
+            payee_fields={"Web address": "Cinema-City.pl"},
+        ),
+        ParsedRow(date(2026, 9, 11), "PayU", Decimal("-5")),
+    ]
+
+    txns = build_transactions(rows, "chk", [], payee_rules)
+
+    assert [t.payee for t in txns] == ["Cinema City", "PayU"]  # more fields wins
+    assert txns[0].payee_fields == {
+        "Web address": "Cinema-City.pl"
+    }  # stored on the row
+    assert txns[1].payee_fields == {}
+
+
+def test_parse_rows_captures_the_mappings_payee_field_columns_by_label():
+    mapping = ImportMapping(
+        bank="X",
+        delimiter=";",
+        date_format="%d.%m.%Y",
+        decimal_separator=",",
+        columns={"date": 3, "description": 2, "amount": 1},
+        payee_fields=[
+            PayeeFieldColumn(label="Web address", column=4),
+            PayeeFieldColumn(label="Recipient", column=5),
+            PayeeFieldColumn(label="Far away", column=99),  # beyond the row: skipped
+        ],
+    )
+    csv_text = (
+        "acct;amount;description;date;site;who\n"
+        "1;-1,00 PLN;PayU;11.09.2026;cinema-city.pl;Cinema City SA\n"
+        "2;-2,00 PLN;PayU;12.09.2026;;\n"
+    )
+
+    rows = parse_rows(csv_text, mapping)
+
+    assert rows[0].payee_fields == {
+        "Web address": "cinema-city.pl",
+        "Recipient": "Cinema City SA",
+    }
+    assert rows[1].payee_fields == {}  # blank cells are left out
 
 
 def test_build_transactions_records_which_import_added_each_row():
@@ -608,3 +670,130 @@ def test_build_transactions_records_which_import_added_each_row():
 
     assert with_source.source == "cred"
     assert without.source == ""
+
+
+# ---------------------------------------------------------------------------
+# Filling payee fields on existing rows from a CSV
+# ---------------------------------------------------------------------------
+
+
+def _row(day, desc, amount, **fields):
+    return ParsedRow(date(2026, 9, day), desc, Decimal(amount), payee_fields=fields)
+
+
+def test_enrichment_fills_fields_on_rows_matching_date_amount_and_text():
+    ledger = [
+        _txn(id="a", date=date(2026, 9, 1), description="PayU", amount=Decimal("-9")),
+        _txn(id="b", date=date(2026, 9, 2), description="Zabka", amount=Decimal("-3")),
+    ]
+    rows = [_row(1, "payu", "-9", **{"Web address": "cinema-city.pl"})]
+
+    plan = plan_enrichment(rows, ledger, "chk")
+
+    assert plan.updates == {"a": {"Web address": "cinema-city.pl"}}  # text case ignored
+    assert plan.unmatched == 0 and plan.ambiguous == 0 and plan.already_complete == 0
+
+
+def test_enrichment_never_changes_a_saved_value_and_keeps_mapping_order():
+    ledger = [
+        _txn(
+            id="a",
+            date=date(2026, 9, 1),
+            description="PayU",
+            amount=Decimal("-9"),
+            payee_fields={"Recipient": "Saved name"},
+        )
+    ]
+    rows = [
+        _row(1, "PayU", "-9", Recipient="Other", **{"Web address": "cinema-city.pl"})
+    ]
+
+    plan = plan_enrichment(rows, ledger, "chk")
+
+    assert plan.updates["a"] == {
+        "Recipient": "Saved name",
+        "Web address": "cinema-city.pl",
+    }
+    assert list(plan.updates["a"]) == ["Recipient", "Web address"]  # the file's order
+
+
+def test_enrichment_counts_rows_that_already_have_everything_and_unmatched_rows():
+    ledger = [
+        _txn(
+            id="a",
+            date=date(2026, 9, 1),
+            description="PayU",
+            amount=Decimal("-9"),
+            payee_fields={"Web address": "x.pl"},
+        )
+    ]
+    rows = [
+        _row(1, "PayU", "-9", **{"Web address": "x.pl"}),
+        _row(5, "Not in ledger", "-1", **{"Web address": "y.pl"}),
+    ]
+
+    plan = plan_enrichment(rows, ledger, "chk")
+
+    assert plan.updates == {} and plan.already_complete == 1 and plan.unmatched == 1
+
+
+def test_enrichment_skips_ambiguous_rows_and_other_accounts():
+    ledger = [
+        _txn(id="a", date=date(2026, 9, 1), description="Coffee", amount=Decimal("-4")),
+        _txn(id="b", date=date(2026, 9, 1), description="Coffee", amount=Decimal("-4")),
+        _txn(
+            id="c",
+            date=date(2026, 9, 2),
+            description="Tea",
+            amount=Decimal("-2"),
+            account_id="other",
+        ),
+    ]
+    rows = [
+        _row(1, "Coffee", "-4", **{"Web address": "one.pl"}),
+        _row(1, "Coffee", "-4", **{"Web address": "two.pl"}),  # same identity, differs
+        _row(2, "Tea", "-2", **{"Web address": "tea.pl"}),
+    ]
+
+    plan = plan_enrichment(rows, ledger, "chk")
+
+    assert plan.updates == {}
+    assert plan.ambiguous == 2
+    assert plan.unmatched == 1  # the Tea row belongs to another account
+
+
+def test_identical_rows_with_identical_values_fill_every_matching_ledger_row():
+    ledger = [
+        _txn(id="a", date=date(2026, 9, 1), description="Coffee", amount=Decimal("-4")),
+        _txn(id="b", date=date(2026, 9, 1), description="Coffee", amount=Decimal("-4")),
+    ]
+    rows = [_row(1, "Coffee", "-4", W="x")] * 2
+
+    plan = plan_enrichment(rows, ledger, "chk")
+
+    assert set(plan.updates) == {"a", "b"}
+
+
+def test_apply_enrichment_merges_against_the_rows_as_they_are_now():
+    ledger = [
+        _txn(id="a", payee_fields={"W": "saved since the preview"}),
+        _txn(id="b"),
+    ]
+
+    result, changed = apply_enrichment(
+        ledger,
+        {"a": {"W": "from the file", "X": "new"}, "b": {"W": "w"}, "ghost": {"W": "z"}},
+    )
+
+    assert changed == 2
+    assert result[0].payee_fields == {"W": "saved since the preview", "X": "new"}
+    assert result[1].payee_fields == {"W": "w"}
+
+
+def test_merge_payee_fields_orders_by_the_wanted_labels():
+    assert list(merge_payee_fields({"A": "1", "B": "2"}, {"C": "3", "B": "old"})) == [
+        "A",
+        "B",
+        "C",
+    ]
+    assert merge_payee_fields({"A": "1"}, {}) == {"A": "1"}

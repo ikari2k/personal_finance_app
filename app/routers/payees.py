@@ -17,20 +17,22 @@ from collections.abc import Callable
 from fastapi import APIRouter, Form, Query, Request
 from fastapi.responses import HTMLResponse
 
-from app.models.payee import PayeeBook
 from app.routers.htmx_events import toast
 from app.services.payees import (
     PayeeSummary,
-    add_aliases,
+    add_rules,
+    apply_naming,
     clean_payee_name,
     clear_skipped,
     coverage,
+    default_labels,
+    field_options,
     group_members,
     merge_payees,
     money_flow,
-    name_group,
     payee_summaries,
-    retarget_aliases,
+    plan_naming,
+    retarget_rules,
     skip_group,
     unnamed_groups,
 )
@@ -180,13 +182,38 @@ def payees_page(
     return _remember_sort(response, sort, direction)
 
 
+def _chosen_labels(
+    members: list, labels: list[str], chosen: str
+) -> tuple[list[str], str | None]:
+    """Return the fields a naming rule uses, and an error if none are usable.
+
+    Before the user has touched the checkboxes (``chosen`` empty) the defaults
+    apply. Afterwards exactly the ticked fields do, limited to the ones the
+    group's rows actually have.
+    """
+    available = {o.label for o in field_options(members) if o.present}
+    if not chosen:
+        return default_labels(members), None
+    picked = [label for label in labels if label in available]
+    if not picked:
+        return [], "Pick at least one field to build the rule from."
+    return picked, None
+
+
 def _name_dialog(
-    request: Request, key: str, name: str, *, error: str | None = None
+    request: Request,
+    key: str,
+    name: str,
+    labels: list[str],
+    chosen: str,
+    *,
+    error: str | None = None,
 ) -> HTMLResponse:
-    """Render the "name this group" preview dialog for group ``key`` and ``name``."""
+    """Render the "name this group" dialog: fields to use, and what it would change."""
     ledger = read_ledger()
     members = group_members(ledger, key)
-    spellings = sorted({" ".join(t.description.split()) for t in members})
+    picked, label_error = _chosen_labels(members, labels, chosen)
+    error = error or label_error
     cleaned = name
     if error is None:
         try:
@@ -195,50 +222,76 @@ def _name_dialog(
             error = str(exc)
     if error is None and not members:
         error = "Nothing left to name in this group; it may have been named already."
+    plan = (
+        plan_naming(ledger, read_payee_book(), key, picked, cleaned)
+        if picked and cleaned and members
+        else None
+    )
+    if error is None and plan is not None and not plan.rows:
+        error = "These fields would not name any transaction. Pick different fields."
+    rows = plan.rows if plan else []
+    spent, received = money_flow(rows)
     return templates.TemplateResponse(
         request,
         "payees/_name_dialog.html",
         {
             "key": key,
             "name": cleaned,
-            "count": len(members),
-            "spelling_count": len(spellings),
-            "spent": money_flow(members)[0],
-            "received": money_flow(members)[1],
-            "sample": sorted(members, key=lambda t: t.date, reverse=True)[
-                :PREVIEW_ROWS
-            ],
+            "options": field_options(members),
+            "picked": picked,
+            "rule_count": len(plan.rules) if plan else 0,
+            "count": len(rows),
+            "without_fields": plan.rows_without_fields if plan else 0,
+            "spent": spent,
+            "received": received,
+            "sample": sorted(rows, key=lambda t: t.date, reverse=True)[:PREVIEW_ROWS],
             "error": error,
         },
     )
 
 
 @router.get("/name-preview", response_class=HTMLResponse)
-def name_preview(request: Request, key: str, name: str = "") -> HTMLResponse:
-    """Preview naming a group: how many transactions and spellings it changes."""
-    return _name_dialog(request, key, name)
+def name_preview(
+    request: Request,
+    key: str,
+    name: str = "",
+    fields: list[str] = Query(default=[]),
+    chosen: str = "",
+) -> HTMLResponse:
+    """Preview naming a group: the rules it makes and the transactions it names."""
+    return _name_dialog(request, key, name, fields, chosen)
 
 
 @router.post("/name", response_class=HTMLResponse)
 def name_group_route(
-    request: Request, key: str = Form(...), name: str = Form("")
+    request: Request,
+    key: str = Form(...),
+    name: str = Form(""),
+    fields: list[str] = Form(default=[]),
+    chosen: str = Form(""),
 ) -> HTMLResponse:
-    """Name a group's payee-less transactions and remember its spellings."""
+    """Name a group: save its rules and name every transaction they claim."""
     try:
         payee = clean_payee_name(name)
     except ValueError as exc:
-        return _name_dialog(request, key, name, error=str(exc))
+        return _name_dialog(request, key, name, fields, chosen, error=str(exc))
     ledger = read_ledger()
-    spellings = sorted({t.description for t in group_members(ledger, key)})
-    updated, count = name_group(ledger, key, payee)
-    if not count:
-        return _name_dialog(request, key, name)
-    write_ledger(updated)
-    write_payee_book(add_aliases(read_payee_book(), spellings, payee))
+    book = read_payee_book()
+    members = group_members(ledger, key)
+    picked, label_error = _chosen_labels(members, fields, chosen)
+    if label_error or not members:
+        return _name_dialog(request, key, name, fields, chosen)
+    plan = plan_naming(ledger, book, key, picked, payee)
+    if not plan.rows:
+        return _name_dialog(request, key, name, fields, chosen)
+    write_ledger(apply_naming(ledger, plan, payee))
+    write_payee_book(add_rules(book, plan.rules))
     return _render_content(
         request,
         oob=True,
-        headers=toast(f"Named {_transactions(count)} as {payee}", close_dialog=True),
+        headers=toast(
+            f"Named {_transactions(len(plan.rows))} as {payee}", close_dialog=True
+        ),
     )
 
 
@@ -287,7 +340,7 @@ def rename_route(
         return _rename_dialog(request, old, new, error="That is already its name.")
     updated, count = merge_payees(read_ledger(), [old], payee)
     write_ledger(updated)
-    write_payee_book(retarget_aliases(read_payee_book(), [old], payee))
+    write_payee_book(retarget_rules(read_payee_book(), [old], payee))
     return _render_content(
         request,
         oob=True,
@@ -337,7 +390,7 @@ def merge_route(
         return _merge_dialog(request, names, name, error=str(exc))
     updated, count = merge_payees(read_ledger(), names, payee)
     write_ledger(updated)
-    book: PayeeBook = retarget_aliases(read_payee_book(), names, payee)
+    book = retarget_rules(read_payee_book(), names, payee)
     write_payee_book(book)
     return _render_content(
         request,

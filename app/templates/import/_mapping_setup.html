@@ -113,26 +113,51 @@
         </label>
       {% endfor %}
     </div>
-    <div class="form-grid-2">
-      <label title="The bank's own name for the other party (e.g. a card export's merchant column). Saved as the transaction's payee unless a rule names one; you can edit it in the preview">
-        Payee column (optional)
-        <select name="payee_column">
-          <option value="" {{ 'selected' if selected_payee_column is none }}>— none —</option>
-          {% for col in columns %}
-            <option value="{{ col.index }}" {{ 'selected' if col.index == selected_payee_column }}>{{ col.index }}: {{ col.header }} ({{ col.sample }})</option>
-          {% endfor %}
-        </select>
-      </label>
-      <label title="Used when the payee column above is blank for a row (e.g. a transfer's recipient or sender)">
-        Payee fallback column (optional)
-        <select name="payee_fallback_column">
-          <option value="" {{ 'selected' if selected_payee_fallback_column is none }}>— none —</option>
-          {% for col in columns %}
-            <option value="{{ col.index }}" {{ 'selected' if col.index == selected_payee_fallback_column }}>{{ col.index }}: {{ col.header }} ({{ col.sample }})</option>
-          {% endfor %}
-        </select>
-      </label>
-    </div>
+    <fieldset class="mapping-payee">
+      <legend>Payee</legend>
+      <div class="form-grid-2">
+        <label title="The bank's own name for the other party (e.g. a card export's merchant column). Saved as the transaction's payee unless a rule names one; you can edit it in the preview">
+          Payee name column (optional)
+          <select name="payee_column">
+            <option value="" {{ 'selected' if selected_payee_column is none }}>— none —</option>
+            {% for col in columns %}
+              <option value="{{ col.index }}" {{ 'selected' if col.index == selected_payee_column }}>{{ col.index }}: {{ col.header }} ({{ col.sample }})</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label title="Used when the payee name column above is blank for a row (e.g. a transfer's recipient or sender)">
+          Payee name fallback column (optional)
+          <select name="payee_fallback_column">
+            <option value="" {{ 'selected' if selected_payee_fallback_column is none }}>— none —</option>
+            {% for col in columns %}
+              <option value="{{ col.index }}" {{ 'selected' if col.index == selected_payee_fallback_column }}>{{ col.index }}: {{ col.header }} ({{ col.sample }})</option>
+            {% endfor %}
+          </select>
+        </label>
+      </div>
+      <p class="muted">
+        Up to five columns the payee view can recognise a payee by, for example a shop's web
+        address or the other side's name. Put the best one first: the first column with a value
+        is what a transaction is grouped on. Their values are saved on every imported transaction,
+        and when you name a payee you choose which of them the rule is built from.
+        Leave the label empty to use the column's header.
+      </p>
+      {% for slot in payee_field_slots %}
+        <div class="form-grid-2">
+          <label>Field {{ loop.index }} label
+            <input type="text" name="payee_field_label" value="{{ slot.label }}" placeholder="e.g. Web address" autocomplete="off">
+          </label>
+          <label>Field {{ loop.index }} column
+            <select name="payee_field_column">
+              <option value="" {{ 'selected' if slot.column is none }}>— none —</option>
+              {% for col in columns %}
+                <option value="{{ col.index }}" {{ 'selected' if col.index == slot.column }}>{{ col.index }}: {{ col.header }} ({{ col.sample }})</option>
+              {% endfor %}
+            </select>
+          </label>
+        </div>
+      {% endfor %}
+    </fieldset>
     <div class="form-grid-2">
       <label>Account number column (optional)
         <select name="account_number_column">

@@ -1,29 +1,36 @@
-"""Domain model for the payee book: which bank spellings were named what."""
+"""Domain model for the payee book: the rules that name payees automatically."""
 
 from pydantic import BaseModel
 
+# Fields every transaction has, so a rule can always use them. Any other field a
+# rule uses is one an import mapping configured (see ``PayeeFieldColumn``).
+DESCRIPTION_FIELD = "Description"
+COUNTERPARTY_FIELD = "Counterparty account"
+BUILT_IN_FIELDS = (DESCRIPTION_FIELD, COUNTERPARTY_FIELD)
+MAX_PAYEE_FIELDS = 5  # configurable columns per import mapping
 
-class PayeeAlias(BaseModel):
-    """One bank spelling the user named: ``spelling`` -> ``payee``.
 
-    ``spelling`` is the bank's own text exactly as it appeared in a
-    transaction's ``description``; matching ignores case and runs of
-    whitespace (see ``app.services.payees.spelling_key``) but is otherwise
-    exact — no patterns, so an alias can never match something unintended.
+class PayeeRule(BaseModel):
+    """If every field in ``fields`` has this value, the payee is ``payee``.
+
+    ``fields`` maps a field label to the exact value to match (case and
+    spacing are ignored, nothing else is: no patterns, so a rule can never
+    match something unintended). A row missing any of the labels never
+    matches. When several rules match one row, the one with more fields wins,
+    then the newer one (later in ``PayeeBook.rules``).
     """
 
-    spelling: str
+    fields: dict[str, str]
     payee: str
 
 
 class PayeeBook(BaseModel):
     """Everything remembered about payees, stored in ``config/payee_aliases.toml``.
 
-    ``aliases`` give new imports the clean name for spellings already named.
-    ``skipped`` holds group keys (see ``app.services.payees.group_key``) the
-    user chose to leave unnamed, so they stop appearing in the "Name these"
-    queue.
+    ``rules`` name payees on import and on existing transactions. ``skipped``
+    holds group keys (see ``app.services.payees.group_key``) the user chose to
+    leave unnamed, so they stop appearing in the "Name these" queue.
     """
 
-    aliases: list[PayeeAlias] = []
+    rules: list[PayeeRule] = []
     skipped: list[str] = []

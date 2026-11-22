@@ -21,17 +21,18 @@ import io
 import json
 import re
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date as date_
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
 from app.models.category import CategoriesByType
 from app.models.import_mapping import ImportMapping
+from app.models.payee import PayeeRule
 from app.models.rule import Rule
 from app.models.transaction import Transaction, TransactionType
 from app.services.categorizer import find_matching_rule
-from app.services.payees import spelling_key
+from app.services.payees import field_values_of, match_payee, spelling_key
 
 DEFAULT_CATEGORY = "Uncategorized"
 
@@ -60,6 +61,9 @@ class ParsedRow:
     # The bank's own name for the other party, when the mapping has a payee
     # column; a matching rule's payee takes precedence over it.
     payee: str = ""
+    # Values of the mapping's labelled payee field columns for this row, by
+    # label (blank values left out); stored on the transaction for payee rules.
+    payee_fields: dict[str, str] = field(default_factory=dict)
 
 
 def parse_amount(raw: str, decimal_separator: str) -> Decimal:
@@ -121,6 +125,7 @@ def parse_rows(csv_text: str, mapping: ImportMapping) -> list[ParsedRow]:
     description_extra_idxs = [
         mapping.columns[key] for key in DESCRIPTION_EXTRA_KEYS if key in mapping.columns
     ]
+    payee_field_columns = [(pf.label, pf.column) for pf in mapping.payee_fields]
     payee_idx = mapping.columns.get("payee")
     payee_fallback_idx = mapping.columns.get("payee_fallback")
     counterparty_idx = mapping.columns.get("counterparty_account")
@@ -174,6 +179,11 @@ def parse_rows(csv_text: str, mapping: ImportMapping) -> list[ParsedRow]:
         payee = row[payee_idx].strip() if payee_idx is not None else ""
         if not payee and payee_fallback_idx is not None:
             payee = row[payee_fallback_idx].strip()
+        payee_fields = {
+            label: row[column].strip()
+            for label, column in payee_field_columns
+            if column < len(row) and row[column].strip()
+        }
         parsed.append(
             ParsedRow(
                 date=parse_date(row[date_idx], mapping.date_format),
@@ -181,6 +191,7 @@ def parse_rows(csv_text: str, mapping: ImportMapping) -> list[ParsedRow]:
                 amount=amount,
                 display_description=display_description,
                 payee=payee,
+                payee_fields=payee_fields,
                 account_number=row[account_idx].strip()
                 if account_idx is not None
                 else "",
@@ -271,11 +282,105 @@ def find_duplicates(
     return new_rows, duplicate_rows
 
 
+@dataclass
+class EnrichmentPlan:
+    """What filling payee fields on existing rows from a CSV would do."""
+
+    updates: dict[str, dict[str, str]]  # transaction id -> its fields afterwards
+    already_complete: int  # matched ledger rows that already had every field
+    ambiguous: int  # CSV rows skipped: same date/amount/text, different values
+    unmatched: int  # CSV rows with no ledger row (a normal import would add them)
+
+
+def _enrichment_key(date: date_, amount: Decimal, description: str) -> tuple:
+    """Return the identity that pairs a CSV row with a ledger row."""
+    return (date, amount, spelling_key(description))
+
+
+def merge_payee_fields(
+    wanted: dict[str, str], existing: dict[str, str]
+) -> dict[str, str]:
+    """Return ``existing`` filled out with ``wanted``, never changing a saved value.
+
+    Labels follow ``wanted``'s order (the mapping's priority order, which decides
+    what a transaction is grouped on); labels only ``existing`` has come after.
+    """
+    merged = {label: existing.get(label, value) for label, value in wanted.items()}
+    for label, value in existing.items():
+        merged.setdefault(label, value)
+    return merged
+
+
+def plan_enrichment(
+    rows: list[ParsedRow], ledger: list[Transaction], account_id: str
+) -> EnrichmentPlan:
+    """Pair CSV rows with existing ledger rows and plan the payee fields to fill in.
+
+    A CSV row matches a ledger row on the same account with the same date,
+    amount and bank text (the same identity duplicate detection uses). Only
+    labels a row is missing are added; saved values are never changed. When CSV
+    rows share that identity but disagree on their field values, the pairing is
+    ambiguous and none of them is applied.
+    """
+    by_key: dict[tuple, list[dict[str, str]]] = {}
+    for row in rows:
+        key = _enrichment_key(row.date, row.amount, row.description)
+        by_key.setdefault(key, []).append(row.payee_fields)
+    ledger_keys = {
+        _enrichment_key(t.date, t.amount, t.description)
+        for t in ledger
+        if t.account_id == account_id
+    }
+    unmatched = sum(
+        len(group) for key, group in by_key.items() if key not in ledger_keys
+    )
+    ambiguous = sum(
+        len(group)
+        for key, group in by_key.items()
+        if key in ledger_keys and any(f != group[0] for f in group)
+    )
+    updates: dict[str, dict[str, str]] = {}
+    complete = 0
+    for txn in ledger:
+        if txn.account_id != account_id:
+            continue
+        group = by_key.get(_enrichment_key(txn.date, txn.amount, txn.description))
+        if not group or any(f != group[0] for f in group) or not group[0]:
+            continue
+        merged = merge_payee_fields(group[0], txn.payee_fields)
+        if merged == txn.payee_fields:
+            complete += 1
+        else:
+            updates[txn.id] = merged
+    return EnrichmentPlan(updates, complete, ambiguous, unmatched)
+
+
+def apply_enrichment(
+    transactions: list[Transaction], updates: dict[str, dict[str, str]]
+) -> tuple[list[Transaction], int]:
+    """Return ``transactions`` with ``updates`` merged in, and how many rows changed.
+
+    Re-merges against the rows as they are now, so a value saved since the
+    preview is never overwritten.
+    """
+    changed = 0
+    result = []
+    for txn in transactions:
+        wanted = updates.get(txn.id)
+        merged = merge_payee_fields(wanted, txn.payee_fields) if wanted else None
+        if merged is not None and merged != txn.payee_fields:
+            result.append(txn.model_copy(update={"payee_fields": merged}))
+            changed += 1
+        else:
+            result.append(txn)
+    return result, changed
+
+
 def build_transactions(
     rows: list[ParsedRow],
     account_id: str,
     rules: list[Rule],
-    aliases: dict[str, str] | None = None,
+    payee_rules: list[PayeeRule] | None = None,
     source: str = "",
 ) -> list[Transaction]:
     """Build ``Transaction`` rows from parsed CSV rows.
@@ -294,12 +399,19 @@ def build_transactions(
         txn_type = TransactionType.EXPENSE if row.amount < 0 else TransactionType.INCOME
         rule = find_matching_rule(row.description, row.amount, txn_type, rules)
         category, subcategory = (rule.category, rule.subcategory) if rule else ("", "")
-        # Payee precedence: a rule's curated name, then a spelling the user
-        # already named in the payee view (``aliases``: spelling key -> payee),
-        # then the bank's own name for the other party.
+        # Payee precedence: a category rule's curated name, then a payee rule
+        # from the payee view (matched on the row's fields: bank text,
+        # counterparty account, the mapping's labelled columns), then the
+        # bank's own name for the other party.
+        payee_fields = row.payee_fields
         payee = (
             (rule.payee if rule and rule.payee else "")
-            or (aliases or {}).get(spelling_key(row.description), "")
+            or match_payee(
+                payee_rules or [],
+                field_values_of(
+                    row.description, row.counterparty_account, payee_fields
+                ),
+            )
             or row.payee
         ).strip()
         transactions.append(
@@ -319,6 +431,7 @@ def build_transactions(
                 notes=row.display_description or None,
                 counterparty_account=row.counterparty_account,
                 payee=payee,
+                payee_fields=payee_fields,
                 source=source,
             )
         )

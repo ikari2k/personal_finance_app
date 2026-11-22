@@ -1,15 +1,49 @@
-<form hx-post="/payees/name" hx-target="#payee-dialog-content" hx-swap="innerHTML">
-  {% if error %}<p class="error">{{ error }}</p>{% endif %}
-  {% if not error %}
-    <input type="hidden" name="key" value="{{ key }}">
-    <input type="hidden" name="name" value="{{ name }}">
+<form hx-get="/payees/name-preview" hx-trigger="change" hx-target="#payee-dialog-content" hx-swap="innerHTML">
+  <input type="hidden" name="key" value="{{ key }}">
+  <input type="hidden" name="chosen" value="1">
+  <label>Payee name
+    <input type="text" name="name" value="{{ name }}" autocomplete="off" required>
+  </label>
+  <fieldset class="payee-fields">
+    <legend>Build the rule from</legend>
+    {% for o in options %}
+      <label class="payee-field{{ ' is-missing' if not o.present }}">
+        <input type="checkbox" name="fields" value="{{ o.label }}"
+               {{ 'checked' if o.label in picked }} {{ 'disabled' if not o.present }}>
+        <span>
+          <strong>{{ o.label }}</strong>
+          <span class="muted">
+            {% if o.present %}on {{ o.present }} of {{ o.total }} rows{% else %}not in these rows{% endif %}
+          </span>
+          {% if o.values %}
+            <span class="payee-values">
+              {% for value, n in o.values[:3] %}<span title="{{ value }}">{{ value }}</span> <small>{{ n }}×</small>{{ ', ' if not loop.last }}{% endfor %}
+              {% if o.values|length > 3 %}<small class="muted"> + {{ o.values|length - 3 }} more</small>{% endif %}
+            </span>
+          {% endif %}
+        </span>
+      </label>
+    {% endfor %}
+  </fieldset>
+
+  {% if error %}
+    <p class="error">{{ error }}</p>
+  {% else %}
     <p>
       <strong>{{ name }}</strong> will be saved on <strong>{{ count }}</strong>
       transaction{{ '' if count == 1 else 's' }}
-      ({{ spelling_count }} bank spelling{{ '' if spelling_count == 1 else 's' }}{% if spent %}, {{ spent|money }} spent{% endif %}{% if received %}, {{ received|money }} received{% endif %}).
-      New imports with those spellings get it too. The bank text stays as it is, and transactions
-      that already have a payee are not changed.
+      ({% if spent %}{{ spent|money }} spent{% endif %}{% if spent and received %}, {% endif %}{% if received %}{{ received|money }} received{% endif %}),
+      using <strong>{{ rule_count }}</strong> rule{{ '' if rule_count == 1 else 's' }}
+      on {{ picked|join(' + ') }}. New imports that match a rule get the name too.
+      The bank text stays as it is, and transactions that already have a payee are not changed.
     </p>
+    {% if without_fields %}
+      <p class="muted">
+        {{ without_fields }} transaction{{ '' if without_fields == 1 else 's' }} in this group
+        {{ 'has' if without_fields == 1 else 'have' }} no value for a chosen field and stay unnamed.
+      </p>
+    {% endif %}
+    <p class="muted">When two rules match one transaction, the one using more fields wins, then the newer one.</p>
     <div class="table-scroll">
       <table class="payee-sample">
         <tbody>
@@ -24,6 +58,10 @@
   <footer class="dialog-footer">
     <button type="button" class="btn-outline"
             onclick="document.getElementById('payee-dialog').close()">Cancel</button>
-    {% if not error %}<button type="submit">Name {{ count }} transaction{{ '' if count == 1 else 's' }}</button>{% endif %}
+    {% if not error %}
+      <button type="submit" hx-post="/payees/name" hx-target="#payee-dialog-content" hx-swap="innerHTML">
+        Name {{ count }} transaction{{ '' if count == 1 else 's' }}
+      </button>
+    {% endif %}
   </footer>
 </form>

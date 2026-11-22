@@ -6,7 +6,21 @@ reused automatically on every later import from that bank — see
 ``app.services.importer`` for how a mapping is applied to parse a file.
 """
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
+
+from app.models.payee import MAX_PAYEE_FIELDS
+
+
+class PayeeFieldColumn(BaseModel):
+    """One CSV column the payee view can recognise a payee by, with its label.
+
+    The label is what a payee rule and a transaction refer to (``"Web address"``),
+    so reordering or re-pointing columns later never changes what a stored value
+    means. ``column`` is a 0-based index, like every other mapping column.
+    """
+
+    label: str
+    column: int
 
 
 class ImportMapping(BaseModel):
@@ -49,6 +63,12 @@ class ImportMapping(BaseModel):
       ``Transaction.payee`` unless a matching rule names a payee, and the
       import preview lets the user edit it before it is saved.
 
+    ``payee_fields`` — up to five labelled columns the payee view can recognise
+    a payee by (a shop's web address, the other side's account or name). Their
+    values are stored on each imported transaction under their labels, and the
+    user picks which of them a payee rule is built from. The order is a
+    priority: the first one with a value is what a transaction is grouped on.
+
     ``decimal_separator`` normalizes amounts like ``"-5,99 PLN"`` before
     parsing: everything except digits, ``-``, and this separator is
     stripped, then the separator itself is normalized to ``.`` — this
@@ -62,3 +82,14 @@ class ImportMapping(BaseModel):
     date_format: str = "%Y-%m-%d"
     decimal_separator: str = "."
     columns: dict[str, int]
+    payee_fields: list[PayeeFieldColumn] = []
+
+    @field_validator("payee_fields")
+    @classmethod
+    def _limit_payee_fields(
+        cls, value: list[PayeeFieldColumn]
+    ) -> list[PayeeFieldColumn]:
+        """Allow at most ``MAX_PAYEE_FIELDS`` columns."""
+        if len(value) > MAX_PAYEE_FIELDS:
+            raise ValueError(f"at most {MAX_PAYEE_FIELDS} payee fields")
+        return value

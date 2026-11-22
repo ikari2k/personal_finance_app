@@ -2,7 +2,7 @@
 
 import pytest
 
-from app.models.import_mapping import ImportMapping
+from app.models.import_mapping import ImportMapping, PayeeFieldColumn
 from app.storage.import_mappings import (
     delete_mapping,
     list_all_mappings,
@@ -65,3 +65,40 @@ def test_delete_mapping_removes_the_file(tmp_path):
 
 def test_delete_mapping_is_a_noop_when_nothing_to_delete(tmp_path):
     delete_mapping("Ghost Bank", tmp_path)  # must not raise
+
+
+def test_payee_field_columns_round_trip_in_order_with_their_labels(tmp_path):
+    mapping = _mapping("Credit Agricole").model_copy(
+        update={
+            "payee_fields": [
+                PayeeFieldColumn(label="Web address", column=89),
+                PayeeFieldColumn(label="Recipient", column=10),
+            ]
+        }
+    )
+
+    write_mapping(mapping, tmp_path)
+
+    assert read_mapping("Credit Agricole", tmp_path) == mapping
+
+
+def test_a_mapping_saved_before_payee_fields_existed_reads_with_none(tmp_path):
+    (tmp_path / "old.toml").write_text(
+        'bank = "old"\n[columns]\ndate = 0\ndescription = 1\namount = 2\n'
+    )
+
+    assert read_mapping("old", tmp_path).payee_fields == []
+
+
+def test_a_mapping_allows_at_most_five_payee_fields():
+    five = [PayeeFieldColumn(label=f"F{i}", column=i) for i in range(5)]
+    six = [PayeeFieldColumn(label=f"F{i}", column=i) for i in range(6)]
+
+    assert (
+        len(
+            ImportMapping(bank="x", columns={"date": 0}, payee_fields=five).payee_fields
+        )
+        == 5
+    )
+    with pytest.raises(ValueError):
+        ImportMapping(bank="x", columns={"date": 0}, payee_fields=six)

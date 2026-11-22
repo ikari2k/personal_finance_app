@@ -1,0 +1,27 @@
+<form hx-post="/import/mappings/{{ bank | urlencode }}/enrich" hx-target="#import-wizard"
+      hx-swap="innerHTML show:top" hx-encoding="multipart/form-data">
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <h2>{{ bank }}</h2>
+  <p class="muted">
+    Reads an export with this mapping and fills the payee fields
+    ({% if fields %}{{ fields|join(', ') }}{% else %}none set yet{% endif %})
+    on transactions you already have. A transaction matches a row on its account, date, amount
+    and bank text. Nothing is added or deleted, and a value already saved is never changed.
+    Use an older export to fill in history from before the fields existed.
+  </p>
+  <div class="form-grid-2">
+    <label>Account
+      <select name="account_id" required>
+        {% for account in accounts %}
+          <option value="{{ account.id }}">{{ account.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+  </div>
+  <label>CSV file
+    <input type="file" name="file" accept=".csv" required>
+  </label>
+  <footer class="dialog-footer">
+    <button type="submit">Preview</button>
+  </footer>
+</form>

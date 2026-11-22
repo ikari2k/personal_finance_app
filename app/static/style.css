@@ -3130,3 +3130,16 @@ a.nw-tab { display: inline-block; text-decoration: none; }
   .payee-group { grid-template-columns: minmax(0, 1fr) 16px minmax(0, 1fr); row-gap: 0.55rem; }
   .payee-actions { grid-column: 1 / -1; justify-content: flex-start; }
 }
+
+.payee-fields { margin: 0 0 0.75rem; padding: 0.5rem 0.75rem; border: var(--pico-border-width) solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius); }
+.payee-fields legend { padding: 0 0.3rem; font-size: 0.8rem; color: var(--pico-muted-color); }
+.payee-field { display: flex; gap: 0.6rem; align-items: flex-start; margin: 0; padding: 0.35rem 0; }
+.payee-field + .payee-field { border-top: var(--pico-border-width) solid var(--pico-muted-border-color); }
+.payee-field input { margin: 0.25rem 0 0; flex: none; }
+.payee-field > span { display: grid; gap: 0.1rem; min-width: 0; font-size: 0.88rem; }
+.payee-field.is-missing { opacity: 0.55; }
+.payee-values { overflow-wrap: anywhere; font-size: 0.82rem; color: var(--pico-muted-color); }
+.payee-by { display: inline-block; margin-right: 0.3rem; padding: 0.05rem 0.45rem; border-radius: 999px; background: rgba(1, 114, 173, 0.12); color: var(--pico-color); font-weight: 600; }
+
+.mapping-payee { margin: 0 0 1rem; padding: 0.5rem 0.9rem 0.25rem; border: var(--pico-border-width) solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius); }
+.mapping-payee legend { padding: 0 0.3rem; font-weight: 600; }

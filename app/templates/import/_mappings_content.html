@@ -34,6 +34,9 @@
                 </button>
               </span>
               {{ mapping.bank }}
+              {% if mapping.payee_fields %}
+                <a class="payee-link" href="/import/mappings/{{ mapping.bank | urlencode }}/enrich">Fill payee fields</a>
+              {% endif %}
             </td>
             <td>{{ mapping.delimiter }}</td>
             <td>{{ mapping.encoding }}</td>
@@ -47,6 +50,9 @@
               {%- endif %}
               {%- for key in ("description_extra_1", "description_extra_2") if key in mapping.columns %}
                 + {{ mapping.columns[key] }}
+              {%- endfor %}
+              {%- for f in mapping.payee_fields %}
+                [{{ f.label }}: {{ f.column }}]
               {%- endfor %}
               {%- if mapping.columns.payee is defined %}
                 (payee: {{ mapping.columns.payee }}{% if mapping.columns.payee_fallback is defined %}, fallback {{ mapping.columns.payee_fallback }}{% endif %})

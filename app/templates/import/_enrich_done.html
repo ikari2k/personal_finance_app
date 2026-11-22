@@ -1,0 +1,7 @@
+<h2>Done</h2>
+<p>Filled payee fields on <strong>{{ changed }}</strong> transaction{{ '' if changed == 1 else 's' }}.</p>
+<p>
+  <a href="/payees">Name payees</a> ·
+  <a href="/import/mappings/{{ bank | urlencode }}/enrich">Fill from another file</a> ·
+  <a href="/import">Back to import</a>
+</p>

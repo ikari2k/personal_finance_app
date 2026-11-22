@@ -5,22 +5,35 @@ from decimal import Decimal
 
 import pytest
 
-from app.models.payee import PayeeAlias, PayeeBook
+from app.models.payee import (
+    COUNTERPARTY_FIELD,
+    DESCRIPTION_FIELD,
+    PayeeBook,
+    PayeeRule,
+)
 from app.models.transaction import Transaction, TransactionType
 from app.services.payees import (
-    add_aliases,
-    alias_lookup,
+    add_rules,
+    apply_naming,
+    best_rule_index,
     clean_payee_name,
     clear_skipped,
     coverage,
+    default_labels,
+    field_options,
+    field_values,
+    field_values_of,
     group_key,
     group_members,
+    match_payee,
     merge_payees,
     money_flow,
-    name_group,
+    normalize_payee_fields,
     payee_summaries,
+    plan_naming,
+    primary_field,
     rename_payee,
-    retarget_aliases,
+    retarget_rules,
     skip_group,
     spelling_key,
     suggest_name,
@@ -134,40 +147,6 @@ def test_unnamed_groups_flag_memo_text_but_not_a_big_merchant():
     assert groups["lidl"].memo_like is False
 
 
-def test_name_group_names_only_payeeless_rows_of_that_group():
-    ledger = [
-        _txn("1", "ZABKA Z1 K.1"),
-        _txn("2", "ZABKA Z2 K.2"),
-        _txn("3", "ZABKA Z3", payee="Already named"),
-        _txn("4", "LIDL"),
-    ]
-
-    updated, count = name_group(ledger, "zabka", "Żabka")
-
-    assert count == 2
-    assert [t.payee for t in updated] == ["Żabka", "Żabka", "Already named", ""]
-    assert [t.description for t in updated] == [t.description for t in ledger]
-
-
-def test_name_group_never_touches_transfers():
-    ledger = [_txn("1", "ZABKA", type=TransactionType.TRANSFER, transfer_id="T")]
-
-    updated, count = name_group(ledger, "zabka", "Żabka")
-
-    assert count == 0 and updated[0].payee == ""
-    assert group_members(ledger, "zabka") == []
-
-
-def test_add_aliases_remembers_spellings_and_repoints_existing_ones():
-    book = PayeeBook(aliases=[PayeeAlias(spelling="ZABKA Z1", payee="Old")])
-
-    book = add_aliases(book, ["zabka  z1", "ZABKA Z2"], "Żabka")
-
-    assert {a.payee for a in book.aliases} == {"Żabka"}
-    assert len(book.aliases) == 2
-    assert alias_lookup(book) == {"zabka z1": "Żabka", "zabka z2": "Żabka"}
-
-
 def test_rename_and_merge_change_exact_payees_and_count_rows():
     ledger = [
         _txn("1", "a", payee="Lidl"),
@@ -190,19 +169,6 @@ def test_merge_leaves_transfers_alone():
     merged, count = merge_payees([leg], ["Odd"], "New")
 
     assert count == 0 and merged[0].payee == "Odd"
-
-
-def test_retarget_aliases_follows_a_rename():
-    book = PayeeBook(
-        aliases=[
-            PayeeAlias(spelling="A", payee="Lidl"),
-            PayeeAlias(spelling="B", payee="Zabka"),
-        ]
-    )
-
-    book = retarget_aliases(book, ["Lidl"], "Lidl Polska")
-
-    assert [a.payee for a in book.aliases] == ["Lidl Polska", "Zabka"]
 
 
 def test_skip_and_clear_skipped():
@@ -273,3 +239,226 @@ def test_unnamed_group_reports_spent_and_received_and_ranks_by_both():
     [group] = unnamed_groups(ledger, PayeeBook())
 
     assert group.spent == Decimal("10") and group.received == Decimal("90")
+
+
+# ---------------------------------------------------------------------------
+# Fields, rules and naming plans
+# ---------------------------------------------------------------------------
+
+
+def _web(id_, description, site, **kw):
+    return _txn(id_, description, payee_fields={"Web address": site}, **kw)
+
+
+def test_field_values_lists_built_ins_then_labelled_fields_and_drops_blanks():
+    txn = _txn(
+        "1",
+        "PayU",
+        counterparty_account="PL61",
+        payee_fields={"Web address": "cinema-city.pl", "Recipient": "  "},
+    )
+
+    assert field_values(txn) == {
+        DESCRIPTION_FIELD: "PayU",
+        COUNTERPARTY_FIELD: "PL61",
+        "Web address": "cinema-city.pl",
+    }
+    assert field_values_of("", "", {}) == {}
+
+
+def test_a_rule_needs_every_field_and_ignores_case_and_spacing():
+    rule = PayeeRule(
+        fields={DESCRIPTION_FIELD: "PAYU", "Web address": "Cinema-City.pl"}, payee="X"
+    )
+    ok = {DESCRIPTION_FIELD: " payu ", "Web address": "cinema-city.pl"}
+
+    assert match_payee([rule], ok) == "X"
+    assert match_payee([rule], {DESCRIPTION_FIELD: "PayU"}) is None  # field missing
+    assert match_payee([rule], {**ok, "Web address": "other.pl"}) is None
+
+
+def test_the_rule_with_more_fields_wins_then_the_newer_one():
+    broad = PayeeRule(fields={DESCRIPTION_FIELD: "PayU"}, payee="PayU")
+    narrow = PayeeRule(
+        fields={DESCRIPTION_FIELD: "PayU", "Web address": "cinema-city.pl"},
+        payee="Cinema City",
+    )
+    newer_broad = PayeeRule(fields={DESCRIPTION_FIELD: "PayU"}, payee="Newer PayU")
+    values = {DESCRIPTION_FIELD: "PayU", "Web address": "cinema-city.pl"}
+
+    assert match_payee([broad, narrow], values) == "Cinema City"
+    assert (
+        match_payee([narrow, broad], values) == "Cinema City"
+    )  # order doesn't beat specificity
+    assert (
+        match_payee([broad, newer_broad], {DESCRIPTION_FIELD: "PayU"}) == "Newer PayU"
+    )
+    assert best_rule_index([broad], {DESCRIPTION_FIELD: "nope"}) is None
+
+
+def test_add_rules_replaces_a_rule_with_the_same_condition():
+    book = PayeeBook(
+        rules=[PayeeRule(fields={DESCRIPTION_FIELD: "ZABKA"}, payee="Old")]
+    )
+
+    book = add_rules(
+        book, [PayeeRule(fields={DESCRIPTION_FIELD: " zabka "}, payee="Żabka")]
+    )
+
+    assert [r.payee for r in book.rules] == ["Żabka"]
+
+
+def test_normalize_payee_fields_keeps_five_unique_labels_in_priority_order():
+    fields = normalize_payee_fields(
+        [
+            ("Web", 89),
+            ("", 15),
+            ("Description", 10),
+            ("web", 5),
+            ("Title", 17),
+            ("Sixth", 1),
+        ]
+    )
+
+    assert [(f.label, f.column) for f in fields] == [
+        ("Web", 89),
+        ("Field 2", 15),
+        ("Description 2", 10),
+        ("web 2", 5),
+        ("Title", 17),
+    ]  # a sixth is dropped
+
+
+def test_groups_form_on_the_first_captured_field_else_the_description():
+    ledger = [
+        _web("1", "PayU", "www.cinema-city.pl"),
+        _web("2", "PayU", "www.cinema-city.pl"),
+        _web("3", "PayU", "www.allegro.pl"),
+        _txn("4", "ZABKA Z1"),
+    ]
+
+    groups = {g.key: g for g in unnamed_groups(ledger, PayeeBook())}
+
+    assert set(groups) == {"cinema city", "allegro", "zabka"}
+    assert groups["cinema city"].primary_label == "Web address"
+    assert groups["cinema city"].spellings == [("www.cinema-city.pl", 2)]
+    assert groups["zabka"].primary_label == DESCRIPTION_FIELD
+    assert primary_field(ledger[0]) == ("Web address", "www.cinema-city.pl")
+
+
+def test_field_options_summarise_each_field_over_the_group():
+    members = [
+        _web("1", "PayU", "cinema-city.pl", counterparty_account=""),
+        _web("2", "PayU 2", "cinema-city.pl"),
+        _txn("3", "PayU"),
+    ]
+
+    options = {o.label: o for o in field_options(members)}
+
+    assert list(options) == [
+        DESCRIPTION_FIELD,
+        "Web address",
+    ]  # no counterparty anywhere
+    assert options[DESCRIPTION_FIELD].present == 3
+    assert options["Web address"].present == 2 and options["Web address"].total == 3
+    assert options["Web address"].values == [("cinema-city.pl", 2)]
+    assert default_labels(members) == ["Web address"]
+    assert default_labels([_txn("9", "x")]) == [DESCRIPTION_FIELD]
+
+
+def test_plan_naming_makes_one_rule_per_distinct_value_combination():
+    ledger = [
+        _txn("1", "ZABKA Z1"),
+        _txn("2", "ZABKA Z1"),
+        _txn("3", "ZABKA Z2"),
+        _txn("4", "LIDL"),
+    ]
+
+    plan = plan_naming(ledger, PayeeBook(), "zabka", [DESCRIPTION_FIELD], "Żabka")
+
+    assert sorted(r.fields[DESCRIPTION_FIELD] for r in plan.rules) == [
+        "ZABKA Z1",
+        "ZABKA Z2",
+    ]
+    assert [t.id for t in plan.rows] == ["1", "2", "3"]
+    named = apply_naming(ledger, plan, "Żabka")
+    assert [t.payee for t in named] == ["Żabka", "Żabka", "Żabka", ""]
+    assert [t.description for t in named] == [t.description for t in ledger]
+
+
+def test_plan_naming_on_a_web_address_names_rows_in_other_groups_too():
+    ledger = [
+        _web("1", "PayU", "cinema-city.pl"),
+        _web("2", "Przelewy24", "cinema-city.pl"),  # a different description
+        _web("3", "PayU", "allegro.pl"),
+    ]
+
+    plan = plan_naming(
+        ledger, PayeeBook(), "cinema city", ["Web address"], "Cinema City"
+    )
+
+    assert [r.fields for r in plan.rules] == [{"Web address": "cinema-city.pl"}]
+    assert [t.id for t in plan.rows] == ["1", "2"]
+
+
+def test_plan_naming_leaves_group_rows_lacking_a_chosen_field_unnamed():
+    # Both rows group as "payu": one through its web address, one by its description.
+    ledger = [_web("1", "PayU", "payu.pl"), _txn("2", "PayU")]
+
+    plan = plan_naming(ledger, PayeeBook(), "payu", ["Web address"], "PayU")
+
+    assert plan.rows_without_fields == 1
+    assert [t.id for t in plan.rows] == ["1"]
+
+
+def test_plan_naming_never_overwrites_a_payee_or_touches_a_transfer():
+    ledger = [
+        _txn("1", "ZABKA"),
+        _txn("2", "ZABKA", payee="Keep me"),
+        _txn("3", "ZABKA", type=TransactionType.TRANSFER, transfer_id="T"),
+    ]
+
+    plan = plan_naming(ledger, PayeeBook(), "zabka", [DESCRIPTION_FIELD], "Żabka")
+
+    assert [t.id for t in plan.rows] == ["1"]
+    assert group_members(ledger, "zabka") == [ledger[0]]
+
+
+def test_plan_naming_leaves_a_row_to_an_older_more_specific_rule():
+    book = PayeeBook(
+        rules=[
+            PayeeRule(
+                fields={DESCRIPTION_FIELD: "PayU", "Web address": "cinema-city.pl"},
+                payee="Cinema City",
+            )
+        ]
+    )
+    ledger = [
+        _web("1", "PayU", "cinema-city.pl"),
+        _web("2", "PayU", "other.pl"),
+    ]
+
+    # Name the "other" group by description: the new broad "PayU" rule would match
+    # row 1 too, but the older rule on two fields beats it, so only row 2 is named.
+    plan = plan_naming(ledger, book, "other", [DESCRIPTION_FIELD], "PayU")
+
+    assert [t.id for t in plan.rows] == ["2"]
+
+
+def test_plan_naming_with_no_labels_does_nothing():
+    plan = plan_naming([_txn("1", "ZABKA")], PayeeBook(), "zabka", [], "Żabka")
+
+    assert plan.rules == [] and plan.rows == []
+
+
+def test_retarget_rules_follows_a_rename():
+    book = PayeeBook(
+        rules=[
+            PayeeRule(fields={DESCRIPTION_FIELD: "A"}, payee="Lidl"),
+            PayeeRule(fields={DESCRIPTION_FIELD: "B"}, payee="Zabka"),
+        ]
+    )
+
+    book = retarget_rules(book, ["Lidl"], "Lidl Polska")
+
+    assert [r.payee for r in book.rules] == ["Lidl Polska", "Zabka"]

@@ -52,18 +52,38 @@
       </label>
     {% endfor %}
   </div>
-  <div class="form-grid-2">
-    <label title="The bank's own name for the other party; saved as the payee unless a rule names one">
-      Payee column (optional)
-      <input type="number" name="payee_column" min="0"
-             value="{{ mapping.columns.payee if mapping.columns.payee is defined else '' }}">
-    </label>
-    <label title="Used when the payee column above is blank for a row">
-      Payee fallback column (optional)
-      <input type="number" name="payee_fallback_column" min="0"
-             value="{{ mapping.columns.payee_fallback if mapping.columns.payee_fallback is defined else '' }}">
-    </label>
-  </div>
+  <fieldset class="mapping-payee">
+    <legend>Payee</legend>
+    <div class="form-grid-2">
+      <label title="The bank's own name for the other party; saved as the payee unless a rule names one">
+        Payee name column (optional)
+        <input type="number" name="payee_column" min="0"
+               value="{{ mapping.columns.payee if mapping.columns.payee is defined else '' }}">
+      </label>
+      <label title="Used when the payee name column above is blank for a row">
+        Payee name fallback column (optional)
+        <input type="number" name="payee_fallback_column" min="0"
+               value="{{ mapping.columns.payee_fallback if mapping.columns.payee_fallback is defined else '' }}">
+      </label>
+    </div>
+    <p class="muted">
+      Up to five columns the payee view can recognise a payee by, best one first (the first with
+      a value is what a transaction is grouped on). Their values are saved on
+      every imported transaction under the label, and a payee rule is built from the ones you
+      choose. Changing a label does not rename values already saved.
+    </p>
+    {% for slot in payee_field_slots %}
+      <div class="form-grid-2">
+        <label>Field {{ loop.index }} label
+          <input type="text" name="payee_field_label" value="{{ slot.label }}" placeholder="e.g. Web address" autocomplete="off">
+        </label>
+        <label>Field {{ loop.index }} column (index)
+          <input type="number" name="payee_field_column" min="0"
+                 value="{{ slot.column if slot.column is not none else '' }}">
+        </label>
+      </div>
+    {% endfor %}
+  </fieldset>
   <div class="form-grid-2">
     <label>Account number column (optional)
       <input type="number" name="account_number_column" min="0"

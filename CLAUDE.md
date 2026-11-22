@@ -69,21 +69,27 @@ tests/unit/     tmp_path-isolated; tests/integration/  TestClient, conftest redi
   (subcategory `""` = inherit; resolve via `services.categories.effective_bucket`); income
   category `""`/`excluded` (left out of the income base), income subcategories have none. In
   `update_category`/`update_subcategory`, omitting `bucket` **keeps** it (opposite of `budget`).
-- `config/payee_aliases.toml` — the payee book: `[[aliases]]` (`spelling, payee`: an exact bank
-  spelling the user named; matched case- and spacing-insensitively via `services.payees.spelling_key`,
-  never as a pattern) and `skipped` (group keys left unnamed). Written only by `/payees`. Import
-  applies aliases to a row's `description`; precedence is rule payee > alias > mapping payee column.
+- `config/payee_aliases.toml` — the payee book: `[[rules]]` (`payee` + a `[rules.fields]` table of
+  label → exact value; a row matches when it has *every* field with that value, case- and
+  spacing-insensitive via `services.payees.spelling_key`, never a pattern; more fields win, then
+  the newer rule = later in the file) and `skipped` (group keys left unnamed). Legacy `[[aliases]]`
+  (`spelling, payee`) are still read, as rules on `Description`, and rewritten as rules on the next
+  save. Written only by `/payees`. Rule fields are `Description`, `Counterparty account` and the
+  labels of the import mapping's `payee_fields`. Import precedence: category-rule payee > payee
+  rule > mapping payee column.
 - `config/budget_rule.toml` — `needs, wants, savings` whole-percent targets (default 50/30/20,
   must sum to 100 via `services.budget_rule.validate_targets`).
 - `data/ledger.csv` — columns: `id, date, account_id, category, subcategory, description, amount,
-  type, transfer_id, notes, counterparty_account, payee, source`. `amount` is signed; `type` ∈
+  type, transfer_id, notes, counterparty_account, payee, source, payee_fields`. `amount` is signed; `type` ∈
   income|expense|transfer. New columns are appended at the end so older files still read.
 - `config/import_mappings/<bank>.toml` — `bank, delimiter, encoding, date_format,
   decimal_separator`, `columns` = ledger field → **0-based column index** (not name; real exports
   have duplicate headers). Required: `date, description, amount`. Optional: `account_number`,
   `description_fallback`, `description_extra_1`/`_2` (appended to the primary/fallback text joined with ` | `, skipping
   blanks and repeats; shown as `ParsedRow.display_description`, saved as the row's *note*, never
-  folded into `description`, so duplicate detection and rules still see the bank's own text), `payee`/`payee_fallback` (the
+  folded into `description`, so duplicate detection and rules still see the bank's own text), `payee_fields` (up to 5 `[[payee_fields]]` tables of `label, column`; the mapping's payee section: the order is a
+  priority, the first with a value is what a row is grouped on; values are stored on each row by
+  label in the ledger's JSON `payee_fields` column), `payee`/`payee_fallback` (the
   bank's name for the other party, prefilled in the preview), `counterparty_account`,
   `counterparty_account_fallback`.
 - `data/import_history.toml` — append-only `[[imports]]` log; independent snapshots, not live refs.
@@ -107,11 +113,16 @@ tests/unit/     tmp_path-isolated; tests/integration/  TestClient, conftest redi
   `update_transaction_payee` refuses transfer legs). Filled by a rule, the mapping's payee
   column, the import preview's box or by hand; the transactions list has an inline payee dropdown
   (`.payee-combo`: existing payees plus the row's bank text; free text is valid) and search matches it. Never use it in duplicate detection.
-- **Payee view (`/payees`) rules.** Naming a group (`services.payees.name_group`) only fills rows whose
-  payee is blank — an existing payee is never overwritten — and never touches transfers or
-  `description`. Every change (name, rename, merge) is previewed in a dialog from the same
-  computation the apply step runs. Groups come from `group_key` (store numbers, legal suffixes and
-  `com`/`www` dropped); a rename or merge also re-points the saved aliases so imports follow.
+- **Payee view (`/payees`) rules.** Naming a group (`services.payees.plan_naming`, with the fields the
+  user ticked) saves one rule per distinct value combination and names every payee-less row that
+  one of the *new* rules wins; an existing payee is never overwritten, an older more-specific rule
+  keeps its rows, and transfers and `description` are never touched. Every change (name, rename,
+  merge, fill) is previewed in a dialog from the same computation the apply step runs. Groups come
+  from `group_key` of a row's first captured field (else its description; store numbers, legal
+  suffixes and `com`/`www` dropped); a rename or merge also re-points the rules so imports follow.
+  `/import/mappings/{bank}/enrich` fills `payee_fields` on *existing* rows from an older CSV
+  (matched on account, date, amount, bank text; only missing labels, never overwrites; ambiguous
+  rows skipped).
   The list's sort is sticky like the Transactions filters (`payee_sort`/`payee_dir` cookies; a URL
   value wins, default name A–Z) and every swap re-renders in the remembered order.
 - **Lock every write** to ledger/config files via `app.storage.lock.file_lock` (PID lockfile,

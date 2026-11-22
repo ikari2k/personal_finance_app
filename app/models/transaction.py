@@ -42,6 +42,11 @@ class Transaction(BaseModel):
     ``description`` (the bank's own text, read-only, keys duplicate
     detection and rule matching) and ``notes`` (purely personal).
 
+    ``payee_fields`` holds the values of the import mapping's payee field
+    columns for this row, keyed by their labels (``{"Web address": "..."}``),
+    captured at import so a payee rule can match on them later. Empty for
+    manual entries and for rows imported before the columns were configured.
+
     ``source`` is the name of the import mapping that first added the row
     (``"cred"``), blank for manual entries and rows created by the app itself.
     It records provenance, so anything that depends on how a bank's export is
@@ -60,4 +65,5 @@ class Transaction(BaseModel):
     notes: str | None = None
     counterparty_account: str = ""
     payee: str = ""
+    payee_fields: dict[str, str] = {}
     source: str = ""

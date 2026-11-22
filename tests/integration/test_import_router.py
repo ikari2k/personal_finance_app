@@ -888,3 +888,236 @@ def test_manual_entries_have_no_source(client):
     )
 
     assert [t.source for t in read_ledger(config.LEDGER_PATH)] == [""]
+
+
+def _save_with_fields(client, labels, columns, content=_PAYEE_CSV, bank="F Bank"):
+    setup = _upload_new(client, bank=bank, content=content)
+    return client.post(
+        "/import/mapping-setup/save",
+        data={
+            "bank": bank,
+            "account_id": "chk",
+            "file_content_b64": _extract_hidden_value(setup.text, "file_content_b64"),
+            "delimiter": ",",
+            "encoding": "utf-8",
+            "date_format": "%Y-%m-%d",
+            "decimal_separator": ".",
+            "date_column": "0",
+            "description_column": "1",
+            "amount_column": "2",
+            "account_number_column": "3",
+            "payee_field_label": labels,
+            "payee_field_column": columns,
+        },
+    )
+
+
+def test_setup_offers_five_payee_field_slots(client):
+    _create_account(client, account_id="chk", number="1234")
+    setup = _upload_new(client, bank="F Bank", content=_PAYEE_CSV)
+
+    assert setup.text.count('name="payee_field_label"') == 5
+    assert setup.text.count('name="payee_field_column"') == 5
+
+
+def test_payee_fields_are_saved_in_priority_order_and_named_after_the_header(client):
+    _create_account(client, account_id="chk", number="1234")
+
+    _save_with_fields(client, ["", "Who", "", "", ""], ["5", "4", "", "", ""])
+
+    mapping = read_mapping("F Bank", config.IMPORT_MAPPINGS_DIR)
+    assert [(f.label, f.column) for f in mapping.payee_fields] == [
+        ("recipient", 5),  # no label typed: the column's header
+        ("Who", 4),
+    ]
+
+
+def test_import_stores_the_payee_field_values_on_each_row_by_label(client):
+    _create_account(client, account_id="chk", number="1234")
+    preview = _save_with_fields(client, ["Merchant", "Recipient"], ["4", "5"])
+
+    _confirm(
+        client,
+        account_id="chk",
+        bank="F Bank",
+        rows_payload=_extract_hidden_value(preview.text, "rows_payload"),
+    )
+
+    by_description = {t.description: t for t in read_ledger(config.LEDGER_PATH)}
+    assert by_description["PayU"].payee_fields == {"Merchant": "Bank Cinema"}
+    assert by_description["Wire 5"].payee_fields == {"Recipient": "Tauron SA"}
+    assert by_description["Cash"].payee_fields == {}  # both cells blank
+
+
+def test_edit_form_shows_and_saves_the_payee_field_slots(client):
+    _create_account(client, account_id="chk", number="1234")
+    _save_with_fields(client, ["Merchant"], ["4"])
+
+    form = client.get("/import/mappings/F%20Bank/edit").text
+    assert form.count('name="payee_field_label"') == 5
+    assert 'value="Merchant"' in form
+
+    client.post(
+        "/import/mappings/F%20Bank/edit",
+        data={
+            "delimiter": ",",
+            "encoding": "utf-8",
+            "date_format": "%Y-%m-%d",
+            "decimal_separator": ".",
+            "date_column": "0",
+            "description_column": "1",
+            "amount_column": "2",
+            "payee_field_label": ["Recipient", "", "Merchant"],
+            "payee_field_column": ["5", "", "4"],
+        },
+    )
+
+    mapping = read_mapping("F Bank", config.IMPORT_MAPPINGS_DIR)
+    assert [(f.label, f.column) for f in mapping.payee_fields] == [
+        ("Recipient", 5),
+        ("Merchant", 4),  # a slot without a column is dropped; order kept
+    ]
+
+
+def test_payee_field_labels_cannot_clash_with_built_in_fields(client):
+    _create_account(client, account_id="chk", number="1234")
+
+    _save_with_fields(client, ["Description", "description"], ["4", "5"])
+
+    mapping = read_mapping("F Bank", config.IMPORT_MAPPINGS_DIR)
+    assert [f.label for f in mapping.payee_fields] == ["Description 2", "description 3"]
+
+
+def test_the_mapping_list_shows_the_payee_field_labels(client):
+    _create_account(client, account_id="chk", number="1234")
+    _save_with_fields(client, ["Merchant"], ["4"])
+
+    assert "Merchant: 4" in client.get("/import").text
+
+
+# ---------------------------------------------------------------------------
+# Fill payee fields on existing transactions from a CSV
+# ---------------------------------------------------------------------------
+
+
+def _import_without_fields(client, bank="E Bank"):
+    """Import _PAYEE_CSV with a mapping that captures no payee fields."""
+    _create_account(client, account_id="chk", number="1234")
+    preview = _save_with_fields(client, [], [], bank=bank)
+    _confirm(
+        client,
+        account_id="chk",
+        bank=bank,
+        rows_payload=_extract_hidden_value(preview.text, "rows_payload"),
+    )
+    assert all(t.payee_fields == {} for t in read_ledger(config.LEDGER_PATH))
+
+
+def _add_fields_to_mapping(client, bank="E Bank"):
+    client.post(
+        f"/import/mappings/{bank.replace(' ', '%20')}/edit",
+        data={
+            "delimiter": ",",
+            "encoding": "utf-8",
+            "date_format": "%Y-%m-%d",
+            "decimal_separator": ".",
+            "date_column": "0",
+            "description_column": "1",
+            "amount_column": "2",
+            "account_number_column": "3",
+            "payee_field_label": ["Merchant", "Recipient"],
+            "payee_field_column": ["4", "5"],
+        },
+    )
+
+
+def _enrich(client, bank="E Bank", content=_PAYEE_CSV):
+    return client.post(
+        f"/import/mappings/{bank.replace(' ', '%20')}/enrich",
+        data={"account_id": "chk"},
+        files={"file": ("old.csv", content, "text/csv")},
+    )
+
+
+def test_the_enrich_page_explains_itself_and_lists_the_fields(client):
+    _import_without_fields(client)
+    _add_fields_to_mapping(client)
+
+    text = client.get("/import/mappings/E%20Bank/enrich").text
+
+    assert "Merchant, Recipient" in text
+    assert 'name="file"' in text and 'name="account_id"' in text
+
+
+def test_enrich_previews_then_fills_fields_without_adding_rows(client):
+    _import_without_fields(client)
+    _add_fields_to_mapping(client)
+    before = [t.id for t in read_ledger(config.LEDGER_PATH)]
+
+    preview = _enrich(client)
+
+    assert "<strong>2</strong> existing transaction" in preview.text
+    assert "Bank Cinema" in preview.text and "Tauron SA" in preview.text
+    assert [t.payee_fields for t in read_ledger(config.LEDGER_PATH)] == [{}, {}, {}]
+    done = client.post(
+        "/import/mappings/E%20Bank/enrich/apply",
+        data={
+            "updates_payload": _extract_hidden_value(preview.text, "updates_payload")
+        },
+    )
+
+    assert "<strong>2</strong>" in done.text
+    ledger = {t.description: t for t in read_ledger(config.LEDGER_PATH)}
+    assert [t.id for t in read_ledger(config.LEDGER_PATH)] == before  # nothing added
+    assert ledger["PayU"].payee_fields == {"Merchant": "Bank Cinema"}
+    assert ledger["Wire 5"].payee_fields == {"Recipient": "Tauron SA"}
+    assert ledger["Cash"].payee_fields == {}  # both cells blank in the file
+    assert len(ledger) == 3
+
+
+def test_enrich_never_changes_a_value_already_saved(client):
+    _import_without_fields(client)
+    _add_fields_to_mapping(client)
+    first = _enrich(client)
+    client.post(
+        "/import/mappings/E%20Bank/enrich/apply",
+        data={"updates_payload": _extract_hidden_value(first.text, "updates_payload")},
+    )
+    changed_file = _PAYEE_CSV.replace("Bank Cinema", "Different")
+
+    again = _enrich(client, content=changed_file)
+
+    assert "<strong>0</strong> existing transaction" in again.text
+    assert "2 already have them" in " ".join(again.text.split())
+    assert {t.description: t.payee_fields for t in read_ledger(config.LEDGER_PATH)}[
+        "PayU"
+    ] == {"Merchant": "Bank Cinema"}
+
+
+def test_enrich_needs_a_mapping_with_payee_fields(client):
+    _import_without_fields(client)  # mapping has none
+
+    page = _enrich(client)
+
+    assert "no payee fields yet" in page.text
+    assert client.get("/import/mappings/Nope/enrich").status_code == 404
+
+
+def test_the_mapping_list_links_to_enrich_only_when_there_are_payee_fields(client):
+    _import_without_fields(client)
+    assert "Fill payee fields" not in client.get("/import").text
+
+    _add_fields_to_mapping(client)
+
+    assert "Fill payee fields" in client.get("/import").text
+
+
+def test_enrich_ignores_a_payload_row_for_a_missing_transaction(client):
+    _import_without_fields(client)
+
+    done = client.post(
+        "/import/mappings/E%20Bank/enrich/apply",
+        data={"updates_payload": '{"ghost": {"Merchant": "x"}}'},
+    )
+
+    assert "<strong>0</strong>" in done.text

@@ -41,12 +41,14 @@ from fastapi import APIRouter, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse
 
 from app.models.import_history import ImportHistoryEntry
-from app.models.import_mapping import ImportMapping
+from app.models.import_mapping import ImportMapping, PayeeFieldColumn
+from app.models.payee import MAX_PAYEE_FIELDS
 from app.models.transaction import Transaction, TransactionType
 from app.routers.htmx_events import toast
 from app.services.importer import (
     DESCRIPTION_EXTRA_KEYS,
     apply_category_picks,
+    apply_enrichment,
     apply_note_edits,
     apply_payee_edits,
     build_transactions,
@@ -56,8 +58,9 @@ from app.services.importer import (
     parse_amount,
     parse_date,
     parse_rows,
+    plan_enrichment,
 )
-from app.services.payees import alias_lookup
+from app.services.payees import normalize_payee_fields
 from app.services.transactions import distinct_payees, ensure_category
 from app.storage.accounts import read_accounts
 from app.storage.categories import read_categories, write_categories
@@ -72,6 +75,8 @@ from app.storage.ledger import read_ledger, write_ledger
 from app.storage.payees import read_payee_book
 from app.storage.rules import read_rules
 from app.templating import templates
+
+ENRICH_SAMPLE_ROWS = 8  # example rows shown in the enrich preview
 
 router = APIRouter(prefix="/import", tags=["import"])
 
@@ -110,6 +115,52 @@ def _set_counterparty_columns(
     fallback_idx = _to_column_index(counterparty_fallback)
     if fallback_idx is not None:
         columns["counterparty_account_fallback"] = fallback_idx
+
+
+def _payee_field_slots(labels: list[str], columns: list[str]) -> list[dict]:
+    """Return the label/column slots the payee section shows, from submissions."""
+    slots = []
+    for i in range(MAX_PAYEE_FIELDS):
+        label = labels[i].strip() if i < len(labels) else ""
+        column = _to_column_index(columns[i]) if i < len(columns) else None
+        slots.append({"label": label, "column": column})
+    return slots
+
+
+def _mapping_payee_slots(fields: list[PayeeFieldColumn]) -> list[dict]:
+    """Return the slots for an existing mapping's saved payee fields, padded."""
+    slots = [{"label": f.label, "column": f.column} for f in fields]
+    return slots + [{"label": "", "column": None}] * (MAX_PAYEE_FIELDS - len(slots))
+
+
+def _header_row(file_content_b64: str, encoding: str, delimiter: str) -> list[str]:
+    """Return the CSV's first row (to name payee fields); ``[]`` if unreadable."""
+    try:
+        text = base64.b64decode(file_content_b64).decode(encoding)
+        return next(csv.reader(io.StringIO(text), delimiter=delimiter), [])
+    except (ValueError, LookupError, csv.Error):
+        return []
+
+
+def _payee_fields_from_form(
+    labels: list[str], columns: list[str], headers: list[str] | None = None
+) -> list[PayeeFieldColumn]:
+    """Build a mapping's payee field columns from the submitted label/column lists.
+
+    A slot with a column but no typed label is named after that column's header
+    when the file's header row is known, else ``Field N``. Slots without a
+    column are dropped; labels are made unique (``normalize_payee_fields``).
+    """
+    pairs = []
+    for slot in _payee_field_slots(labels, columns):
+        column = slot["column"]
+        if column is None:
+            continue
+        label = slot["label"]
+        if not label and headers and column < len(headers):
+            label = headers[column].strip()
+        pairs.append((label, column))
+    return normalize_payee_fields(pairs)
 
 
 def _set_payee_columns(columns: dict[str, int], payee: str, fallback: str) -> None:
@@ -334,6 +385,7 @@ def _render_mapping_setup(
     selected_description_extra_2_column: int | None = None,
     selected_payee_column: int | None = None,
     selected_payee_fallback_column: int | None = None,
+    payee_field_slots: list[dict] | None = None,
     selected_amount_column: int | None = None,
     selected_account_number_column: int | None = None,
     selected_counterparty_account_column: int | None = None,
@@ -411,6 +463,7 @@ def _render_mapping_setup(
             "selected_description_extra_2_column": selected_description_extra_2_column,
             "selected_payee_column": selected_payee_column,
             "selected_payee_fallback_column": selected_payee_fallback_column,
+            "payee_field_slots": payee_field_slots or _payee_field_slots([], []),
             "selected_amount_column": selected_amount_column,
             "selected_account_number_column": selected_account_number_column,
             "selected_counterparty_account_column": (
@@ -444,6 +497,8 @@ def reparse_mapping_setup(
     description_extra_2_column: str = Form(""),
     payee_column: str = Form(""),
     payee_fallback_column: str = Form(""),
+    payee_field_label: list[str] = Form(default=[]),
+    payee_field_column: list[str] = Form(default=[]),
     amount_column: str = Form(""),
     account_number_column: str = Form(""),
     counterparty_account_column: str = Form(""),
@@ -474,6 +529,7 @@ def reparse_mapping_setup(
         ),
         selected_payee_column=_to_column_index(payee_column),
         selected_payee_fallback_column=_to_column_index(payee_fallback_column),
+        payee_field_slots=_payee_field_slots(payee_field_label, payee_field_column),
         selected_amount_column=_to_column_index(amount_column),
         selected_account_number_column=_to_column_index(account_number_column),
         selected_counterparty_account_column=_to_column_index(
@@ -503,6 +559,8 @@ def save_mapping_setup(
     description_extra_2_column: str = Form(""),
     payee_column: str = Form(""),
     payee_fallback_column: str = Form(""),
+    payee_field_label: list[str] = Form(default=[]),
+    payee_field_column: list[str] = Form(default=[]),
     amount_column: int = Form(...),
     account_number_column: str = Form(""),
     counterparty_account_column: str = Form(""),
@@ -548,6 +606,11 @@ def save_mapping_setup(
         date_format=date_format,
         decimal_separator=decimal_separator,
         columns=columns,
+        payee_fields=_payee_fields_from_form(
+            payee_field_label,
+            payee_field_column,
+            _header_row(file_content_b64, encoding, delimiter),
+        ),
     )
     content = base64.b64decode(file_content_b64)
     try:
@@ -576,6 +639,7 @@ def save_mapping_setup(
             ),
             selected_payee_column=_to_column_index(payee_column),
             selected_payee_fallback_column=_to_column_index(payee_fallback_column),
+            payee_field_slots=_payee_field_slots(payee_field_label, payee_field_column),
             selected_amount_column=amount_column,
             selected_account_number_column=account_number_idx,
             selected_counterparty_account_column=_to_column_index(
@@ -623,7 +687,7 @@ def _render_preview(
     new_rows, duplicate_rows = find_duplicates(kept, existing, account_id)
     rules = read_rules()
     transactions = build_transactions(
-        new_rows, account_id, rules, alias_lookup(read_payee_book()), mapping.bank
+        new_rows, account_id, rules, read_payee_book().rules, mapping.bank
     )
 
     blank_date, total_rows = count_blank_column_values(
@@ -643,6 +707,7 @@ def _render_preview(
                 "subcategory": txn.subcategory,
                 "counterparty_account": txn.counterparty_account,
                 "payee": txn.payee,
+                "payee_fields": txn.payee_fields,
             }
             for txn in transactions
         ]
@@ -714,6 +779,7 @@ def confirm(
                 notes=row.get("notes"),
                 counterparty_account=row.get("counterparty_account", ""),
                 payee=row.get("payee", ""),
+                payee_fields=row.get("payee_fields") or {},
                 source=bank,
             )
         )
@@ -785,6 +851,104 @@ async def run_mapping(
 
 
 # ---------------------------------------------------------------------------
+# Enrich flow: fill payee fields on existing transactions from a CSV
+# ---------------------------------------------------------------------------
+
+
+@router.get("/mappings/{bank}/enrich", response_class=HTMLResponse)
+def enrich_page(request: Request, bank: str) -> HTMLResponse:
+    """Render the upload prompt for filling payee fields from a CSV."""
+    mapping = read_mapping(bank)
+    if mapping is None:
+        return HTMLResponse(f'No saved mapping named "{bank}".', status_code=404)
+    context = {
+        "bank": mapping.bank,
+        "fields": [f.label for f in mapping.payee_fields],
+        "accounts": read_accounts(),
+        "error": None,
+    }
+    template = (
+        "import/_enrich_upload.html" if _is_htmx(request) else "import/enrich.html"
+    )
+    return templates.TemplateResponse(request, template, context)
+
+
+@router.post("/mappings/{bank}/enrich", response_class=HTMLResponse)
+async def enrich_preview(
+    request: Request,
+    bank: str,
+    account_id: str = Form(...),
+    file: UploadFile = File(...),
+) -> HTMLResponse:
+    """Match a CSV to existing transactions and preview the fields it would fill."""
+    mapping = read_mapping(bank)
+    if mapping is None:
+        return HTMLResponse(f'No saved mapping named "{bank}".', status_code=404)
+    context = {
+        "bank": mapping.bank,
+        "fields": [f.label for f in mapping.payee_fields],
+        "accounts": read_accounts(),
+    }
+    if not mapping.payee_fields:
+        return templates.TemplateResponse(
+            request,
+            "import/_enrich_upload.html",
+            {
+                **context,
+                "error": "This mapping has no payee fields yet. Add some first.",
+            },
+        )
+    try:
+        text = (await file.read()).decode(mapping.encoding)
+        rows = parse_rows(text, mapping)
+    except (ValueError, LookupError) as exc:
+        return templates.TemplateResponse(
+            request, "import/_enrich_upload.html", {**context, "error": str(exc)}
+        )
+    account = next((a for a in read_accounts() if a.id == account_id), None)
+    kept, _ = filter_by_account_number(rows, account.number if account else "")
+    ledger = read_ledger()
+    plan = plan_enrichment(kept, ledger, account_id)
+    by_id = {t.id: t for t in ledger}
+    sample = [
+        {"txn": by_id[txn_id], "fields": fields}
+        for txn_id, fields in list(plan.updates.items())[:ENRICH_SAMPLE_ROWS]
+    ]
+    return templates.TemplateResponse(
+        request,
+        "import/_enrich_preview.html",
+        {
+            **context,
+            "account_id": account_id,
+            "enriched": len(plan.updates),
+            "already_complete": plan.already_complete,
+            "ambiguous": plan.ambiguous,
+            "unmatched": plan.unmatched,
+            "csv_rows": len(kept),
+            "sample": sample,
+            "updates_payload": json.dumps(plan.updates, ensure_ascii=False),
+        },
+    )
+
+
+@router.post("/mappings/{bank}/enrich/apply", response_class=HTMLResponse)
+def enrich_apply(
+    request: Request, bank: str, updates_payload: str = Form(...)
+) -> HTMLResponse:
+    """Write the previewed payee fields onto the matched transactions."""
+    updates = {
+        str(txn_id): {str(k): str(v) for k, v in fields.items()}
+        for txn_id, fields in json.loads(updates_payload).items()
+    }
+    updated, changed = apply_enrichment(read_ledger(), updates)
+    if changed:
+        write_ledger(updated)
+    return templates.TemplateResponse(
+        request, "import/_enrich_done.html", {"bank": bank, "changed": changed}
+    )
+
+
+# ---------------------------------------------------------------------------
 # Edit flow: change a saved mapping's settings, with an optional dry run
 # ---------------------------------------------------------------------------
 
@@ -802,6 +966,7 @@ def _render_edit_form(
         "import/_edit_form.html",
         {
             "mapping": mapping,
+            "payee_field_slots": _mapping_payee_slots(mapping.payee_fields),
             "accounts": read_accounts(),
             "encoding_choices": ENCODING_CHOICES,
             "error": error,
@@ -823,6 +988,7 @@ def edit_mapping_page(request: Request, bank: str) -> HTMLResponse:
         "import/edit_mapping.html",
         {
             "mapping": mapping,
+            "payee_field_slots": _mapping_payee_slots(mapping.payee_fields),
             "accounts": read_accounts(),
             "encoding_choices": ENCODING_CHOICES,
             "error": None,
@@ -848,6 +1014,8 @@ def _mapping_from_edit_form(
     description_extra_2_column: str = "",
     payee_column: str = "",
     payee_fallback_column: str = "",
+    payee_field_label: list[str] | None = None,
+    payee_field_column: list[str] | None = None,
 ) -> ImportMapping:
     columns = {
         "date": date_column,
@@ -872,6 +1040,9 @@ def _mapping_from_edit_form(
         date_format=date_format,
         decimal_separator=decimal_separator,
         columns=columns,
+        payee_fields=_payee_fields_from_form(
+            payee_field_label or [], payee_field_column or []
+        ),
     )
 
 
@@ -890,6 +1061,8 @@ def save_edited_mapping(
     description_extra_2_column: str = Form(""),
     payee_column: str = Form(""),
     payee_fallback_column: str = Form(""),
+    payee_field_label: list[str] = Form(default=[]),
+    payee_field_column: list[str] = Form(default=[]),
     amount_column: int = Form(...),
     account_number_column: str = Form(""),
     counterparty_account_column: str = Form(""),
@@ -917,6 +1090,8 @@ def save_edited_mapping(
         description_extra_2_column=description_extra_2_column,
         payee_column=payee_column,
         payee_fallback_column=payee_fallback_column,
+        payee_field_label=payee_field_label,
+        payee_field_column=payee_field_column,
     )
     write_mapping(mapping)
     return _render_edit_form(request, mapping, headers=toast("Mapping saved"))
@@ -939,6 +1114,8 @@ async def dry_run_mapping(
     description_extra_2_column: str = Form(""),
     payee_column: str = Form(""),
     payee_fallback_column: str = Form(""),
+    payee_field_label: list[str] = Form(default=[]),
+    payee_field_column: list[str] = Form(default=[]),
     amount_column: int = Form(...),
     account_number_column: str = Form(""),
     counterparty_account_column: str = Form(""),
@@ -968,6 +1145,8 @@ async def dry_run_mapping(
         description_extra_2_column=description_extra_2_column,
         payee_column=payee_column,
         payee_fallback_column=payee_fallback_column,
+        payee_field_label=payee_field_label,
+        payee_field_column=payee_field_column,
     )
     if file is None or not file.filename:
         return _render_edit_form(
