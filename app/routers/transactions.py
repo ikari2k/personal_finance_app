@@ -2,6 +2,7 @@
 
 from datetime import date
 from decimal import Decimal, InvalidOperation
+from urllib.parse import quote, unquote
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
@@ -95,6 +96,7 @@ def _filter_ledger(
     search: str,
     date_from: str,
     date_to: str,
+    payee: str = "",
 ) -> list[Transaction]:
     """Filter the ledger by account/category/subcategory/type/search/date range (AND).
 
@@ -111,6 +113,7 @@ def _filter_ledger(
     ``search`` is a case-insensitive substring match against
     ``description`` or ``payee`` — free text, not an equality filter like
     the others.
+    ``payee`` is an exact match on the clean payee name, unlike ``search``.
     ``date_from``/``date_to`` are inclusive ISO ``YYYY-MM-DD`` bounds,
     either or both may be unset independently.
     """
@@ -121,6 +124,8 @@ def _filter_ledger(
             for t in ledger
             if needle in t.description.lower() or needle in t.payee.lower()
         ]
+    if payee:
+        ledger = [t for t in ledger if t.payee == payee]
     if account_id:
         ledger = [t for t in ledger if t.account_id == account_id]
     if category:
@@ -136,6 +141,12 @@ def _filter_ledger(
     if parsed_to:
         ledger = [t for t in ledger if t.date <= parsed_to]
     return ledger
+
+
+def _payee_options(ledger: list[Transaction], selected: str) -> list[str]:
+    """Payee names for the filter, A to Z, plus the selected one if no row has it."""
+    names = {t.payee for t in ledger if t.payee} | ({selected} if selected else set())
+    return sorted(names, key=str.lower)
 
 
 def render_table(
@@ -163,6 +174,7 @@ def render_table(
     subcategory = request.cookies.get("subcategory", "")
     txn_type = request.cookies.get("txn_type", "")
     search = request.cookies.get("search", "")
+    payee = unquote(request.cookies.get("payee", ""))
     date_from = request.cookies.get("date_from", "")
     date_to = request.cookies.get("date_to", "")
     full_ledger = read_ledger()
@@ -173,6 +185,7 @@ def render_table(
         subcategory=subcategory,
         txn_type=txn_type,
         search=search,
+        payee=payee,
         date_from=date_from,
         date_to=date_to,
     )
@@ -196,6 +209,8 @@ def render_table(
             "subcategory": subcategory,
             "txn_type": txn_type,
             "search": search,
+            "payee": payee,
+            "payee_options": _payee_options(full_ledger, payee),
             "date_from": date_from,
             "date_to": date_to,
             "any_filter_active": bool(
@@ -204,6 +219,7 @@ def render_table(
                 or subcategory
                 or txn_type
                 or search
+                or payee
                 or date_from
                 or date_to
             ),
@@ -224,6 +240,7 @@ def list_transactions(
     subcategory: str | None = None,
     txn_type: str | None = None,
     search: str | None = None,
+    payee: str | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
     scope_month: str | None = None,
@@ -317,6 +334,9 @@ def list_transactions(
     resolved_date_from = (
         date_from if date_from is not None else request.cookies.get("date_from", "")
     )
+    resolved_payee = (
+        payee if payee is not None else unquote(request.cookies.get("payee", ""))
+    )
     resolved_date_to = (
         date_to if date_to is not None else request.cookies.get("date_to", "")
     )
@@ -329,6 +349,7 @@ def list_transactions(
         subcategory=resolved_subcategory,
         txn_type=resolved_txn_type,
         search=resolved_search,
+        payee=resolved_payee,
         date_from=resolved_date_from,
         date_to=resolved_date_to,
     )
@@ -351,6 +372,8 @@ def list_transactions(
         "subcategory": resolved_subcategory,
         "txn_type": resolved_txn_type,
         "search": resolved_search,
+        "payee": resolved_payee,
+        "payee_options": _payee_options(full_ledger, resolved_payee),
         "date_from": resolved_date_from,
         "date_to": resolved_date_to,
         "breadcrumbs": breadcrumbs.from_transaction_filters(
@@ -367,6 +390,7 @@ def list_transactions(
             or resolved_subcategory
             or resolved_txn_type
             or resolved_search
+            or resolved_payee
             or resolved_date_from
             or resolved_date_to
         ),
@@ -404,6 +428,10 @@ def list_transactions(
         "subcategory", resolved_subcategory, max_age=STICKY_FILTER_COOKIE_MAX_AGE
     )
     response.set_cookie("search", resolved_search, max_age=STICKY_FILTER_COOKIE_MAX_AGE)
+    # Payee names are free text ("Żabka"), so the cookie holds them URL-encoded.
+    response.set_cookie(
+        "payee", quote(resolved_payee), max_age=STICKY_FILTER_COOKIE_MAX_AGE
+    )
     response.set_cookie(
         "date_from", resolved_date_from, max_age=STICKY_FILTER_COOKIE_MAX_AGE
     )

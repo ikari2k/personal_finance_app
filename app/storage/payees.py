@@ -1,8 +1,9 @@
 """Read/write access to ``config/payee_aliases.toml``.
 
 Holds the payee book: ``[[rules]]`` tables (a ``payee`` plus a ``[rules.fields]``
-table of label -> exact value) and a ``skipped`` list of group keys left unnamed
-on purpose. Written only by the payee management view; config writes leave
+table of label -> exact value), a ``skipped`` list of group keys left unnamed on
+purpose and a ``split`` list of group keys divided into single spellings.
+Written only by the payee management view; config writes leave
 backups like the other config files.
 
 The file's first format held ``[[aliases]]`` (``spelling``, ``payee``). Those
@@ -47,7 +48,11 @@ def read_payee_book(path: Path | None = None) -> PayeeBook:
         }
         if fields and row.get("payee"):
             rules.append(PayeeRule(fields=fields, payee=row["payee"]))
-    return PayeeBook(rules=rules, skipped=list(data.get("skipped", [])))
+    return PayeeBook(
+        rules=rules,
+        skipped=list(data.get("skipped", [])),
+        split=list(data.get("split", [])),
+    )
 
 
 def write_payee_book(book: PayeeBook, path: Path | None = None) -> None:
@@ -62,6 +67,7 @@ def write_payee_book(book: PayeeBook, path: Path | None = None) -> None:
         backup_before_write(path)
         data = {
             "skipped": list(book.skipped),
+            "split": list(book.split),
             "rules": [
                 {"payee": rule.payee, "fields": dict(rule.fields)}
                 for rule in book.rules

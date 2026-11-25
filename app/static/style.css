@@ -3139,7 +3139,66 @@ a.nw-tab { display: inline-block; text-decoration: none; }
 .payee-field > span { display: grid; gap: 0.1rem; min-width: 0; font-size: 0.88rem; }
 .payee-field.is-missing { opacity: 0.55; }
 .payee-values { overflow-wrap: anywhere; font-size: 0.82rem; color: var(--pico-muted-color); }
-.payee-by { display: inline-block; margin-right: 0.3rem; padding: 0.05rem 0.45rem; border-radius: 999px; background: rgba(1, 114, 173, 0.12); color: var(--pico-color); font-weight: 600; }
+.payee-by, .payee-source { display: inline-block; margin-right: 0.3rem; padding: 0.05rem 0.45rem; border-radius: 999px; background: rgba(1, 114, 173, 0.12); color: var(--pico-color); font-weight: 600; }
 
 .mapping-payee { margin: 0 0 1rem; padding: 0.5rem 0.9rem 0.25rem; border: var(--pico-border-width) solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius); }
 .mapping-payee legend { padding: 0 0.3rem; font-weight: 600; }
+
+/* The group workspace under each "Name these" row. */
+.payee-card { border-top: var(--pico-border-width) solid var(--pico-muted-border-color); }
+.payee-card:first-child { border-top: 0; }
+.payee-card .payee-group { border-top: 0; }
+.payee-detail { margin: 0 0 0.5rem; }
+.payee-detail > summary { cursor: pointer; font-size: 0.8rem; color: var(--pico-muted-color); }
+.payee-detail-body { padding: 0.6rem 0 0.2rem; }
+.payee-tickgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: 0.5rem; margin-bottom: 0.75rem; }
+.payee-tick { display: flex; gap: 0.5rem; align-items: flex-start; margin: 0; padding: 0.45rem 0.6rem; border: var(--pico-border-width) solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius); font-size: 0.85rem; }
+.payee-tick input { margin: 0.2rem 0 0; flex: none; }
+.payee-tick > span { display: grid; gap: 0.1rem; min-width: 0; }
+.payee-tick.is-missing { opacity: 0.5; }
+.payee-val { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--pico-muted-color); }
+.payee-val b { font-weight: 600; color: var(--pico-color); }
+.payee-combos { font-size: 0.85rem; }
+.payee-combos th, .payee-combos td { white-space: nowrap; vertical-align: middle; }
+.payee-combos .num { text-align: right; font-variant-numeric: tabular-nums; }
+.payee-combos td.payee-combo-value { white-space: normal; min-width: 9rem; max-width: 22rem; overflow-wrap: anywhere; }
+.payee-combo-value small { display: block; }
+.payee-combos input[type="text"] { width: 12rem; max-width: 100%; height: var(--control-h); margin: 0; font-weight: 600; }
+.payee-combos button { width: auto; height: var(--control-h); margin: 0; padding: 0 0.8rem; font-size: 0.8rem; }
+.payee-allspell { margin-top: 0.6rem; }
+.payee-allspell summary { cursor: pointer; font-size: 0.8rem; color: var(--pico-muted-color); }
+.payee-allspell ul { max-height: 14rem; overflow-y: auto; margin: 0.3rem 0 0; padding: 0; list-style: none; font-size: 0.82rem; }
+.payee-allspell li { display: flex; justify-content: space-between; gap: 0.6rem; margin: 0; }
+.payee-allspell li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.payee-rule-terms { margin: 0.25rem 0 0; padding-left: 1.1rem; font-size: 0.9rem; }
+
+/* Tabs of the "Name these" queue: single spellings, several spellings. */
+.payee-tabs { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.25rem; margin-bottom: 0.4rem; }
+.payee-tab {
+  width: auto;
+  margin: 0;
+  padding: 0.25rem 0.8rem;
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  color: var(--pico-muted-color);
+  font-weight: 600;
+}
+.payee-tab[aria-selected="true"] { color: var(--pico-primary); border-bottom-color: var(--pico-primary); }
+.payee-tab-count {
+  display: inline-block;
+  min-width: 1.4rem;
+  margin-left: 0.25rem;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  background: rgba(127, 127, 127, 0.18);
+  font-size: 0.75rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.payee-tabs-note { margin-left: auto; font-size: 0.8rem; }
+.payee-tab-help { margin: 0 0 0.5rem; font-size: 0.8rem; }
+
+.payee-tabs-label { font-size: 0.8rem; margin-right: 0.25rem; }
+.payee-field-tabs { margin-bottom: 0.1rem; }

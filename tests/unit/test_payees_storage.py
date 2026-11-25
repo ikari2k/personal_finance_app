@@ -78,3 +78,12 @@ def test_legacy_aliases_come_before_new_rules_so_new_rules_win_ties(tmp_path):
     )
 
     assert [r.payee for r in read_payee_book(path).rules] == ["Old", "New"]
+
+
+def test_split_groups_round_trip_and_default_to_none(tmp_path):
+    path = tmp_path / "payee_aliases.toml"
+    write_payee_book(PayeeBook(split=["zabka", "lidl"]), path)
+
+    assert read_payee_book(path).split == ["zabka", "lidl"]
+    (tmp_path / "old.toml").write_text('skipped = ["a"]\n')
+    assert read_payee_book(tmp_path / "old.toml").split == []

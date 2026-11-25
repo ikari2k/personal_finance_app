@@ -1,0 +1,126 @@
+{% from "payees/_macros.html" import count_label %}
+{% if field_tabs %}
+  <div class="payee-tabs payee-field-tabs" role="tablist" aria-label="Build suggestions from">
+    <span class="muted payee-tabs-label">Suggest by</span>
+    {% for f in field_tabs %}
+      <button type="button" role="tab" class="payee-tab" aria-selected="{{ 'true' if field == f.label else 'false' }}"
+              title="{{ f.rows }} transaction{{ '' if f.rows == 1 else 's' }} without a payee have a value in this field"
+              hx-get="/payees?part=queue&field={{ f.label|urlencode }}&tab={{ tab }}"
+              hx-target="#payee-queue-box" hx-swap="innerHTML">
+        {{ f.label }} <span class="payee-tab-count">{{ f.groups }}</span>
+      </button>
+    {% endfor %}
+  </div>
+  <div class="payee-tabs" role="tablist" aria-label="Proposals">
+    {% for key, label, n in [('single', 'Single spelling', single_count), ('multiple', 'Several spellings', multiple_count)] %}
+      <button type="button" role="tab" class="payee-tab" aria-selected="{{ 'true' if tab == key else 'false' }}"
+              hx-get="/payees?part=queue&field={{ field|urlencode }}&tab={{ key }}" hx-target="#payee-queue-box" hx-swap="innerHTML">
+        {{ label }} <span class="payee-tab-count">{{ n }}</span>
+      </button>
+    {% endfor %}
+    {% if queue %}<span class="muted payee-tabs-note">{{ count_label(queue|length, 'group') }} here cover {{ queue_cover }} transactions</span>{% endif %}
+  </div>
+  <p class="muted payee-tab-help">
+    Each suggestion is built from <strong>{{ field }}</strong> alone.
+    {% if tab == 'single' %}These are single values; divide a group on the other tab and its values land here.
+    {% else %}These fold several values into one proposal; divide one to treat every value on its own.{% endif %}
+    Open a suggestion to see how its transactions split by the other fields.
+  </p>
+{% else %}
+  <p class="muted">
+    No payee fields are set up yet. Add up to five on an import mapping (Import, then edit the
+    mapping), then use “Fill payee fields” to add them to transactions you already have.
+  </p>
+{% endif %}
+    {% if queue %}
+      <div class="payee-queue">
+        {% for g in queue %}
+          <div class="payee-card">
+          <form class="payee-group" hx-get="/payees/name-preview" hx-target="#payee-dialog-content" hx-swap="innerHTML">
+            <input type="hidden" name="key" value="{{ g.key }}">
+            <ul class="payee-spellings">
+              {% for spelling, n in g.spellings[:card_spellings] %}
+                <li><span title="{{ spelling }}">{{ spelling }}</span><span>{{ n }}×</span></li>
+              {% endfor %}
+              {% if g.spellings|length > card_spellings %}
+                <li class="more"><span>+ {{ g.spellings|length - card_spellings }} more spellings</span><span></span></li>
+              {% endif %}
+            </ul>
+            <span class="payee-fold" aria-hidden="true"></span>
+            <div class="payee-namebox">
+              <input type="text" name="name" value="{{ g.suggestion }}" autocomplete="off"
+                     placeholder="{{ 'Leave unnamed, or type a name' if g.memo_like else 'Payee name' }}"
+                     aria-label="Payee name for {{ count_label(g.spellings|length, 'bank spelling') }}">
+              <span class="muted payee-stats">
+                {% if g.memo_like %}<span class="payee-memo">Looks like memo text</span>{% endif %}
+                {% if g.other_fields %}
+                  <span class="payee-source" title="How many of this group's transactions also have a value in each other payee field. Open the group to split it by them.">
+                    also {% for other, n in g.other_fields %}{{ other }} {{ n }} of {{ g.count }}{{ ' · ' if not loop.last }}{% endfor %}
+                  </span>
+                {% endif %}
+                {{ count_label(g.count, 'transaction') }}
+                {%- if g.spent %} · {{ g.spent|money }} spent{% endif %}
+                {%- if g.received %} · {{ g.received|money }} received{% endif %}
+                · mostly {{ g.top_category or 'uncategorized' }}
+              </span>
+            </div>
+            <div class="payee-actions">
+              {% if g.spellings|length > 1 %}
+                <button type="button" class="btn-outline"
+                        title="Treat each of these {{ g.spellings|length }} spellings as its own proposal"
+                        hx-post="/payees/split" hx-vals='{{ {"key": g.key}|tojson }}'
+                        hx-target="#payees-content" hx-swap="none">Divide into {{ g.spellings|length }}</button>
+              {% elif g.exact %}
+                <button type="button" class="btn-outline"
+                        title="Put this spelling back into a group with similar ones"
+                        hx-post="/payees/unsplit" hx-vals='{{ {"key": g.key}|tojson }}'
+                        hx-target="#payees-content" hx-swap="none">Group with similar</button>
+              {% endif %}
+              <button type="button" class="btn-outline"
+                      hx-post="/payees/skip" hx-vals='{{ {"key": g.key}|tojson }}'
+                      hx-target="#payees-content" hx-swap="none">Leave unnamed</button>
+              <button type="submit">Name {{ count_label(g.count, 'transaction') }}</button>
+            </div>
+          </form>
+          {# The workspace: every column's values, all spellings, and the distinct
+             combinations of the columns a rule could use. Loaded when opened, or
+             already open after one of its combinations was named. Offered only
+             when it holds more than the card already shows. #}
+          {% if g.has_more_detail %}
+            <details class="payee-detail"{% if g.key == open_key and detail %} open{% endif %}
+                     {%- if not (g.key == open_key and detail) %}
+                     hx-get="/payees/group" hx-vals='{{ {"key": g.key}|tojson }}'
+                     hx-trigger="toggle once" hx-target="find .payee-detail-body" hx-swap="innerHTML"{% endif %}>
+              <summary>
+                {% if g.other_fields %}Split by other fields, all {{ count_label(g.spellings|length, 'value') }}
+                {% else %}All {{ count_label(g.spellings|length, 'value') }}{% endif %}
+              </summary>
+              <div class="payee-detail-body">
+                {% if g.key == open_key and detail %}{% include "payees/_group_detail.html" %}{% endif %}
+              </div>
+            </details>
+          {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+      {% if more_groups %}
+        <p class="muted payee-foot">
+          + {{ more_groups }} more groups{% if more_once %}, {{ more_once }} of them seen only once (invoice numbers, memo text){% endif %}.
+          They move up as you name these.
+        </p>
+      {% endif %}
+    {% elif tab == 'single' and multiple_count %}
+      <p class="muted">No single values left in {{ field }}. {{ multiple_count }} group{{ '' if multiple_count == 1 else 's' }} of several spellings wait on the other tab.</p>
+    {% elif tab == 'multiple' and single_count %}
+      <p class="muted">No groups of several values left in {{ field }}. {{ single_count }} single value{{ '' if single_count == 1 else 's' }} wait on the other tab.</p>
+    {% else %}
+      <p class="muted">Every transaction with a value in {{ field }} has a payee, or was left unnamed. Try another field, or import more.</p>
+    {% endif %}
+
+{% if no_fields_count %}
+  <p class="muted payee-foot">
+    {{ count_label(no_fields_count, 'transaction') }} {{ 'has' if no_fields_count == 1 else 'have' }}
+    no payee field saved, so {{ 'it' if no_fields_count == 1 else 'they' }} cannot be named yet.
+    Use “Fill payee fields” on the Import page with an older export to add them.
+  </p>
+{% endif %}

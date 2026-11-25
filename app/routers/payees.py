@@ -12,30 +12,43 @@ apply step runs, so the preview cannot disagree with what is written.
 overwritten by naming a cluster.
 """
 
+import json
 from collections.abc import Callable
+from urllib.parse import quote, unquote
 
 from fastapi import APIRouter, Form, Query, Request
 from fastapi.responses import HTMLResponse
 
 from app.routers.htmx_events import toast
 from app.services.payees import (
+    CARD_SPELLINGS,
     PayeeSummary,
     add_rules,
     apply_naming,
     clean_payee_name,
     clear_skipped,
+    combinations,
     coverage,
     default_labels,
+    distinct_spellings,
     field_options,
+    field_text,
     group_members,
     merge_payees,
     money_flow,
+    payee_field_labels,
     payee_summaries,
     plan_naming,
     retarget_rules,
     skip_group,
+    split_group,
+    split_key,
+    suggest_name,
     unnamed_groups,
+    unsplit_group,
+    without_payee_fields,
 )
+from app.storage.import_mappings import list_all_mappings
 from app.storage.ledger import read_ledger, write_ledger
 from app.storage.payees import read_payee_book, write_payee_book
 from app.templating import templates
@@ -45,6 +58,7 @@ router = APIRouter(prefix="/payees", tags=["payees"])
 QUEUE_LIMIT = 8  # groups listed under "Name these"
 GOAL_GROUPS = 25  # the meter's marker: coverage after naming this many groups
 PREVIEW_ROWS = 6  # sample transactions shown in a preview dialog
+COMBO_LIMIT = 25  # combinations listed in a group's workspace
 
 
 def _transactions(count: int) -> str:
@@ -59,6 +73,10 @@ _SORTS: dict[str, Callable[[PayeeSummary], object]] = {
     "received": lambda p: p.received,
     "last": lambda p: p.last_seen,
 }
+TABS = ("single", "multiple")  # "Name these": one spelling vs several
+DEFAULT_TAB = "single"
+TAB_COOKIE = "payee_tab"
+FIELD_COOKIE = "payee_field"
 DEFAULT_SORT = "name"  # when nothing was ever chosen
 SORT_COOKIE = "payee_sort"
 DIR_COOKIE = "payee_dir"
@@ -95,24 +113,131 @@ def resolve_sort(
     return chosen, _DEFAULT_DIR[chosen]
 
 
-def _remember_sort(response: HTMLResponse, sort: str, direction: str) -> HTMLResponse:
-    """Store the list's sort so the next visit, and every swap, keeps it."""
+def resolve_tab(request: Request, tab: str | None) -> str:
+    """Pick the "Name these" tab: the URL, else the remembered one, else the first."""
+    if tab in TABS:
+        return tab
+    cookie = request.cookies.get(TAB_COOKIE)
+    return cookie if cookie in TABS else DEFAULT_TAB
+
+
+def _remember_sort(
+    response: HTMLResponse,
+    sort: str,
+    direction: str,
+    tab: str = DEFAULT_TAB,
+    field: str = "",
+) -> HTMLResponse:
+    """Store the list's sort and the queue's tab and field for the next visit."""
     response.set_cookie(SORT_COOKIE, sort, max_age=SORT_COOKIE_MAX_AGE)
     response.set_cookie(DIR_COOKIE, direction, max_age=SORT_COOKIE_MAX_AGE)
+    response.set_cookie(TAB_COOKIE, tab, max_age=SORT_COOKIE_MAX_AGE)
+    if field:
+        # Labels are free text ("Tytuł"), but a cookie value must be plain ASCII.
+        response.set_cookie(FIELD_COOKIE, quote(field), max_age=SORT_COOKIE_MAX_AGE)
     return response
 
 
+def remembered_field(request: Request) -> str:
+    """Return the payee field last chosen for "Name these", or ``""``."""
+    return unquote(request.cookies.get(FIELD_COOKIE, ""))
+
+
+def _parse_combo(raw: str) -> dict[str, str] | None:
+    """Parse the ``combo`` form value: a JSON object of field label -> value.
+
+    Anything else (blank, malformed, empty, non-text values) means "no combo".
+    """
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        return None
+    if not isinstance(data, dict) or not data:
+        return None
+    if not all(
+        isinstance(k, str) and isinstance(v, str) and v.strip() for k, v in data.items()
+    ):
+        return None
+    return data
+
+
+def _group_detail_context(
+    ledger: list, key: str, labels: list[str], chosen: str
+) -> dict | None:
+    """Everything a group's workspace shows, or ``None`` if the group is gone.
+
+    Every field the group's rows have (with its values), the full list of
+    spellings it was formed on, and the distinct combinations of the ticked
+    fields, each with a suggested name.
+    """
+    members = group_members(ledger, key)
+    if not members:
+        return None
+    label = split_key(key)[0]
+    picked, error = _chosen_labels(key, members, labels, chosen)
+    combos, without = combinations(members, picked) if picked else ([], len(members))
+    rows = []
+    for combo in combos[:COMBO_LIMIT]:
+        suggestion = next(
+            (s for v in combo.values.values() if (s := suggest_name([(v, 1)]))), ""
+        )
+        rows.append(
+            {
+                "combo": combo,
+                "json": json.dumps(combo.values, ensure_ascii=False),
+                "suggestion": suggestion,
+            }
+        )
+    return {
+        "key": key,
+        "label": label,
+        "options": field_options(members),
+        "picked": picked,
+        "error": error,
+        "rows": rows,
+        "more_combos": max(0, len(combos) - COMBO_LIMIT),
+        "without": without,
+        "member_count": len(members),
+        "spellings": distinct_spellings([field_text(t, label) for t in members]),
+    }
+
+
 def _content_context(
-    q: str = "", sort: str = DEFAULT_SORT, direction: str = ""
+    q: str = "",
+    sort: str = DEFAULT_SORT,
+    direction: str = "",
+    open_key: str = "",
+    open_labels: list[str] | None = None,
+    tab: str = DEFAULT_TAB,
+    field: str = "",
 ) -> dict:
-    """Everything ``payees/_content.html`` renders, from the ledger and the book."""
+    """Everything ``payees/_content.html`` renders, from the ledger and the book.
+
+    ``field`` picks which payee field "Name these" builds its suggestions from
+    (the first one when it is blank or unknown); ``tab`` which of them it lists:
+    groups of one spelling, or groups of several.
+
+    ``open_key`` names a group whose workspace should come back already
+    expanded (with ``open_labels`` ticked), e.g. right after one of its
+    combinations was named.
+    """
     sort = sort if sort in _SORTS else DEFAULT_SORT
     direction = direction if direction in ("asc", "desc") else _DEFAULT_DIR[sort]
     ledger = read_ledger()
     book = read_payee_book()
     named, total = coverage(ledger)
-    groups = unnamed_groups(ledger, book)
-    queue = groups[:QUEUE_LIMIT]
+    configured = [f.label for m in list_all_mappings() for f in m.payee_fields]
+    labels = payee_field_labels(ledger, configured)
+    field = field if field in labels else (labels[0] if labels else "")
+    by_field = {label: unnamed_groups(ledger, book, label) for label in labels}
+    groups = by_field.get(field, [])
+    singles = [g for g in groups if len(g.spellings) == 1]
+    multiples = [g for g in groups if len(g.spellings) > 1]
+    tab = tab if tab in TABS else DEFAULT_TAB
+    shown = singles if tab == "single" else multiples
+    queue = shown[:QUEUE_LIMIT]
     goal_named = named + sum(g.count for g in groups[:GOAL_GROUPS])
     needle = q.strip().casefold()
     summaries = [
@@ -129,9 +254,23 @@ def _content_context(
         "pct": (named / total * 100) if total else 0.0,
         "goal_pct": (goal_named / total * 100) if total else 0.0,
         "queue": queue,
+        "field": field,
+        "field_tabs": [
+            {
+                "label": label,
+                "groups": len(by_field[label]),
+                "rows": sum(g.count for g in by_field[label]),
+            }
+            for label in labels
+        ],
+        "tab": tab,
+        "card_spellings": CARD_SPELLINGS,
+        "no_fields_count": without_payee_fields(ledger),
+        "single_count": len(singles),
+        "multiple_count": len(multiples),
         "queue_cover": sum(g.count for g in queue),
-        "more_groups": len(groups) - len(queue),
-        "more_once": sum(1 for g in groups[len(queue) :] if g.count == 1),
+        "more_groups": len(shown) - len(queue),
+        "more_once": sum(1 for g in shown[len(queue) :] if g.count == 1),
         "skipped_count": len(book.skipped),
         "summaries": summaries,
         "q": q,
@@ -139,21 +278,41 @@ def _content_context(
         "dir": direction,
         "default_dir": _DEFAULT_DIR,
         "has_payees": any(t.payee for t in ledger),
+        "open_key": open_key,
+        "detail": (
+            _group_detail_context(ledger, open_key, open_labels or [], "1")
+            if open_key and open_labels
+            else None
+        ),
     }
 
 
 def _render_content(
-    request: Request, *, oob: bool = False, headers: dict[str, str] | None = None
+    request: Request,
+    *,
+    oob: bool = False,
+    headers: dict[str, str] | None = None,
+    open_key: str = "",
+    open_labels: list[str] | None = None,
 ) -> HTMLResponse:
     """Render the swappable page region (coverage, queue, list) afresh.
 
-    The list keeps the sort the user last chose (read from the cookie).
+    The list keeps the sort, and the queue the tab, the user last chose (read
+    from their cookies).
     """
     sort, direction = resolve_sort(request, None, None)
+    context = _content_context(
+        sort=sort,
+        direction=direction,
+        open_key=open_key,
+        open_labels=open_labels,
+        tab=resolve_tab(request, None),
+        field=remembered_field(request),
+    )
     return templates.TemplateResponse(
         request,
         "payees/_content.html",
-        {**_content_context(sort=sort, direction=direction), "oob": oob},
+        {**context, "oob": oob},
         headers=headers,
     )
 
@@ -165,25 +324,46 @@ def payees_page(
     sort: str | None = None,
     direction: str | None = Query(None, alias="dir"),
     part: str = "",
+    tab: str | None = None,
+    field: str | None = None,
 ) -> HTMLResponse:
-    """Render the payee management page, or just its list for search and sorting.
+    """Render the payee management page, or just a part of it.
 
-    The sort is remembered between visits (see ``resolve_sort``), so leaving the
-    page and coming back, or searching, keeps the order last chosen.
+    ``part=table`` is the list (search and sorting), ``part=queue`` the "Name
+    these" box (switching field or tab). The sort, the tab and the field are
+    remembered between visits (see ``resolve_sort`` and ``resolve_tab``).
     """
     sort, direction = resolve_sort(request, sort, direction)
-    context = _content_context(q, sort, direction)
+    tab = resolve_tab(request, tab)
+    wanted_field = field if field else remembered_field(request)
+    context = _content_context(q, sort, direction, tab=tab, field=wanted_field)
     if part == "table":
         response = templates.TemplateResponse(request, "payees/_table.html", context)
+    elif part == "queue":
+        response = templates.TemplateResponse(request, "payees/_queue.html", context)
     else:
         response = templates.TemplateResponse(
             request, "payees/list.html", {**context, "oob": False}
         )
-    return _remember_sort(response, sort, direction)
+    return _remember_sort(response, sort, direction, tab, context["field"])
+
+
+@router.get("/group", response_class=HTMLResponse)
+def group_workspace(
+    request: Request,
+    key: str,
+    fields: list[str] = Query(default=[]),
+    chosen: str = "",
+) -> HTMLResponse:
+    """Render a group's workspace: every field's values, all spellings, combinations."""
+    detail = _group_detail_context(read_ledger(), key, fields, chosen)
+    return templates.TemplateResponse(
+        request, "payees/_group_detail.html", {"detail": detail}
+    )
 
 
 def _chosen_labels(
-    members: list, labels: list[str], chosen: str
+    key: str, members: list, labels: list[str], chosen: str
 ) -> tuple[list[str], str | None]:
     """Return the fields a naming rule uses, and an error if none are usable.
 
@@ -193,7 +373,7 @@ def _chosen_labels(
     """
     available = {o.label for o in field_options(members) if o.present}
     if not chosen:
-        return default_labels(members), None
+        return default_labels(key, members), None
     picked = [label for label in labels if label in available]
     if not picked:
         return [], "Pick at least one field to build the rule from."
@@ -206,13 +386,21 @@ def _name_dialog(
     name: str,
     labels: list[str],
     chosen: str,
+    combo: dict[str, str] | None = None,
     *,
     error: str | None = None,
 ) -> HTMLResponse:
-    """Render the "name this group" dialog: fields to use, and what it would change."""
+    """Render the "name this" dialog: what it would change, and the fields it uses.
+
+    With ``combo`` it names exactly one combination of field values (one rule on
+    all of them); without, the whole group, with fields the user can tick.
+    """
     ledger = read_ledger()
     members = group_members(ledger, key)
-    picked, label_error = _chosen_labels(members, labels, chosen)
+    if combo:
+        picked, label_error = list(combo), None
+    else:
+        picked, label_error = _chosen_labels(key, members, labels, chosen)
     error = error or label_error
     cleaned = name
     if error is None:
@@ -223,12 +411,17 @@ def _name_dialog(
     if error is None and not members:
         error = "Nothing left to name in this group; it may have been named already."
     plan = (
-        plan_naming(ledger, read_payee_book(), key, picked, cleaned)
+        plan_naming(ledger, read_payee_book(), key, picked, cleaned, only=combo)
         if picked and cleaned and members
         else None
     )
     if error is None and plan is not None and not plan.rows:
-        error = "These fields would not name any transaction. Pick different fields."
+        error = (
+            "Nothing would be named: these rows are already named or claimed by "
+            "a more specific rule."
+            if combo
+            else "These fields would not name any transaction. Pick different fields."
+        )
     rows = plan.rows if plan else []
     spent, received = money_flow(rows)
     return templates.TemplateResponse(
@@ -239,6 +432,8 @@ def _name_dialog(
             "name": cleaned,
             "options": field_options(members),
             "picked": picked,
+            "combo": combo,
+            "combo_json": json.dumps(combo, ensure_ascii=False) if combo else "",
             "rule_count": len(plan.rules) if plan else 0,
             "count": len(rows),
             "without_fields": plan.rows_without_fields if plan else 0,
@@ -257,9 +452,10 @@ def name_preview(
     name: str = "",
     fields: list[str] = Query(default=[]),
     chosen: str = "",
+    combo: str = "",
 ) -> HTMLResponse:
-    """Preview naming a group: the rules it makes and the transactions it names."""
-    return _name_dialog(request, key, name, fields, chosen)
+    """Preview naming a group (or one combination): its rules and the rows it names."""
+    return _name_dialog(request, key, name, fields, chosen, _parse_combo(combo))
 
 
 @router.post("/name", response_class=HTMLResponse)
@@ -269,21 +465,26 @@ def name_group_route(
     name: str = Form(""),
     fields: list[str] = Form(default=[]),
     chosen: str = Form(""),
+    combo: str = Form(""),
 ) -> HTMLResponse:
-    """Name a group: save its rules and name every transaction they claim."""
+    """Name a group or one combination: save its rules and name the rows they claim."""
+    only = _parse_combo(combo)
     try:
         payee = clean_payee_name(name)
     except ValueError as exc:
-        return _name_dialog(request, key, name, fields, chosen, error=str(exc))
+        return _name_dialog(request, key, name, fields, chosen, only, error=str(exc))
     ledger = read_ledger()
     book = read_payee_book()
     members = group_members(ledger, key)
-    picked, label_error = _chosen_labels(members, fields, chosen)
+    if only:
+        picked, label_error = list(only), None
+    else:
+        picked, label_error = _chosen_labels(key, members, fields, chosen)
     if label_error or not members:
-        return _name_dialog(request, key, name, fields, chosen)
-    plan = plan_naming(ledger, book, key, picked, payee)
+        return _name_dialog(request, key, name, fields, chosen, only)
+    plan = plan_naming(ledger, book, key, picked, payee, only=only)
     if not plan.rows:
-        return _name_dialog(request, key, name, fields, chosen)
+        return _name_dialog(request, key, name, fields, chosen, only)
     write_ledger(apply_naming(ledger, plan, payee))
     write_payee_book(add_rules(book, plan.rules))
     return _render_content(
@@ -292,7 +493,33 @@ def name_group_route(
         headers=toast(
             f"Named {_transactions(len(plan.rows))} as {payee}", close_dialog=True
         ),
+        # Splitting a group means naming several combinations in a row, so its
+        # workspace stays open on the same fields.
+        open_key=key if only else "",
+        open_labels=list(only) if only else None,
     )
+
+
+@router.post("/split", response_class=HTMLResponse)
+def split_route(request: Request, key: str = Form(...)) -> HTMLResponse:
+    """Divide a group into one proposal per spelling (they join the single tab)."""
+    ledger = read_ledger()
+    book = read_payee_book()
+    label = split_key(key)[0]
+    count = len({field_text(t, label) for t in group_members(ledger, key)})
+    write_payee_book(split_group(book, key))
+    return _render_content(
+        request,
+        oob=True,
+        headers=toast(f"Divided into {count} single spellings"),
+    )
+
+
+@router.post("/unsplit", response_class=HTMLResponse)
+def unsplit_route(request: Request, key: str = Form(...)) -> HTMLResponse:
+    """Group a divided spelling with its similar ones again."""
+    write_payee_book(unsplit_group(read_payee_book(), key))
+    return _render_content(request, oob=True, headers=toast("Grouped with similar"))
 
 
 @router.post("/skip", response_class=HTMLResponse)

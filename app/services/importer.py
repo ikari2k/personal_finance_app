@@ -406,12 +406,7 @@ def build_transactions(
         payee_fields = row.payee_fields
         payee = (
             (rule.payee if rule and rule.payee else "")
-            or match_payee(
-                payee_rules or [],
-                field_values_of(
-                    row.description, row.counterparty_account, payee_fields
-                ),
-            )
+            or match_payee(payee_rules or [], field_values_of(payee_fields))
             or row.payee
         ).strip()
         transactions.append(

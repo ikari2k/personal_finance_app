@@ -593,12 +593,24 @@ def test_apply_payee_edits_ignores_a_list_that_does_not_line_up():
 def test_build_transactions_payee_precedence_rule_then_payee_rule_then_bank():
     rules = [Rule(pattern="PayU", category="Fun", payee="Cinema City")]
     payee_rules = [
-        PayeeRule(fields={DESCRIPTION_FIELD: "ZABKA Z8540 K.2"}, payee="Żabka"),
-        PayeeRule(fields={DESCRIPTION_FIELD: "PayU"}, payee="Loses to the rule"),
+        PayeeRule(fields={"Place": "ZABKA Z8540 K.2"}, payee="Żabka"),
+        PayeeRule(fields={"Place": "PayU"}, payee="Loses to the category rule"),
     ]
     rows = [
-        ParsedRow(date(2026, 9, 10), "PayU", Decimal("-9"), payee="Bank"),
-        ParsedRow(date(2026, 9, 11), "ZABKA  Z8540 K.2", Decimal("-3"), payee="Bank"),
+        ParsedRow(
+            date(2026, 9, 10),
+            "PayU",
+            Decimal("-9"),
+            payee="Bank",
+            payee_fields={"Place": "PayU"},
+        ),
+        ParsedRow(
+            date(2026, 9, 11),
+            "ZABKA Z8540 K.2",
+            Decimal("-3"),
+            payee="Bank",
+            payee_fields={"Place": "ZABKA  Z8540 K.2"},
+        ),
         ParsedRow(date(2026, 9, 12), "Other", Decimal("-1"), payee="Bank"),
     ]
 
@@ -607,11 +619,21 @@ def test_build_transactions_payee_precedence_rule_then_payee_rule_then_bank():
     assert [t.payee for t in txns] == ["Cinema City", "Żabka", "Bank"]
 
 
+def test_a_payee_rule_never_matches_the_description_only_payee_fields():
+    # A rule on the bank text is not a payee rule: only payee fields count.
+    payee_rules = [PayeeRule(fields={DESCRIPTION_FIELD: "ZABKA"}, payee="Żabka")]
+    rows = [ParsedRow(date(2026, 9, 11), "ZABKA", Decimal("-3"))]
+
+    [txn] = build_transactions(rows, "chk", [], payee_rules)
+
+    assert txn.payee == ""
+
+
 def test_build_transactions_matches_payee_rules_on_the_captured_fields():
     payee_rules = [
-        PayeeRule(fields={DESCRIPTION_FIELD: "PayU"}, payee="PayU"),
+        PayeeRule(fields={"Merchant": "PayU"}, payee="PayU"),
         PayeeRule(
-            fields={DESCRIPTION_FIELD: "PayU", "Web address": "cinema-city.pl"},
+            fields={"Merchant": "PayU", "Web address": "cinema-city.pl"},
             payee="Cinema City",
         ),
     ]
@@ -620,18 +642,21 @@ def test_build_transactions_matches_payee_rules_on_the_captured_fields():
             date(2026, 9, 10),
             "PayU",
             Decimal("-9"),
-            payee_fields={"Web address": "Cinema-City.pl"},
+            payee_fields={"Merchant": "PayU", "Web address": "Cinema-City.pl"},
         ),
-        ParsedRow(date(2026, 9, 11), "PayU", Decimal("-5")),
+        ParsedRow(
+            date(2026, 9, 11),
+            "PayU",
+            Decimal("-5"),
+            payee_fields={"Merchant": "PayU"},
+        ),
     ]
 
     txns = build_transactions(rows, "chk", [], payee_rules)
 
     assert [t.payee for t in txns] == ["Cinema City", "PayU"]  # more fields wins
-    assert txns[0].payee_fields == {
-        "Web address": "Cinema-City.pl"
-    }  # stored on the row
-    assert txns[1].payee_fields == {}
+    assert txns[0].payee_fields["Web address"] == "Cinema-City.pl"  # stored on the row
+    assert txns[1].payee_fields == {"Merchant": "PayU"}
 
 
 def test_parse_rows_captures_the_mappings_payee_field_columns_by_label():

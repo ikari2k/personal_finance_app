@@ -1,4 +1,4 @@
-{% macro count_label(n, word) %}{{ n }} {{ word }}{{ '' if n == 1 else 's' }}{% endmacro %}
+{% from "payees/_macros.html" import count_label %}
 <div id="payees-content" {% if oob %}hx-swap-oob="true"{% endif %}>
   <section class="report-card">
     <div class="payee-cover-line">
@@ -14,62 +14,17 @@
       {% endif %}
     </div>
     <ol class="payee-order" aria-label="Order names are applied in">
-      <li><strong>Bank text</strong>The description from the import. It is never changed.</li>
-      <li><strong>Payee</strong>A spelling you have named gets its name on every import. Pattern rules come next.</li>
-      <li><strong>Category rules</strong>Unchanged for now: they match the bank text.</li>
+      <li><strong>Payee fields</strong>The columns you chose on import, saved on every transaction.</li>
+      <li><strong>Payee rules</strong>A rule on one or more of those fields names the payee, on existing transactions and on every import.</li>
+      <li><strong>Category rules</strong>Unchanged: they still match the transaction's description.</li>
     </ol>
   </section>
 
   <section class="report-card">
     <div class="dash-widget-head">
       <h2 style="margin: 0;">Name these</h2>
-      {% if queue %}<span class="muted">{{ count_label(queue|length, 'group') }} here cover {{ queue_cover }} transactions</span>{% endif %}
     </div>
-    {% if queue %}
-      <div class="payee-queue">
-        {% for g in queue %}
-          <form class="payee-group" hx-get="/payees/name-preview" hx-target="#payee-dialog-content" hx-swap="innerHTML">
-            <input type="hidden" name="key" value="{{ g.key }}">
-            <ul class="payee-spellings">
-              {% for spelling, n in g.spellings[:3] %}
-                <li><span title="{{ spelling }}">{{ spelling }}</span><span>{{ n }}×</span></li>
-              {% endfor %}
-              {% if g.spellings|length > 3 %}
-                <li class="more"><span>+ {{ g.spellings|length - 3 }} more spellings</span><span></span></li>
-              {% endif %}
-            </ul>
-            <span class="payee-fold" aria-hidden="true"></span>
-            <div class="payee-namebox">
-              <input type="text" name="name" value="{{ g.suggestion }}" autocomplete="off"
-                     placeholder="{{ 'Leave unnamed, or type a name' if g.memo_like else 'Payee name' }}"
-                     aria-label="Payee name for {{ count_label(g.spellings|length, 'bank spelling') }}">
-              <span class="muted payee-stats">
-                {% if g.memo_like %}<span class="payee-memo">Looks like memo text</span>{% endif %}
-                {% if g.primary_label != 'Description' %}<span class="payee-by">by {{ g.primary_label }}</span>{% endif %}
-                {{ count_label(g.count, 'transaction') }}
-                {%- if g.spent %} · {{ g.spent|money }} spent{% endif %}
-                {%- if g.received %} · {{ g.received|money }} received{% endif %}
-                · mostly {{ g.top_category or 'uncategorized' }}
-              </span>
-            </div>
-            <div class="payee-actions">
-              <button type="button" class="btn-outline"
-                      hx-post="/payees/skip" hx-vals='{{ {"key": g.key}|tojson }}'
-                      hx-target="#payees-content" hx-swap="none">Leave unnamed</button>
-              <button type="submit">Name {{ count_label(g.count, 'transaction') }}</button>
-            </div>
-          </form>
-        {% endfor %}
-      </div>
-      {% if more_groups %}
-        <p class="muted payee-foot">
-          + {{ more_groups }} more groups{% if more_once %}, {{ more_once }} of them seen only once (invoice numbers, memo text){% endif %}.
-          They move up as you name these.
-        </p>
-      {% endif %}
-    {% else %}
-      <p class="muted">Every transaction with a bank text has a payee, or was left unnamed. New imports with an unnamed spelling show up here.</p>
-    {% endif %}
+    <div id="payee-queue-box">{% include "payees/_queue.html" %}</div>
     {% if skipped_count %}
       <p class="muted payee-foot">
         {{ count_label(skipped_count, 'group') }} left unnamed.

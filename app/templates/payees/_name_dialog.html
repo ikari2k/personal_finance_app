@@ -1,9 +1,18 @@
 <form hx-get="/payees/name-preview" hx-trigger="change" hx-target="#payee-dialog-content" hx-swap="innerHTML">
   <input type="hidden" name="key" value="{{ key }}">
   <input type="hidden" name="chosen" value="1">
+  {% if combo %}<input type="hidden" name="combo" value="{{ combo_json }}">{% endif %}
   <label>Payee name
     <input type="text" name="name" value="{{ name }}" autocomplete="off" required>
   </label>
+  {% if combo %}
+    <div class="payee-fields">
+      <p class="muted">This rule matches a transaction that has all of:</p>
+      <ul class="payee-rule-terms">
+        {% for label, value in combo.items() %}<li><strong>{{ label }}</strong> {{ value }}</li>{% endfor %}
+      </ul>
+    </div>
+  {% else %}
   <fieldset class="payee-fields">
     <legend>Build the rule from</legend>
     {% for o in options %}
@@ -25,6 +34,7 @@
       </label>
     {% endfor %}
   </fieldset>
+  {% endif %}
 
   {% if error %}
     <p class="error">{{ error }}</p>

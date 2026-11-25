@@ -36,12 +36,13 @@ def transactions_link(
     txn_type: str = "",
     account_id: str = "",
     search: str = "",
+    payee: str = "",
 ) -> str:
     """Build a ``/transactions`` URL that fully specifies every sticky filter.
 
-    Always emits all seven of ``list_transactions``'s sticky-cookie
+    Always emits all eight of ``list_transactions``'s sticky-cookie
     filters explicitly (``account_id``/``category``/``subcategory``/
-    ``txn_type``/``search``/``date_from``/``date_to``), even the ones
+    ``txn_type``/``search``/``payee``/``date_from``/``date_to``), even the ones
     left at their default ``""`` — an *omitted* param there falls back
     to whatever's in the visitor's sticky cookie (see
     ``list_transactions``'s own docstring), so a link built to mean
@@ -58,6 +59,7 @@ def transactions_link(
         "subcategory": subcategory,
         "txn_type": txn_type,
         "search": search,
+        "payee": payee,
         "account_id": account_id,
     }
     query = "&".join(f"{key}={quote(value)}" for key, value in params.items())

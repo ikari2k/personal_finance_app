@@ -1716,3 +1716,30 @@ def test_search_also_matches_the_payee(client):
 
     assert "PayU 99" in text
     assert "Other" not in text
+
+
+def test_payee_filter_is_an_exact_match(client):
+    _create_account(client)
+    _add_expense(client, description="PayU 99", payee="Cinema City")
+    _add_expense(
+        client, description="Other", payee="Cinema City Plaza", date="2026-01-16"
+    )
+
+    text = client.get("/transactions?payee=Cinema City").text
+
+    assert "PayU 99" in text
+    assert "Other" not in text
+    assert 'option value="Cinema City Plaza"' in text
+
+
+def test_payee_filter_is_sticky_and_survives_non_ascii_names(client):
+    _create_account(client)
+    _add_expense(client, description="Shop 1", payee="Żabka")
+    _add_expense(client, description="Shop 2", payee="Lidl", date="2026-01-16")
+
+    client.get("/transactions?payee=Żabka")
+    remembered = client.get("/transactions").text
+    cleared = client.get("/transactions?payee=").text
+
+    assert "Shop 1" in remembered and "Shop 2" not in remembered
+    assert "Shop 1" in cleared and "Shop 2" in cleared

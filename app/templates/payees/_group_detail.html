@@ -1,0 +1,107 @@
+{% if not detail %}
+  <p class="muted">Nothing is left to name in this group.</p>
+{% else %}
+  {% set d = detail %}
+  <form class="payee-ticks" hx-get="/payees/group" hx-trigger="change"
+        hx-target="closest .payee-detail-body" hx-swap="innerHTML">
+    <input type="hidden" name="key" value="{{ d.key }}">
+    <input type="hidden" name="chosen" value="1">
+    <p class="muted">
+      These {{ d.member_count }} transactions were grouped by <strong>{{ d.label }}</strong>. Here is how
+      the other payee fields cover them. Tick the fields a rule should use: it needs every ticked
+      field to match, so ticking more makes it narrower, and ticking another field instead of
+      {{ d.label }} makes a rule that can reach transactions outside this group.
+    </p>
+    <div class="payee-tickgrid">
+      {% for o in d.options %}
+        <label class="payee-tick{{ ' is-missing' if not o.present }}">
+          <input type="checkbox" name="fields" value="{{ o.label }}"
+                 {{ 'checked' if o.label in d.picked }} {{ 'disabled' if not o.present }}>
+          <span>
+            <strong>{{ o.label }}</strong>
+            <span class="muted">{% if o.present %}on {{ o.present }} of {{ o.total }} ({{ (o.present / o.total * 100)|round|int }}%){% else %}not here{% endif %}</span>
+            {% for value, n in o.values[:5] %}
+              <small class="payee-val" title="{{ value }}">{{ value }} <b>{{ n }}×</b></small>
+            {% endfor %}
+            {% if o.values|length > 5 %}<small class="muted">+ {{ o.values|length - 5 }} more</small>{% endif %}
+          </span>
+        </label>
+      {% endfor %}
+    </div>
+  </form>
+
+  {% if d.error %}
+    <p class="error">{{ d.error }}</p>
+  {% else %}
+    <div class="table-scroll">
+      <table class="payee-combos">
+        <thead>
+          <tr>
+            {% for label in d.picked %}<th>{{ label }}</th>{% endfor %}
+            <th class="num">Transactions</th>
+            <th class="num">Amount</th>
+            <th>Payee name</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in d.rows %}
+            {% set c = row.combo %}
+            {% set vals = {"key": d.key, "combo": row.json} %}
+            <tr>
+              {% for label in d.picked %}
+                <td class="payee-combo-value">
+                  <span title="{{ c.values[label] }}">{{ c.values[label] }}</span>
+                  {% if loop.first and c.others %}
+                    <small class="muted">
+                      {% for other, value in c.others.items() %}{{ other }}: {{ value }}{{ ' · ' if not loop.last }}{% endfor %}
+                    </small>
+                  {% endif %}
+                </td>
+              {% endfor %}
+              <td class="num">{{ c.count }}</td>
+              <td class="num">
+                {% if c.spent %}{{ c.spent|money }}{% endif %}
+                {% if c.received %}<span class="muted">+{{ c.received|money }}</span>{% endif %}
+              </td>
+              <td>
+                <input type="text" name="name" value="{{ row.suggestion }}" aria-label="Payee name for this combination"
+                       autocomplete="off" placeholder="Payee name"
+                       hx-get="/payees/name-preview" hx-vals='{{ vals|tojson }}'
+                       hx-trigger="keydown[key=='Enter']" hx-include="this"
+                       hx-target="#payee-dialog-content" hx-swap="innerHTML">
+              </td>
+              <td>
+                <button type="button" class="btn-outline"
+                        hx-get="/payees/name-preview" hx-vals='{{ vals|tojson }}'
+                        hx-include="closest tr" hx-target="#payee-dialog-content" hx-swap="innerHTML">
+                  Name {{ c.count }}
+                </button>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if d.more_combos %}
+      <p class="muted">+ {{ d.more_combos }} more combinations, smaller than these.</p>
+    {% endif %}
+    {% if d.without %}
+      <p class="muted">
+        {{ d.without }} transaction{{ '' if d.without == 1 else 's' }} in this group
+        {{ 'has' if d.without == 1 else 'have' }} no value in a ticked column, so
+        {{ 'it is' if d.without == 1 else 'they are' }} not listed here.
+        “Fill payee fields” on the Import page can add the missing values from an older CSV.
+      </p>
+    {% endif %}
+  {% endif %}
+
+  <details class="payee-allspell">
+    <summary>All {{ d.spellings|length }} spellings</summary>
+    <ul>
+      {% for spelling, n in d.spellings %}
+        <li><span title="{{ spelling }}">{{ spelling }}</span> <small class="muted">{{ n }}×</small></li>
+      {% endfor %}
+    </ul>
+  </details>
+{% endif %}

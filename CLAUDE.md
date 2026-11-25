@@ -72,10 +72,9 @@ tests/unit/     tmp_path-isolated; tests/integration/  TestClient, conftest redi
 - `config/payee_aliases.toml` — the payee book: `[[rules]]` (`payee` + a `[rules.fields]` table of
   label → exact value; a row matches when it has *every* field with that value, case- and
   spacing-insensitive via `services.payees.spelling_key`, never a pattern; more fields win, then
-  the newer rule = later in the file) and `skipped` (group keys left unnamed). Legacy `[[aliases]]`
+  the newer rule = later in the file) and `skipped` (group keys left unnamed) and `split` (group keys, `<field>::<cluster>`, divided into one group per spelling). Legacy `[[aliases]]`
   (`spelling, payee`) are still read, as rules on `Description`, and rewritten as rules on the next
-  save. Written only by `/payees`. Rule fields are `Description`, `Counterparty account` and the
-  labels of the import mapping's `payee_fields`. Import precedence: category-rule payee > payee
+  save. Written only by `/payees`. Rule fields are the labels of the import mapping's `payee_fields` only. Import precedence: category-rule payee > payee
   rule > mapping payee column.
 - `config/budget_rule.toml` — `needs, wants, savings` whole-percent targets (default 50/30/20,
   must sum to 100 via `services.budget_rule.validate_targets`).
@@ -117,9 +116,34 @@ tests/unit/     tmp_path-isolated; tests/integration/  TestClient, conftest redi
   user ticked) saves one rule per distinct value combination and names every payee-less row that
   one of the *new* rules wins; an existing payee is never overwritten, an older more-specific rule
   keeps its rows, and transfers and `description` are never touched. Every change (name, rename,
-  merge, fill) is previewed in a dialog from the same computation the apply step runs. Groups come
-  from `group_key` of a row's first captured field (else its description; store numbers, legal
-  suffixes and `com`/`www` dropped); a rename or merge also re-points the rules so imports follow.
+  merge, fill) is previewed in a dialog from the same computation the apply step runs. A rename
+  or merge also re-points the rules so imports follow.
+  Payee categorization uses *only the payee fields configured on the import mapping* (the
+  description and counterparty account are never payee fields; the description keeps its other
+  jobs: duplicate detection, category rules, the fill tool's matching, so an old rule on
+  `Description` never matches). A row with no payee field value is not offered anywhere (counted
+  by `without_payee_fields`, shown as "N transactions have no payee field saved" until the fill
+  tool adds values).
+  **Suggestions are built per payee field**: "Name these" has a tab per field (labels from the
+  mappings first, then stray ones: `payee_field_labels`; cookie `payee_field`, stored URL-encoded
+  because labels are free text like "Tytuł"), and `unnamed_groups(rows, book, label)` clusters only
+  the rows that have a value for that field (`group_key`: store numbers, legal suffixes and
+  `com`/`www` dropped). A group key is `"<label>::<cluster>"` (`make_key`/`split_key`), and
+  `skipped`/`split` entries carry it, so skipping or dividing under one field never touches
+  another. The same row can be offered under several fields; naming it under any one takes it out of
+  all of them (only payee-less rows are ever counted). Inside a field there are two tabs (cookie
+  `payee_tab`, default *single*): groups of one spelling, and of several. Dividing a group adds its
+  key to `split`; each value is then its own group, `<label>::exact:<spelling_key>`
+  (`row_group_key`, `group_members` and every naming/preview path accept those keys); "Group with
+  similar" undoes it. Spellings count ignoring case and spacing (`distinct_spellings`).
+  Each card shows which other fields its rows also have (`UnnamedGroup.other_fields`, "also
+  Web address 14 of 28"), and opens a workspace (`GET /payees/group`, offered only when
+  `has_more_detail`: other fields exist, or more spellings than `CARD_SPELLINGS`) with every field's
+  coverage and values and the distinct *combinations* of the ticked fields
+  (`services.payees.combinations`). The group's own field is ticked by default; ticking another
+  field (alone or with it) builds a rule that can reach rows outside the group, each combination
+  nameable on its own (`plan_naming(..., only=combo)` = one rule on all of the combo's fields).
+  The workspace stays open after naming a combination; a malformed `combo` is ignored.
   `/import/mappings/{bank}/enrich` fills `payee_fields` on *existing* rows from an older CSV
   (matched on account, date, amount, bank text; only missing labels, never overwrites; ambiguous
   rows skipped).

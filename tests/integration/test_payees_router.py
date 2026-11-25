@@ -1,11 +1,11 @@
 """Integration tests for the payee management view."""
 
 import json
+import re
 from datetime import date
 from decimal import Decimal
 
 from app import config
-from app.models.payee import DESCRIPTION_FIELD
 from app.models.transaction import Transaction, TransactionType
 from app.storage.ledger import read_ledger, write_ledger
 from app.storage.payees import read_payee_book
@@ -22,6 +22,8 @@ def _txn(id_, description, *, payee="", amount="-10", **overrides) -> Transactio
         "amount": Decimal(amount),
         "type": TransactionType.EXPENSE,
         "payee": payee,
+        # A row as a mapping with one payee field ("Place") would import it.
+        "payee_fields": {"Place": description} if description.strip() else {},
     }
     fields.update(overrides)
     return Transaction(**fields)
@@ -56,13 +58,16 @@ def test_page_lists_groups_to_name_with_suggestion_and_counts(client):
         _txn("3", "LIDL WEGLARSKA"),
     )
 
-    text = client.get("/payees").text
+    text = client.get("/payees?tab=multiple").text  # Żabka has two spellings
 
     assert "Name these" in text
     assert 'value="Zabka"' in text  # suggested from the most common spelling
     assert "Name 2 transactions" in text
     assert "ZABKA Z8540 K.2" in text and "ZABKA Z8540 K.1" in text
-    assert 'name="key" value="zabka"' in text
+    assert 'name="key" value="Place::zabka"' in text
+    assert (
+        'name="key" value="Place::lidl weglarska"' not in text
+    )  # that one is a single
 
 
 def test_name_preview_shows_what_would_change_without_writing(client):
@@ -70,7 +75,7 @@ def test_name_preview_shows_what_would_change_without_writing(client):
         _txn("1", "ZABKA Z1"), _txn("2", "ZABKA Z2"), _txn("3", "ZABKA Z3", payee="X")
     )
 
-    text = client.get("/payees/name-preview?key=zabka&name=Żabka").text
+    text = client.get("/payees/name-preview?key=Place::zabka&name=Żabka").text
 
     assert "<strong>2</strong>" in text  # the row that has a payee is left out
     assert "<strong>2</strong> rule" in text  # one per distinct description
@@ -81,8 +86,8 @@ def test_name_preview_shows_what_would_change_without_writing(client):
 def test_name_preview_rejects_a_blank_name_and_a_stale_group(client):
     _seed(_txn("1", "ZABKA"))
 
-    blank = client.get("/payees/name-preview?key=zabka&name=%20")
-    stale = client.get("/payees/name-preview?key=nothing&name=Foo")
+    blank = client.get("/payees/name-preview?key=Place::zabka&name=%20")
+    stale = client.get("/payees/name-preview?key=Place::nothing&name=Foo")
 
     assert "enter a payee name" in blank.text
     assert "Nothing left to name" in stale.text
@@ -96,7 +101,9 @@ def test_naming_a_group_names_rows_saves_rules_and_keeps_description(client):
         _txn("4", "ZABKA Z9", payee="Keep me"),
     )
 
-    response = client.post("/payees/name", data={"key": "zabka", "name": " Żabka "})
+    response = client.post(
+        "/payees/name", data={"key": "Place::zabka", "name": " Żabka "}
+    )
 
     assert response.status_code == 200
     assert _payees_by_id() == {"1": "Żabka", "2": "Żabka", "3": "", "4": "Keep me"}
@@ -105,7 +112,7 @@ def test_naming_a_group_names_rows_saves_rules_and_keeps_description(client):
         "ZABKA Z8540 K.1",
     }
     book = read_payee_book(config.PAYEE_ALIASES_PATH)
-    assert {r.fields[DESCRIPTION_FIELD] for r in book.rules} == {
+    assert {r.fields["Place"] for r in book.rules} == {
         "ZABKA Z8540 K.2",
         "ZABKA Z8540 K.1",
     }
@@ -117,7 +124,7 @@ def test_naming_a_group_names_rows_saves_rules_and_keeps_description(client):
 def test_naming_with_a_blank_name_changes_nothing(client):
     _seed(_txn("1", "ZABKA"))
 
-    response = client.post("/payees/name", data={"key": "zabka", "name": ""})
+    response = client.post("/payees/name", data={"key": "Place::zabka", "name": ""})
 
     assert "enter a payee name" in response.text
     assert _payees_by_id() == {"1": ""}
@@ -129,7 +136,7 @@ def test_named_payees_appear_in_the_list_with_usage(client):
         _txn("1", "ZABKA Z1", amount="-5"),
         _txn("2", "ZABKA Z2", amount="-7"),
     )
-    client.post("/payees/name", data={"key": "zabka", "name": "Żabka"})
+    client.post("/payees/name", data={"key": "Place::zabka", "name": "Żabka"})
 
     text = client.get("/payees").text
 
@@ -141,20 +148,20 @@ def test_named_payees_appear_in_the_list_with_usage(client):
 def test_skipping_a_group_hides_it_and_can_be_undone(client):
     _seed(_txn("1", "ZABKA"), _txn("2", "LIDL"))
 
-    client.post("/payees/skip", data={"key": "zabka"})
+    client.post("/payees/skip", data={"key": "Place::zabka"})
     hidden = client.get("/payees").text
     client.post("/payees/unskip")
     restored = client.get("/payees").text
 
-    assert 'name="key" value="zabka"' not in hidden
-    assert 'name="key" value="lidl"' in hidden
+    assert 'name="key" value="Place::zabka"' not in hidden
+    assert 'name="key" value="Place::lidl"' in hidden
     assert "1 group left unnamed" in hidden
-    assert 'name="key" value="zabka"' in restored
+    assert 'name="key" value="Place::zabka"' in restored
 
 
 def test_rename_updates_transactions_and_saved_rules(client):
     _seed(_txn("1", "ZABKA Z1"), _txn("2", "LIDL", payee="Lidl"))
-    client.post("/payees/name", data={"key": "zabka", "name": "Zabka"})
+    client.post("/payees/name", data={"key": "Place::zabka", "name": "Zabka"})
 
     response = client.post("/payees/rename", data={"old": "Zabka", "new": "Żabka"})
 
@@ -212,8 +219,8 @@ def test_merge_needs_two_payees_and_a_name(client):
 
 def test_merge_retargets_saved_rules(client):
     _seed(_txn("1", "ZABKA Z1"), _txn("2", "LIDL"))
-    client.post("/payees/name", data={"key": "zabka", "name": "Zabka"})
-    client.post("/payees/name", data={"key": "lidl", "name": "Lidl"})
+    client.post("/payees/name", data={"key": "Place::zabka", "name": "Zabka"})
+    client.post("/payees/name", data={"key": "Place::lidl", "name": "Lidl"})
 
     client.post("/payees/merge", data={"names": ["Zabka", "Lidl"], "name": "Groceries"})
 
@@ -305,7 +312,7 @@ def test_queue_and_preview_show_what_was_spent_and_received(client):
     )
 
     page = client.get("/payees").text
-    preview = client.get("/payees/name-preview?key=acme&name=Acme").text
+    preview = client.get("/payees/name-preview?key=Place::acme&name=Acme").text
 
     assert "10.00 spent" in page and "90.00 received" in page
     assert "10.00 spent" in preview and "90.00 received" in preview
@@ -407,46 +414,57 @@ def _web(id_, description, site, **kw):
     return _txn(id_, description, payee_fields={"Web address": site}, **kw)
 
 
-def test_the_dialog_offers_every_field_with_the_defaults_ticked(client):
+def test_the_dialog_offers_only_the_configured_payee_fields_with_the_default_ticked(
+    client,
+):
     _seed(_web("1", "PayU", "cinema-city.pl"), _web("2", "PayU", "cinema-city.pl"))
 
-    text = client.get("/payees/name-preview?key=cinema city&name=Cinema City").text
+    text = client.get(
+        "/payees/name-preview?key=Web address::cinema city&name=Cinema City"
+    ).text
 
-    assert 'name="fields" value="Description"' in text
     assert 'name="fields" value="Web address"' in text
-    assert 'value="Web address"\n               checked' in text  # grouped on it
-    assert 'value="Description"\n               checked' not in text
+    assert 'name="fields" value="Description"' not in text  # just the bank text
+    assert 'name="fields" value="Counterparty account"' not in text
+    assert 'value="Web address"\n               checked' in text
     assert "on 2 of 2 rows" in text
 
 
 def test_the_dialog_previews_a_changed_choice_of_fields(client):
     _seed(
-        _web("1", "PayU", "cinema-city.pl"),
-        _web("2", "PayU", "allegro.pl"),
+        _payu("1", "cinema-city.pl"),
+        _payu("2", "allegro.pl"),
+        _payu("3", "allegro.pl"),
     )
-    url = "/payees/name-preview?key=cinema city&name=Cinema City&chosen=1"
+    url = "/payees/name-preview?key=Merchant::payu&name=PayU&chosen=1"
 
     def read(extra):
         return " ".join(client.get(url + extra).text.split())
 
+    by_merchant = read("&fields=Merchant")
     by_web = read("&fields=Web address")
-    by_description = read("&fields=Description")
-    both = read("&fields=Description&fields=Web address")
+    both = read("&fields=Merchant&fields=Web address")
 
-    assert "<strong>1</strong> transaction (" in by_web  # only cinema-city.pl
-    assert "<strong>2</strong> transactions (" in by_description  # PayU is on both
-    assert "<strong>1</strong> transaction (" in both
-    assert "Description + Web address" in both
-    assert _payees_by_id() == {"1": "", "2": ""}  # a preview writes nothing
+    assert "<strong>3</strong> transactions (" in by_merchant  # PayU is on all three
+    assert "<strong>3</strong> transactions (" in by_web
+    assert "<strong>2</strong> rules" in by_web  # one per web address
+    assert "<strong>1</strong> rule " in by_merchant
+    assert "Merchant + Web address" in both
+    assert _payees_by_id() == {"1": "", "2": "", "3": ""}  # a preview writes nothing
 
 
 def test_unticking_every_field_asks_for_at_least_one(client):
     _seed(_web("1", "PayU", "cinema-city.pl"))
 
-    text = client.get("/payees/name-preview?key=cinema city&name=X&chosen=1").text
+    text = client.get(
+        "/payees/name-preview?key=Web address::cinema city&name=X&chosen=1"
+    ).text
 
     assert "Pick at least one field" in text
-    client.post("/payees/name", data={"key": "cinema city", "name": "X", "chosen": "1"})
+    client.post(
+        "/payees/name",
+        data={"key": "Web address::cinema city", "name": "X", "chosen": "1"},
+    )
     assert _payees_by_id() == {"1": ""}
 
 
@@ -460,7 +478,7 @@ def test_naming_by_web_address_names_other_descriptions_and_saves_a_field_rule(c
     response = client.post(
         "/payees/name",
         data={
-            "key": "cinema city",
+            "key": "Web address::cinema city",
             "name": "Cinema City",
             "chosen": "1",
             "fields": ["Web address"],
@@ -476,16 +494,620 @@ def test_naming_by_web_address_names_other_descriptions_and_saves_a_field_rule(c
 def test_a_field_missing_from_the_group_cannot_be_ticked_into_a_rule(client):
     _seed(_txn("1", "ZABKA"))
 
-    text = client.get("/payees/name-preview?key=zabka&name=Zabka").text
+    text = client.get("/payees/name-preview?key=Place::zabka&name=Zabka").text
 
     assert 'name="fields" value="Web address"' not in text  # not in these rows
     assert 'name="fields" value="Counterparty account"' not in text
 
 
-def test_the_queue_says_which_field_a_group_was_formed_on(client):
-    _seed(_web("1", "PayU", "cinema-city.pl"), _txn("2", "ZABKA"))
+def test_every_payee_field_gets_a_tab_with_its_number_of_suggestions(client):
+    _seed(
+        _web("1", "PayU", "cinema-city.pl"),
+        _web("2", "PayU", "allegro.pl"),
+        _txn("3", "ZABKA"),
+    )
+
+    text = " ".join(client.get("/payees").text.split())
+
+    assert 'Web address <span class="payee-tab-count">2</span>' in text
+    assert 'Place <span class="payee-tab-count">1</span>' in text
+    assert "Suggest by" in text
+    assert "Each suggestion is built from <strong>Web address</strong> alone" in text
+
+
+def _payu(id_, site, **kw):
+    return _txn(
+        id_,
+        "PayU",
+        payee_fields={"Merchant": "PayU", "Web address": site, **kw.pop("fields", {})},
+        **kw,
+    )
+
+
+def _shops():
+    return [
+        _payu("1", "cinema-city.pl", amount="-30"),
+        _payu("2", "cinema-city.pl", amount="-20"),
+        _payu("3", "allegro.pl", amount="-5", fields={"Title": "Order 1"}),
+    ]
+
+
+def test_each_queue_group_has_a_workspace_that_loads_when_opened(client):
+    _seed(*_shops())
+
+    page = client.get("/payees").text
+
+    assert 'class="payee-detail"' in page
+    assert 'hx-get="/payees/group"' in page and 'hx-trigger="toggle once"' in page
+    assert "Split by other fields, all 1 value" in page  # every row says "PayU"
+
+
+def test_the_workspace_shows_every_payee_column_with_its_values_and_counts(client):
+    _seed(*_shops())
+
+    text = client.get("/payees/group?key=Merchant::payu").text
+
+    for label in ("Merchant", "Web address", "Title"):
+        assert f'name="fields" value="{label}"' in text
+    assert (
+        'name="fields" value="Description"' not in text
+    )  # the bank text is not a payee field
+    assert "cinema-city.pl <b>2×</b>" in text
+    assert "allegro.pl <b>1×</b>" in text
+    assert "on 1 of 3" in text  # Title is on one row only
+
+
+def test_the_workspace_lists_every_spelling_not_only_three(client):
+    # Store numbers differ, so the seven spellings are one group ("shop").
+    _seed(*[_txn(str(i), f"SHOP {i}00 K.{i}") for i in range(7)])
+
+    text = client.get("/payees/group?key=Place::shop").text
+
+    assert "All 7 spellings" in text
+    assert all(f"SHOP {i}00 K.{i}" in text for i in range(7))
+
+
+def test_ticked_columns_define_the_combinations_listed(client):
+    _seed(*_shops())
+
+    by_site = client.get(
+        "/payees/group?key=Merchant::payu&chosen=1&fields=Web address"
+    ).text
+    by_both = client.get(
+        "/payees/group?key=Merchant::payu&chosen=1&fields=Web address&fields=Title"
+    ).text
+
+    assert "cinema-city.pl" in by_site and "allegro.pl" in by_site
+    assert "Name 2" in by_site  # cinema-city.pl has two rows
+    assert "<th>Web address</th>" in by_both and "<th>Title</th>" in by_both
+    assert "Order 1" in by_both
+    assert "no value in a ticked column" in " ".join(
+        by_both.split()
+    )  # 2 rows lack Title
+
+
+def test_unticking_every_column_asks_for_one(client):
+    _seed(*_shops())
+
+    text = client.get("/payees/group?key=Merchant::payu&chosen=1").text
+
+    assert "Pick at least one field" in text
+
+
+def test_a_combination_is_previewed_as_one_rule_naming_only_its_rows(client):
+    _seed(*_shops())
+    combo = '{"Merchant": "PayU", "Web address": "cinema-city.pl"}'
+
+    text = client.get(
+        "/payees/name-preview",
+        params={"key": "Merchant::payu", "name": "Cinema City", "combo": combo},
+    ).text
+    flat = " ".join(text.split())
+
+    assert "<strong>2</strong> transactions" in flat  # not allegro.pl's row
+    assert "<strong>1</strong> rule" in flat
+    assert "<strong>Merchant</strong> PayU" in text
+    assert "<strong>Web address</strong> cinema-city.pl" in text
+    assert 'name="fields"' not in text  # the columns are fixed for a combination
+    assert _payees_by_id() == {"1": "", "2": "", "3": ""}
+
+
+def test_naming_one_combination_leaves_the_others_to_be_named_separately(client):
+    _seed(*_shops())
+
+    first = client.post(
+        "/payees/name",
+        data={
+            "key": "Merchant::payu",
+            "name": "Cinema City",
+            "combo": '{"Web address": "cinema-city.pl"}',
+        },
+    )
+    second = client.post(
+        "/payees/name",
+        data={
+            "key": "Merchant::payu",
+            "name": "Allegro",
+            "combo": '{"Web address": "allegro.pl"}',
+        },
+    )
+
+    assert _payees_by_id() == {"1": "Cinema City", "2": "Cinema City", "3": "Allegro"}
+    rules = read_payee_book(config.PAYEE_ALIASES_PATH).rules
+    assert [(r.fields, r.payee) for r in rules] == [
+        ({"Web address": "cinema-city.pl"}, "Cinema City"),
+        ({"Web address": "allegro.pl"}, "Allegro"),
+    ]
+    assert _toast(first) == "Named 2 transactions as Cinema City"
+    assert _toast(second) == "Named 1 transaction as Allegro"
+
+
+def test_the_workspace_stays_open_on_the_same_columns_after_naming_a_combination(
+    client,
+):
+    _seed(*_shops())
+
+    response = client.post(
+        "/payees/name",
+        data={
+            "key": "Merchant::payu",
+            "name": "Cinema City",
+            "combo": '{"Merchant": "PayU", "Web address": "cinema-city.pl"}',
+        },
+    )
+
+    assert '<details class="payee-detail" open' in response.text
+    assert (
+        "<th>Merchant</th>" in response.text and "<th>Web address</th>" in response.text
+    )
+    assert "allegro.pl" in response.text  # what is left of the group
+
+
+def test_naming_the_whole_group_still_works_and_closes_the_workspace(client):
+    _seed(_payu("1", "cinema-city.pl"), _payu("2", "cinema-city.pl"))
+
+    response = client.post(
+        "/payees/name",
+        data={
+            "key": "Merchant::payu",
+            "name": "Cinema City",
+            "chosen": "1",
+            "fields": ["Web address"],
+        },
+    )
+
+    assert _payees_by_id() == {"1": "Cinema City", "2": "Cinema City"}
+    assert '<details class="payee-detail" open' not in response.text
+
+
+def test_a_malformed_combo_is_ignored_not_trusted(client):
+    _seed(*_shops())
+
+    for bad in ("{not json", "[1, 2]", "{}", '{"Web address": ""}', '{"x": 5}'):
+        text = client.get(
+            "/payees/name-preview",
+            params={"key": "Merchant::payu", "name": "X", "combo": bad},
+        ).text
+        assert 'name="fields" value="Web address"' in text  # back to the group dialog
+
+
+def test_a_combination_that_nothing_would_claim_says_so(client):
+    _seed(*_shops())
+
+    text = client.get(
+        "/payees/name-preview",
+        params={
+            "key": "Merchant::payu",
+            "name": "X",
+            "combo": '{"Web address": "nowhere.pl"}',
+        },
+    ).text
+
+    assert "Nothing would be named" in text
+
+
+# ---------------------------------------------------------------------------
+# "Name these" tabs: single spellings, several spellings, dividing a group
+# ---------------------------------------------------------------------------
+
+
+def _zabka_and_singles():
+    return [
+        _txn("1", "ZABKA Z8540 K.2"),
+        _txn("2", "ZABKA Z8540 K.2"),
+        _txn("3", "ZABKA Z8540 K.1"),
+        _txn("4", "ZABKA ZC026 K.2"),
+        _txn("5", "LIDL WEGLARSKA"),
+    ]
+
+
+def _keys(text):
+    return re.findall(r'<input type="hidden" name="key" value="([^"]+)"', text)
+
+
+def test_the_first_tab_shows_only_single_spelling_proposals_with_counts(client):
+    _seed(*_zabka_and_singles())
 
     text = client.get("/payees").text
 
-    assert "by Web address" in text
-    assert text.count("payee-by") == 1  # description groups need no tag
+    assert _keys(text) == ["Place::lidl weglarska"]
+    assert 'aria-selected="true"' in text
+    flat = " ".join(text.split())
+    assert 'Single spelling <span class="payee-tab-count">1</span>' in flat
+    assert 'Several spellings <span class="payee-tab-count">1</span>' in flat
+    assert "Divide into" not in text  # nothing to divide in a single
+
+
+def test_the_second_tab_shows_groups_of_several_spellings_with_a_divide_button(client):
+    _seed(*_zabka_and_singles())
+
+    text = client.get("/payees?tab=multiple").text
+
+    assert _keys(text) == ["Place::zabka"]
+    assert "Divide into 3" in text
+    assert "Group with similar" not in text
+
+
+def test_the_chosen_tab_is_remembered_and_applies_to_swaps(client):
+    _seed(*_zabka_and_singles())
+
+    fragment = client.get("/payees?part=queue&tab=multiple").text
+    later = client.get("/payees").text
+    after_change = client.post("/payees/skip", data={"key": "Place::zabka"}).text
+
+    assert (
+        'name="key" value="Place::zabka"' in fragment
+        and 'id="payees-content"' not in fragment
+    )
+    assert _keys(later) == ["Place::zabka"]  # the next visit opens on the same tab
+    assert (
+        'hx-swap-oob="true"' in after_change
+    )  # and so does the refresh after a change
+
+
+def test_an_unknown_tab_falls_back_to_the_first(client):
+    _seed(*_zabka_and_singles())
+
+    assert _keys(client.get("/payees?tab=bogus").text) == ["Place::lidl weglarska"]
+
+
+def test_dividing_a_group_turns_each_spelling_into_its_own_single_proposal(client):
+    _seed(*_zabka_and_singles())
+
+    response = client.post("/payees/split", data={"key": "Place::zabka"})
+
+    assert _toast(response) == "Divided into 3 single spellings"
+    assert read_payee_book(config.PAYEE_ALIASES_PATH).split == ["Place::zabka"]
+    single = client.get("/payees?tab=single").text
+    assert sorted(_keys(single)) == [
+        "Place::exact:zabka z8540 k.1",
+        "Place::exact:zabka z8540 k.2",
+        "Place::exact:zabka zc026 k.2",
+        "Place::lidl weglarska",  # was already a single
+    ]
+    assert "Group with similar" in single
+    assert _keys(client.get("/payees?tab=multiple").text) == []  # the group is gone
+
+
+def test_a_divided_spelling_is_named_on_its_own(client):
+    _seed(*_zabka_and_singles())
+    client.post("/payees/split", data={"key": "Place::zabka"})
+
+    response = client.post(
+        "/payees/name",
+        data={"key": "Place::exact:zabka z8540 k.2", "name": "Żabka Rynek"},
+    )
+
+    assert _payees_by_id() == {
+        "1": "Żabka Rynek",
+        "2": "Żabka Rynek",
+        "3": "",
+        "4": "",
+        "5": "",
+    }
+    assert _toast(response) == "Named 2 transactions as Żabka Rynek"
+    [rule] = read_payee_book(config.PAYEE_ALIASES_PATH).rules
+    assert rule.fields == {"Place": "ZABKA Z8540 K.2"}  # exactly that value
+
+
+def test_a_divided_spelling_previews_only_its_own_rows(client):
+    _seed(*_zabka_and_singles())
+    client.post("/payees/split", data={"key": "Place::zabka"})
+
+    text = " ".join(
+        client.get(
+            "/payees/name-preview",
+            params={"key": "Place::exact:zabka z8540 k.1", "name": "Z"},
+        ).text.split()
+    )
+
+    assert "<strong>1</strong> transaction" in text
+    assert "ZABKA Z8540 K.1" in text and "ZABKA Z8540 K.2" not in text
+
+
+def test_grouping_with_similar_puts_the_spellings_back_into_one_proposal(client):
+    _seed(*_zabka_and_singles())
+    client.post("/payees/split", data={"key": "Place::zabka"})
+
+    response = client.post(
+        "/payees/unsplit", data={"key": "Place::exact:zabka z8540 k.1"}
+    )
+
+    assert _toast(response) == "Grouped with similar"
+    assert read_payee_book(config.PAYEE_ALIASES_PATH).split == []
+    assert _keys(client.get("/payees?tab=multiple").text) == ["Place::zabka"]
+
+
+def test_dividing_twice_is_harmless_and_the_book_remembers_it_once(client):
+    _seed(*_zabka_and_singles())
+
+    client.post("/payees/split", data={"key": "Place::zabka"})
+    client.post("/payees/split", data={"key": "Place::zabka"})
+
+    assert read_payee_book(config.PAYEE_ALIASES_PATH).split == ["Place::zabka"]
+
+
+def test_each_tab_explains_when_it_is_empty_and_points_to_the_other(client):
+    _seed(_txn("1", "LIDL"))
+
+    multiple = client.get("/payees?tab=multiple").text
+    client.post(
+        "/payees/split", data={"key": "Place::lidl"}
+    )  # nothing to divide: still fine
+
+    assert "No groups of several values left in Place" in multiple
+    assert "1 single value" in multiple
+
+
+def test_the_workspace_of_a_divided_spelling_works(client):
+    _seed(*_zabka_and_singles())
+    client.post("/payees/split", data={"key": "Place::zabka"})
+
+    text = client.get(
+        "/payees/group", params={"key": "Place::exact:zabka z8540 k.2"}
+    ).text
+
+    assert "on 2 of 2" in text  # only that spelling's two rows
+    assert "ZABKA Z8540 K.2" in text and "ZABKA Z8540 K.1" not in text
+
+
+# ---------------------------------------------------------------------------
+# What the workspace offers, and when
+# ---------------------------------------------------------------------------
+
+
+def test_the_workspace_is_offered_only_when_it_shows_something_new(client):
+    _seed(
+        # one spelling, one payee field: the card already shows everything
+        _txn("1", "CZAJCZYK S.C.", payee_fields={"Place": "CZAJCZYK S.C."}),
+        # one spelling, no payee field at all
+        _txn("2", "LIDL WEGLARSKA"),
+    )
+
+    page = client.get("/payees").text
+
+    assert 'class="payee-detail"' not in page
+    assert "Split by other fields" not in page
+
+
+def test_the_workspace_is_offered_when_several_payee_columns_have_values(client):
+    _seed(_payu("1", "cinema-city.pl"), _payu("2", "cinema-city.pl"))
+
+    page = " ".join(client.get("/payees").text.split())
+
+    assert 'class="payee-detail"' in page
+    assert "Split by other fields, all 1 value" in page
+
+
+def test_the_workspace_is_offered_for_more_spellings_than_the_card_lists(client):
+    _seed(*[_txn(str(i), f"SHOP {i}00 K.{i}") for i in range(5)])
+
+    page = " ".join(client.get("/payees?tab=multiple").text.split())
+
+    assert 'class="payee-detail"' in page
+    assert (
+        "All 5 values" in page and "split by column" not in page
+    )  # nothing to split by
+
+
+def test_a_group_of_three_spellings_and_one_column_needs_no_workspace(client):
+    _seed(*[_txn(str(i), f"SHOP {i}00 K.{i}") for i in range(3)])
+
+    page = client.get("/payees?tab=multiple").text
+
+    assert 'class="payee-detail"' not in page  # the card lists all three already
+    assert "Divide into 3" in page
+
+
+def test_rows_with_no_payee_field_are_not_offered_and_are_counted(client):
+    _seed(
+        _txn("1", "ZABKA Z1", payee_fields={}),
+        _txn("2", "ZABKA Z2", payee_fields={}),
+        _txn("3", "LIDL"),  # has a field
+    )
+
+    page = client.get("/payees").text
+
+    assert _keys(page) == ["Place::lidl"]
+    assert "2 transactions have no payee field saved" in " ".join(page.split())
+    assert "Fill payee fields" in page
+    preview = client.get("/payees/name-preview?key=Place::zabka&name=Z").text
+    assert "Nothing left to name" in preview  # no group to name
+    assert _payees_by_id() == {"1": "", "2": "", "3": ""}
+
+
+def test_rows_without_a_payee_field_are_left_for_the_fill_tool(client):
+    _seed(
+        _txn("1", "CZAJCZYK S.C."),
+        _txn("2", "CZAJCZYK S.C."),
+        _txn("3", "CZAJCZYK S.C.", payee_fields={}),
+    )
+
+    named = client.post(
+        "/payees/name", data={"key": "Place::czajczyk", "name": "Piekarnia"}
+    )
+
+    assert _payees_by_id() == {"1": "Piekarnia", "2": "Piekarnia", "3": ""}
+    assert _toast(named) == "Named 2 transactions as Piekarnia"
+    page = " ".join(client.get("/payees").text.split())
+    assert 'name="key" value="Place::czajczyk"' not in page  # nothing left to group
+    assert "1 transaction has no payee field saved" in page  # the fill tool's work
+
+
+def test_the_page_says_how_many_rows_have_no_payee_field_yet(client):
+    _seed(
+        _txn("1", "CZAJCZYK S.C."),
+        _txn("2", "OLD ROW", payee_fields={}),
+        _txn("3", "NAMED", payee="X", payee_fields={}),  # named: not counted
+    )
+
+    page = " ".join(client.get("/payees").text.split())
+
+    assert "1 transaction has no payee field saved, so it cannot be named yet" in page
+    assert 'class="payee-by"' not in page  # no per-card badge any more
+
+
+def test_a_card_says_how_many_of_its_rows_have_each_other_field(client):
+    _seed(
+        _txn("1", "A", payee_fields={"Place": "ACME", "Web address": "acme.pl"}),
+        _txn("2", "B", payee_fields={"Place": "ACME", "Web address": "acme.pl"}),
+        _txn("3", "C", payee_fields={"Place": "ACME", "Title": "Order"}),
+    )
+
+    text = " ".join(client.get("/payees").text.split())
+
+    assert "also Web address 2 of 3 · Title 1 of 3" in text
+    assert "How many of this group's transactions also have a value" in text
+
+
+# ---------------------------------------------------------------------------
+# Suggestions per payee field
+# ---------------------------------------------------------------------------
+
+
+def _tab_counts(text):
+    flat = " ".join(text.split())
+    return dict(
+        re.findall(
+            r'role="tab"[^>]*>\s*([^<]+?)\s*<span class="payee-tab-count">(\d+)', flat
+        )
+    )
+
+
+def test_field_tabs_follow_the_import_mappings_order_then_stray_labels(client):
+    from app.models.import_mapping import ImportMapping, PayeeFieldColumn
+    from app.storage.import_mappings import write_mapping
+
+    write_mapping(
+        ImportMapping(
+            bank="X",
+            columns={"date": 0, "description": 1, "amount": 2},
+            payee_fields=[
+                PayeeFieldColumn(label="Merchant", column=4),
+                PayeeFieldColumn(label="Web address", column=5),
+            ],
+        ),
+        config.IMPORT_MAPPINGS_DIR,
+    )
+    _seed(_txn("1", "x", payee_fields={"Old field": "ACME"}))
+
+    counts = _tab_counts(client.get("/payees").text)
+
+    assert list(counts)[:3] == ["Merchant", "Web address", "Old field"]
+    assert counts["Merchant"] == "0" and counts["Old field"] == "1"
+
+
+def test_each_field_lists_its_own_suggestions_and_a_row_can_be_in_several(client):
+    _seed(*_shops())
+
+    by_merchant = _keys(client.get("/payees?part=queue&field=Merchant&tab=single").text)
+    by_site = _keys(client.get("/payees?part=queue&field=Web address&tab=single").text)
+    by_title = _keys(client.get("/payees?part=queue&field=Title&tab=single").text)
+
+    assert by_merchant == ["Merchant::payu"]  # all three rows say PayU
+    assert by_site == ["Web address::cinema city", "Web address::allegro"]
+    assert by_title == ["Title::order"]  # only one row has a Title
+
+
+def test_the_chosen_field_is_remembered_even_with_a_non_ascii_label(client):
+    _seed(
+        _txn("1", "A", payee_fields={"Place": "ACME"}),
+        _txn("2", "B", payee_fields={"Tytuł": "Obiady"}),
+    )
+
+    chosen = client.get("/payees?part=queue&field=Tytuł&tab=single")
+    later = client.get("/payees")
+
+    assert chosen.status_code == 200 and _keys(chosen.text) == ["Tytuł::obiady"]
+    assert _keys(later.text) == ["Tytuł::obiady"]  # the next visit opens on it
+    assert "Each suggestion is built from <strong>Tytuł</strong>" in " ".join(
+        later.text.split()
+    )
+
+
+def test_an_unknown_field_falls_back_to_the_first_one(client):
+    _seed(_txn("1", "ZABKA"))
+
+    assert _keys(client.get("/payees?part=queue&field=Nonsense").text) == [
+        "Place::zabka"
+    ]
+
+
+def test_naming_under_one_field_takes_the_rows_out_of_the_other_fields(client):
+    _seed(*_shops())
+    before = _tab_counts(client.get("/payees").text)
+
+    client.post(
+        "/payees/name",
+        data={
+            "key": "Web address::cinema city",
+            "name": "Cinema City",
+            "chosen": "1",
+            "fields": ["Web address"],
+        },
+    )
+    after = _tab_counts(client.get("/payees").text)
+
+    assert before["Merchant"] == "1" and before["Web address"] == "2"
+    assert after["Web address"] == "1"  # only allegro.pl is left
+    assert _payees_by_id() == {"1": "Cinema City", "2": "Cinema City", "3": ""}
+    # the PayU group in the Merchant tab now holds just the one unnamed row
+    merchant = client.get("/payees?part=queue&field=Merchant&tab=single").text
+    assert "1 transaction" in " ".join(merchant.split())
+
+
+def test_the_workspace_shows_how_much_of_the_group_each_other_field_covers(client):
+    _seed(*_shops())
+
+    text = " ".join(client.get("/payees/group?key=Merchant::payu").text.split())
+
+    assert "grouped by <strong>Merchant</strong>" in text
+    assert "on 3 of 3 (100%)" in text  # Merchant and Web address
+    assert "on 1 of 3 (33%)" in text  # Title
+    assert 'value="Merchant" checked' in text.replace(
+        "\n", " "
+    )  # the group's own field
+
+
+def test_a_rule_can_be_built_from_another_field_than_the_one_suggested_by(client):
+    _seed(*_shops())
+
+    client.post(
+        "/payees/name",
+        data={
+            "key": "Merchant::payu",
+            "name": "Allegro",
+            "combo": '{"Web address": "allegro.pl"}',
+        },
+    )
+
+    assert _payees_by_id() == {"1": "", "2": "", "3": "Allegro"}
+    [rule] = read_payee_book(config.PAYEE_ALIASES_PATH).rules
+    assert rule.fields == {"Web address": "allegro.pl"}
+
+
+def test_with_no_payee_fields_anywhere_the_page_explains_how_to_set_them_up(client):
+    text = " ".join(client.get("/payees").text.split())
+
+    assert "No payee fields are set up yet" in text
+    assert "Suggest by" not in text

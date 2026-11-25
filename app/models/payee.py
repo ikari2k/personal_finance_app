@@ -29,8 +29,11 @@ class PayeeBook(BaseModel):
 
     ``rules`` name payees on import and on existing transactions. ``skipped``
     holds group keys (see ``app.services.payees.group_key``) the user chose to
-    leave unnamed, so they stop appearing in the "Name these" queue.
+    leave unnamed, so they stop appearing in the "Name these" queue. ``split``
+    holds group keys the user divided: each spelling in them is its own
+    proposition instead of one group.
     """
 
     rules: list[PayeeRule] = []
     skipped: list[str] = []
+    split: list[str] = []
