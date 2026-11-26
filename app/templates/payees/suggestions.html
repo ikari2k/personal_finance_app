@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Name payees — Finance Tracker{% endblock %}
+{% block content %}
+  <div class="page-header-row">
+    <h1>Name payees</h1>
+    <a role="button" class="btn-outline" href="/payees">All payees</a>
+  </div>
+  <p class="muted">
+    A payee is the clean name of who was paid, or who paid you. The bank's own text stays as it is
+    on every transaction; naming a group of it here saves the name next to it.
+  </p>
+  {% include "payees/_content.html" %}
+  {% include "payees/_dialog.html" %}
+{% endblock %}

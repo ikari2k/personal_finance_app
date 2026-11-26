@@ -91,6 +91,12 @@ tests/unit/     tmp_path-isolated; tests/integration/  TestClient, conftest redi
   label in the ledger's JSON `payee_fields` column), `payee`/`payee_fallback` (the
   bank's name for the other party, prefilled in the preview), `counterparty_account`,
   `counterparty_account_fallback`.
+- `data/payee_logos/` — one image per payee (png/jpg/gif/webp/svg, ≤512 KB), named
+  `services.payee_logos.logo_stem(name)` (sha1 of the casefolded name) + extension, so there is no
+  index. Uploaded on `/payees` (never fetched: the app is offline); content-sniffed, SVGs with scripts
+  refused, served only by well-formed file name with a sandbox CSP. Rename/merge move the logo
+  (`carry_logos`: the target keeps its own). Shown via the `payee_logo_url` Jinja global /
+  `_payee_logo.html` macro on the payee list, Transactions rows and the payee filter's matches.
 - `data/import_history.toml` — append-only `[[imports]]` log; independent snapshots, not live refs.
 - `config/rules.toml` — `[[rules]]`: `pattern, field, category, subcategory, priority`, plus
   optional `min_amount`/`max_amount` (inclusive, vs `abs(amount)`, stored as quoted strings;
@@ -112,6 +118,10 @@ tests/unit/     tmp_path-isolated; tests/integration/  TestClient, conftest redi
   `update_transaction_payee` refuses transfer legs). Filled by a rule, the mapping's payee
   column, the import preview's box or by hand; the transactions list has an inline payee dropdown
   (`.payee-combo`: existing payees plus the row's bank text; free text is valid) and search matches it. Never use it in duplicate detection.
+- **Two payee pages share `payees/_content.html`** (`view` = `list`/`name`): `/payees` is the progress card + the
+  payee list (rename, merge, logo, search); `/payees/suggestions` is progress + "Name these". Both swap
+  `#payees-content` out of band; `_current_view` picks the sections from the `HX-Current-URL` header, so any new
+  action on either page must re-render through `_render_content`.
 - **Payee view (`/payees`) rules.** Naming a group (`services.payees.plan_naming`, with the fields the
   user ticked) saves one rule per distinct value combination and names every payee-less row that
   one of the *new* rules wins; an existing payee is never overwritten, an older more-specific rule

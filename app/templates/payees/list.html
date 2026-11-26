@@ -4,22 +4,6 @@
   <div class="page-header-row">
     <h1>Payees</h1>
   </div>
-  <p class="muted">
-    A payee is the clean name of who was paid, or who paid you. The bank's own text stays as it is
-    on every transaction; naming a group of it here saves the name next to it.
-  </p>
   {% include "payees/_content.html" %}
-
-  <dialog id="payee-dialog" hx-on:close-dialog="this.close()"
-          hx-on:click="if (event.target === this) this.close()">
-    <article>
-      <header>
-        <button aria-label="Close" rel="prev"
-                onclick="document.getElementById('payee-dialog').close()"></button>
-        <strong>Payees</strong>
-      </header>
-      <div id="payee-dialog-content"
-           hx-on::after-swap="if (this.firstElementChild) { const d = this.closest('dialog'); if (!d.open) d.showModal(); }"></div>
-    </article>
-  </dialog>
+  {% include "payees/_dialog.html" %}
 {% endblock %}

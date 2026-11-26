@@ -4,22 +4,29 @@
     <div class="payee-cover-line">
       <span><strong>{{ ("%.1f"|format(pct)) if pct < 10 else ("%.0f"|format(pct)) }}%</strong>
         of {{ total }} transactions have a payee</span>
-      {% if queue %}<span class="muted">Naming the biggest groups would reach {{ "%.0f"|format(goal_pct) }}%</span>{% endif %}
+      {% if view == 'name' %}
+        {% if queue %}<span class="muted">Naming the biggest groups would reach {{ "%.0f"|format(goal_pct) }}%</span>{% endif %}
+      {% elif single_count + multiple_count %}
+        <a href="/payees/suggestions">Name these ({{ count_label(single_count + multiple_count, 'suggestion') }})</a>
+      {% endif %}
     </div>
     <div class="payee-meter" role="img" aria-label="Share of transactions with a payee">
       <div class="payee-meter-fill" style="width: {{ pct }}%"></div>
-      {% if queue %}
+      {% if view == 'name' and queue %}
         <span class="payee-meter-goal" style="left: {{ goal_pct }}%"></span>
         <span class="payee-meter-goal-label" style="left: {{ goal_pct }}%">{{ "%.0f"|format(goal_pct) }}%</span>
       {% endif %}
     </div>
+    {% if view == 'name' %}
     <ol class="payee-order" aria-label="Order names are applied in">
       <li><strong>Payee fields</strong>The columns you chose on import, saved on every transaction.</li>
       <li><strong>Payee rules</strong>A rule on one or more of those fields names the payee, on existing transactions and on every import.</li>
       <li><strong>Category rules</strong>Unchanged: they still match the transaction's description.</li>
     </ol>
+    {% endif %}
   </section>
 
+  {% if view == 'name' %}
   <section class="report-card">
     <div class="dash-widget-head">
       <h2 style="margin: 0;">Name these</h2>
@@ -32,18 +39,28 @@
       </p>
     {% endif %}
   </section>
-
+  {% else %}
   <section class="report-card">
     <div class="dash-widget-head">
       <h2 style="margin: 0;">All payees</h2>
-      <label class="payee-search">
-        <span class="muted">Search</span>
+      <div class="payee-search">
+        <label for="payee-logo-filter" class="muted">Logo</label>
+        <select id="payee-logo-filter" name="logo" aria-label="Filter by logo"
+                hx-get="/payees?part=table" hx-trigger="change"
+                hx-target="#payee-table" hx-swap="innerHTML" hx-include="#payee-q, #payee-sort, #payee-dir">
+          <option value="" {{ 'selected' if not logo }}>All</option>
+          <option value="with" {{ 'selected' if logo == 'with' }}>With logo</option>
+          <option value="without" {{ 'selected' if logo == 'without' }}>Without logo</option>
+        </select>
+        <label for="payee-q" class="muted">Search</label>
         <input type="search" id="payee-q" name="q" value="{{ q }}" placeholder="Name or bank spelling"
                autocomplete="off"
                hx-get="/payees?part=table" hx-trigger="input changed delay:250ms, search"
-               hx-target="#payee-table" hx-swap="innerHTML" hx-include="#payee-sort, #payee-dir">
-      </label>
+               hx-target="#payee-table" hx-swap="innerHTML"
+               hx-include="#payee-sort, #payee-dir, #payee-logo-filter">
+      </div>
     </div>
     <div id="payee-table">{% include "payees/_table.html" %}</div>
   </section>
+  {% endif %}
 </div>

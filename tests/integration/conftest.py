@@ -28,5 +28,6 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "PAYEE_ALIASES_PATH", tmp_path / "payee_aliases.toml")
     monkeypatch.setattr(config, "IMPORT_MAPPINGS_DIR", tmp_path / "import_mappings")
     monkeypatch.setattr(config, "IMPORT_HISTORY_PATH", tmp_path / "import_history.toml")
+    monkeypatch.setattr(config, "PAYEE_LOGOS_DIR", tmp_path / "payee_logos")
     with TestClient(app) as test_client:
         yield test_client

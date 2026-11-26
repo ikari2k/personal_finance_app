@@ -10,6 +10,7 @@ from pathlib import Path
 from fastapi.templating import Jinja2Templates
 
 from app import config
+from app.storage.payee_logos import logo_url
 
 APP_DIR = Path(__file__).resolve().parent
 STATIC_DIR = APP_DIR / "static"
@@ -27,6 +28,7 @@ def static_version(path: str) -> int:
 
 
 templates.env.globals["static_version"] = static_version
+templates.env.globals["payee_logo_url"] = logo_url
 
 
 def money(value: object) -> str:

@@ -14,12 +14,13 @@ overwritten by naming a cluster.
 
 import json
 from collections.abc import Callable
-from urllib.parse import quote, unquote
+from urllib.parse import quote, unquote, urlparse
 
-from fastapi import APIRouter, Form, Query, Request
-from fastapi.responses import HTMLResponse
+from fastapi import APIRouter, File, Form, Query, Request, UploadFile
+from fastapi.responses import FileResponse, HTMLResponse, Response
 
 from app.routers.htmx_events import toast
+from app.services.payee_logos import MAX_LOGO_BYTES
 from app.services.payees import (
     CARD_SPELLINGS,
     PayeeSummary,
@@ -50,6 +51,13 @@ from app.services.payees import (
 )
 from app.storage.import_mappings import list_all_mappings
 from app.storage.ledger import read_ledger, write_ledger
+from app.storage.payee_logos import (
+    carry_logos,
+    delete_logo,
+    logo_path,
+    logo_url,
+    save_logo,
+)
 from app.storage.payees import read_payee_book, write_payee_book
 from app.templating import templates
 
@@ -59,6 +67,7 @@ QUEUE_LIMIT = 20  # groups listed under "Name these"
 QUEUE_STEP = 20  # more groups each "Show more" adds
 GOAL_GROUPS = 25  # the meter's marker: coverage after naming this many groups
 PREVIEW_ROWS = 6  # sample transactions shown in a preview dialog
+LOGO_FILTERS = ("with", "without")  # list filter on having a logo
 COMBO_LIMIT = 25  # combinations listed in a group's workspace
 
 
@@ -214,8 +223,11 @@ def _content_context(
     tab: str = DEFAULT_TAB,
     field: str = "",
     limit: int = QUEUE_LIMIT,
+    logo: str = "",
 ) -> dict:
     """Everything ``payees/_content.html`` renders, from the ledger and the book.
+
+    ``logo`` narrows the list to payees ``"with"`` or ``"without"`` a logo.
 
     ``field`` picks which payee field "Name these" builds its suggestions from
     (the first one when it is blank or unknown); ``tab`` which of them it lists:
@@ -250,6 +262,9 @@ def _content_context(
         or needle in s.name.casefold()
         or any(needle in spelling.casefold() for spelling, _ in s.spellings)
     ]
+    logo = logo if logo in LOGO_FILTERS else ""
+    if logo:
+        summaries = [s for s in summaries if bool(logo_url(s.name)) == (logo == "with")]
     summaries.sort(key=_SORTS[sort], reverse=(direction == "desc"))
     return {
         "named": named,
@@ -279,6 +294,7 @@ def _content_context(
         "skipped_count": len(book.skipped),
         "summaries": summaries,
         "q": q,
+        "logo": logo,
         "sort": sort,
         "dir": direction,
         "default_dir": _DEFAULT_DIR,
@@ -290,6 +306,16 @@ def _content_context(
             else None
         ),
     }
+
+
+def _current_view(request: Request) -> str:
+    """Which payee page an HTMX request came from: ``"name"`` or ``"list"``.
+
+    Actions on either page re-render ``#payees-content`` out of band, and that
+    must be the sections the page being looked at has.
+    """
+    path = urlparse(request.headers.get("hx-current-url", "")).path.rstrip("/")
+    return "name" if path.endswith("/payees/suggestions") else "list"
 
 
 def _render_content(
@@ -317,7 +343,7 @@ def _render_content(
     return templates.TemplateResponse(
         request,
         "payees/_content.html",
-        {**context, "oob": oob},
+        {**context, "oob": oob, "view": _current_view(request)},
         headers=headers,
     )
 
@@ -332,6 +358,7 @@ def payees_page(
     tab: str | None = None,
     field: str | None = None,
     limit: int = QUEUE_LIMIT,
+    logo: str = "",
 ) -> HTMLResponse:
     """Render the payee management page, or just a part of it.
 
@@ -344,7 +371,7 @@ def payees_page(
     tab = resolve_tab(request, tab)
     wanted_field = field if field else remembered_field(request)
     context = _content_context(
-        q, sort, direction, tab=tab, field=wanted_field, limit=limit
+        q, sort, direction, tab=tab, field=wanted_field, limit=limit, logo=logo
     )
     if part == "table":
         response = templates.TemplateResponse(request, "payees/_table.html", context)
@@ -352,8 +379,28 @@ def payees_page(
         response = templates.TemplateResponse(request, "payees/_queue.html", context)
     else:
         response = templates.TemplateResponse(
-            request, "payees/list.html", {**context, "oob": False}
+            request, "payees/list.html", {**context, "oob": False, "view": "list"}
         )
+    return _remember_sort(response, sort, direction, tab, context["field"])
+
+
+@router.get("/suggestions", response_class=HTMLResponse)
+def suggestions_page(
+    request: Request,
+    tab: str | None = None,
+    field: str | None = None,
+    limit: int = QUEUE_LIMIT,
+) -> HTMLResponse:
+    """Render the "Name these" page: suggestions per payee field, with progress."""
+    sort, direction = resolve_sort(request, None, None)
+    tab = resolve_tab(request, tab)
+    wanted_field = field if field else remembered_field(request)
+    context = _content_context(
+        "", sort, direction, tab=tab, field=wanted_field, limit=limit
+    )
+    response = templates.TemplateResponse(
+        request, "payees/suggestions.html", {**context, "oob": False, "view": "name"}
+    )
     return _remember_sort(response, sort, direction, tab, context["field"])
 
 
@@ -577,6 +624,7 @@ def rename_route(
     updated, count = merge_payees(read_ledger(), [old], payee)
     write_ledger(updated)
     write_payee_book(retarget_rules(read_payee_book(), [old], payee))
+    carry_logos([old], payee)
     return _render_content(
         request,
         oob=True,
@@ -628,10 +676,75 @@ def merge_route(
     write_ledger(updated)
     book = retarget_rules(read_payee_book(), names, payee)
     write_payee_book(book)
+    carry_logos(names, payee)
     return _render_content(
         request,
         oob=True,
         headers=toast(
             f"Merged into {payee}: {_transactions(count)}", close_dialog=True
         ),
+    )
+
+
+def _logo_dialog(
+    request: Request, name: str, *, error: str | None = None
+) -> HTMLResponse:
+    """Render the add/replace/remove logo dialog for payee ``name``."""
+    return templates.TemplateResponse(
+        request,
+        "payees/_logo_dialog.html",
+        {"name": name, "has_logo": bool(logo_url(name)), "error": error},
+    )
+
+
+@router.get("/logo", response_class=HTMLResponse)
+def logo_form(request: Request, name: str) -> HTMLResponse:
+    """Render the logo dialog for one payee."""
+    return _logo_dialog(request, name)
+
+
+@router.get("/logo/{filename}")
+def logo_file(filename: str) -> Response:
+    """Serve a stored logo. Only well-formed logo file names ever resolve.
+
+    SVGs are served under a sandboxing policy so a script in one could never run
+    if the file is opened on its own.
+    """
+    path = logo_path(filename)
+    if path is None:
+        return Response(status_code=404)
+    return FileResponse(
+        path,
+        headers={
+            "Cache-Control": "public, max-age=31536000, immutable",
+            "Content-Security-Policy": (
+                "default-src 'none'; style-src 'unsafe-inline'; sandbox"
+            ),
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@router.post("/logo", response_class=HTMLResponse)
+def logo_upload(
+    request: Request, name: str = Form(...), file: UploadFile = File(...)
+) -> HTMLResponse:
+    """Save an uploaded image as payee ``name``'s logo."""
+    if not any(t.payee == name for t in read_ledger()):
+        return _logo_dialog(request, name, error="No transaction has that payee.")
+    try:
+        save_logo(name, file.file.read(MAX_LOGO_BYTES + 1))
+    except ValueError as exc:
+        return _logo_dialog(request, name, error=str(exc))
+    return _render_content(
+        request, oob=True, headers=toast(f"Logo saved for {name}", close_dialog=True)
+    )
+
+
+@router.post("/logo/remove", response_class=HTMLResponse)
+def logo_remove(request: Request, name: str = Form(...)) -> HTMLResponse:
+    """Remove payee ``name``'s logo."""
+    delete_logo(name)
+    return _render_content(
+        request, oob=True, headers=toast(f"Logo removed for {name}", close_dialog=True)
     )

@@ -52,13 +52,16 @@ def test_page_renders_empty(client):
 
 
 def test_page_lists_groups_to_name_with_suggestion_and_counts(client):
+    client.headers["HX-Current-URL"] = "http://testserver/payees/suggestions"
     _seed(
         _txn("1", "ZABKA Z8540 K.2"),
         _txn("2", "ZABKA Z8540 K.1"),
         _txn("3", "LIDL WEGLARSKA"),
     )
 
-    text = client.get("/payees?tab=multiple").text  # Żabka has two spellings
+    text = client.get(
+        "/payees/suggestions?tab=multiple"
+    ).text  # Żabka has two spellings
 
     assert "Name these" in text
     assert 'value="Zabka"' in text  # suggested from the most common spelling
@@ -149,9 +152,9 @@ def test_skipping_a_group_hides_it_and_can_be_undone(client):
     _seed(_txn("1", "ZABKA"), _txn("2", "LIDL"))
 
     client.post("/payees/skip", data={"key": "Place::zabka"})
-    hidden = client.get("/payees").text
+    hidden = client.get("/payees/suggestions").text
     client.post("/payees/unskip")
-    restored = client.get("/payees").text
+    restored = client.get("/payees/suggestions").text
 
     assert 'name="key" value="Place::zabka"' not in hidden
     assert 'name="key" value="Place::lidl"' in hidden
@@ -311,7 +314,7 @@ def test_queue_and_preview_show_what_was_spent_and_received(client):
         _txn("2", "ACME", amount="90", type=TransactionType.INCOME),
     )
 
-    page = client.get("/payees").text
+    page = client.get("/payees/suggestions").text
     preview = client.get("/payees/name-preview?key=Place::acme&name=Acme").text
 
     assert "10.00 spent" in page and "90.00 received" in page
@@ -507,7 +510,7 @@ def test_every_payee_field_gets_a_tab_with_its_number_of_suggestions(client):
         _txn("3", "ZABKA"),
     )
 
-    text = " ".join(client.get("/payees").text.split())
+    text = " ".join(client.get("/payees/suggestions").text.split())
 
     assert 'Web address <span class="payee-tab-count">2</span>' in text
     assert 'Place <span class="payee-tab-count">1</span>' in text
@@ -535,7 +538,7 @@ def _shops():
 def test_each_queue_group_has_a_workspace_that_loads_when_opened(client):
     _seed(*_shops())
 
-    page = client.get("/payees").text
+    page = client.get("/payees/suggestions").text
 
     assert 'class="payee-detail"' in page
     assert 'hx-get="/payees/group"' in page and 'hx-trigger="toggle once"' in page
@@ -645,6 +648,7 @@ def test_naming_one_combination_leaves_the_others_to_be_named_separately(client)
 def test_the_workspace_stays_open_on_the_same_columns_after_naming_a_combination(
     client,
 ):
+    client.headers["HX-Current-URL"] = "http://testserver/payees/suggestions"
     _seed(*_shops())
 
     response = client.post(
@@ -728,7 +732,7 @@ def _keys(text):
 def test_the_first_tab_shows_only_single_spelling_proposals_with_counts(client):
     _seed(*_zabka_and_singles())
 
-    text = client.get("/payees").text
+    text = client.get("/payees/suggestions").text
 
     assert _keys(text) == ["Place::lidl weglarska"]
     assert 'aria-selected="true"' in text
@@ -739,9 +743,10 @@ def test_the_first_tab_shows_only_single_spelling_proposals_with_counts(client):
 
 
 def test_the_second_tab_shows_groups_of_several_spellings_with_a_divide_button(client):
+    client.headers["HX-Current-URL"] = "http://testserver/payees/suggestions"
     _seed(*_zabka_and_singles())
 
-    text = client.get("/payees?tab=multiple").text
+    text = client.get("/payees/suggestions?tab=multiple").text
 
     assert _keys(text) == ["Place::zabka"]
     assert "Divide into 3" in text
@@ -752,7 +757,7 @@ def test_the_chosen_tab_is_remembered_and_applies_to_swaps(client):
     _seed(*_zabka_and_singles())
 
     fragment = client.get("/payees?part=queue&tab=multiple").text
-    later = client.get("/payees").text
+    later = client.get("/payees/suggestions").text
     after_change = client.post("/payees/skip", data={"key": "Place::zabka"}).text
 
     assert (
@@ -766,19 +771,23 @@ def test_the_chosen_tab_is_remembered_and_applies_to_swaps(client):
 
 
 def test_an_unknown_tab_falls_back_to_the_first(client):
+    client.headers["HX-Current-URL"] = "http://testserver/payees/suggestions"
     _seed(*_zabka_and_singles())
 
-    assert _keys(client.get("/payees?tab=bogus").text) == ["Place::lidl weglarska"]
+    assert _keys(client.get("/payees/suggestions?tab=bogus").text) == [
+        "Place::lidl weglarska"
+    ]
 
 
 def test_dividing_a_group_turns_each_spelling_into_its_own_single_proposal(client):
+    client.headers["HX-Current-URL"] = "http://testserver/payees/suggestions"
     _seed(*_zabka_and_singles())
 
     response = client.post("/payees/split", data={"key": "Place::zabka"})
 
     assert _toast(response) == "Divided into 3 single spellings"
     assert read_payee_book(config.PAYEE_ALIASES_PATH).split == ["Place::zabka"]
-    single = client.get("/payees?tab=single").text
+    single = client.get("/payees/suggestions?tab=single").text
     assert sorted(_keys(single)) == [
         "Place::exact:zabka z8540 k.1",
         "Place::exact:zabka z8540 k.2",
@@ -786,7 +795,9 @@ def test_dividing_a_group_turns_each_spelling_into_its_own_single_proposal(clien
         "Place::lidl weglarska",  # was already a single
     ]
     assert "Group with similar" in single
-    assert _keys(client.get("/payees?tab=multiple").text) == []  # the group is gone
+    assert (
+        _keys(client.get("/payees/suggestions?tab=multiple").text) == []
+    )  # the group is gone
 
 
 def test_a_divided_spelling_is_named_on_its_own(client):
@@ -826,6 +837,7 @@ def test_a_divided_spelling_previews_only_its_own_rows(client):
 
 
 def test_grouping_with_similar_puts_the_spellings_back_into_one_proposal(client):
+    client.headers["HX-Current-URL"] = "http://testserver/payees/suggestions"
     _seed(*_zabka_and_singles())
     client.post("/payees/split", data={"key": "Place::zabka"})
 
@@ -835,7 +847,9 @@ def test_grouping_with_similar_puts_the_spellings_back_into_one_proposal(client)
 
     assert _toast(response) == "Grouped with similar"
     assert read_payee_book(config.PAYEE_ALIASES_PATH).split == []
-    assert _keys(client.get("/payees?tab=multiple").text) == ["Place::zabka"]
+    assert _keys(client.get("/payees/suggestions?tab=multiple").text) == [
+        "Place::zabka"
+    ]
 
 
 def test_dividing_twice_is_harmless_and_the_book_remembers_it_once(client):
@@ -848,9 +862,10 @@ def test_dividing_twice_is_harmless_and_the_book_remembers_it_once(client):
 
 
 def test_each_tab_explains_when_it_is_empty_and_points_to_the_other(client):
+    client.headers["HX-Current-URL"] = "http://testserver/payees/suggestions"
     _seed(_txn("1", "LIDL"))
 
-    multiple = client.get("/payees?tab=multiple").text
+    multiple = client.get("/payees/suggestions?tab=multiple").text
     client.post(
         "/payees/split", data={"key": "Place::lidl"}
     )  # nothing to divide: still fine
@@ -893,16 +908,17 @@ def test_the_workspace_is_offered_only_when_it_shows_something_new(client):
 def test_the_workspace_is_offered_when_several_payee_columns_have_values(client):
     _seed(_payu("1", "cinema-city.pl"), _payu("2", "cinema-city.pl"))
 
-    page = " ".join(client.get("/payees").text.split())
+    page = " ".join(client.get("/payees/suggestions").text.split())
 
     assert 'class="payee-detail"' in page
     assert "Split by other fields, all 1 value" in page
 
 
 def test_the_workspace_is_offered_for_more_spellings_than_the_card_lists(client):
+    client.headers["HX-Current-URL"] = "http://testserver/payees/suggestions"
     _seed(*[_txn(str(i), f"SHOP {i}00 K.{i}") for i in range(5)])
 
-    page = " ".join(client.get("/payees?tab=multiple").text.split())
+    page = " ".join(client.get("/payees/suggestions?tab=multiple").text.split())
 
     assert 'class="payee-detail"' in page
     assert (
@@ -911,9 +927,10 @@ def test_the_workspace_is_offered_for_more_spellings_than_the_card_lists(client)
 
 
 def test_a_group_of_three_spellings_and_one_column_needs_no_workspace(client):
+    client.headers["HX-Current-URL"] = "http://testserver/payees/suggestions"
     _seed(*[_txn(str(i), f"SHOP {i}00 K.{i}") for i in range(3)])
 
-    page = client.get("/payees?tab=multiple").text
+    page = client.get("/payees/suggestions?tab=multiple").text
 
     assert 'class="payee-detail"' not in page  # the card lists all three already
     assert "Divide into 3" in page
@@ -926,7 +943,7 @@ def test_rows_with_no_payee_field_are_not_offered_and_are_counted(client):
         _txn("3", "LIDL"),  # has a field
     )
 
-    page = client.get("/payees").text
+    page = client.get("/payees/suggestions").text
 
     assert _keys(page) == ["Place::lidl"]
     assert "2 transactions have no mapped payee field saved" in " ".join(page.split())
@@ -949,7 +966,7 @@ def test_rows_without_a_payee_field_are_left_for_the_fill_tool(client):
 
     assert _payees_by_id() == {"1": "Piekarnia", "2": "Piekarnia", "3": ""}
     assert _toast(named) == "Named 2 transactions as Piekarnia"
-    page = " ".join(client.get("/payees").text.split())
+    page = " ".join(client.get("/payees/suggestions").text.split())
     assert 'name="key" value="Place::czajczyk"' not in page  # nothing left to group
     assert (
         "1 transaction has no mapped payee field saved" in page
@@ -963,7 +980,7 @@ def test_the_page_says_how_many_rows_have_no_payee_field_yet(client):
         _txn("3", "NAMED", payee="X", payee_fields={}),  # named: not counted
     )
 
-    page = " ".join(client.get("/payees").text.split())
+    page = " ".join(client.get("/payees/suggestions").text.split())
 
     assert "1 transaction has no mapped payee field saved" in page
     assert "can only be named by Description" in page
@@ -977,7 +994,7 @@ def test_a_card_says_how_many_of_its_rows_have_each_other_field(client):
         _txn("3", "", payee_fields={"Place": "ACME", "Title": "Order"}),
     )
 
-    text = " ".join(client.get("/payees").text.split())
+    text = " ".join(client.get("/payees/suggestions").text.split())
 
     assert "also Web address 2 of 3 · Title 1 of 3" in text
     assert "How many of this group's transactions also have a value" in text
@@ -1014,7 +1031,7 @@ def test_field_tabs_follow_the_import_mappings_order_then_stray_labels(client):
     )
     _seed(_txn("1", "x", payee_fields={"Old field": "ACME"}))
 
-    counts = _tab_counts(client.get("/payees").text)
+    counts = _tab_counts(client.get("/payees/suggestions").text)
 
     assert list(counts)[:3] == ["Merchant", "Web address", "Old field"]
     assert counts["Merchant"] == "0" and counts["Old field"] == "1"
@@ -1039,7 +1056,7 @@ def test_the_chosen_field_is_remembered_even_with_a_non_ascii_label(client):
     )
 
     chosen = client.get("/payees?part=queue&field=Tytuł&tab=single")
-    later = client.get("/payees")
+    later = client.get("/payees/suggestions")
 
     assert chosen.status_code == 200 and _keys(chosen.text) == ["Tytuł::obiady"]
     assert _keys(later.text) == ["Tytuł::obiady"]  # the next visit opens on it
@@ -1058,7 +1075,7 @@ def test_an_unknown_field_falls_back_to_the_first_one(client):
 
 def test_naming_under_one_field_takes_the_rows_out_of_the_other_fields(client):
     _seed(*_shops())
-    before = _tab_counts(client.get("/payees").text)
+    before = _tab_counts(client.get("/payees/suggestions").text)
 
     client.post(
         "/payees/name",
@@ -1069,7 +1086,7 @@ def test_naming_under_one_field_takes_the_rows_out_of_the_other_fields(client):
             "fields": ["Web address"],
         },
     )
-    after = _tab_counts(client.get("/payees").text)
+    after = _tab_counts(client.get("/payees/suggestions").text)
 
     assert before["Merchant"] == "1" and before["Web address"] == "2"
     assert after["Web address"] == "1"  # only allegro.pl is left
@@ -1110,7 +1127,7 @@ def test_a_rule_can_be_built_from_another_field_than_the_one_suggested_by(client
 
 
 def test_with_no_payee_fields_anywhere_the_page_explains_how_to_set_them_up(client):
-    text = " ".join(client.get("/payees").text.split())
+    text = " ".join(client.get("/payees/suggestions").text.split())
 
     assert "Suggest by" in text
     assert _tab_counts(text)["Description"] == "0"
@@ -1140,3 +1157,128 @@ def test_payee_list_links_to_its_transactions(client):
         "/transactions?payee=%C5%BBabka%20%26%20Co&account_id=&category=&search="
     ).text
     assert "ZABKA" in shown
+
+
+PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 20
+
+
+def _upload(client, name="Lidl", data=PNG, filename="logo.png"):
+    return client.post(
+        "/payees/logo", data={"name": name}, files={"file": (filename, data)}
+    )
+
+
+def test_uploaded_logo_shows_on_the_payee_list_and_is_served(client):
+    _seed(_txn("1", "LIDL 1", payee="Lidl"))
+
+    response = _upload(client)
+
+    assert response.status_code == 200
+    assert "Logo saved for Lidl" in response.headers["HX-Trigger"]
+    table = client.get("/payees?part=table").text
+    assert 'class="payee-logo ' in table
+    url = table.split('class="payee-logo " src="')[1].split('"')[0]
+    served = client.get(url.replace("&amp;", "&"))
+    assert served.status_code == 200 and served.content == PNG
+    assert served.headers["x-content-type-options"] == "nosniff"
+
+
+def test_logo_upload_rejects_non_images_and_unknown_payees(client):
+    _seed(_txn("1", "LIDL 1", payee="Lidl"))
+
+    bad = _upload(client, data=b"not an image", filename="x.png")
+    unknown = _upload(client, name="Nobody")
+
+    assert "PNG, JPEG" in bad.text and "HX-Trigger" not in bad.headers
+    assert "No transaction has that payee" in unknown.text
+    assert client.get("/payees/logo/0123456789abcdef.png").status_code == 404
+    assert client.get("/payees/logo/..%2Fledger.csv").status_code == 404
+
+
+def test_logo_can_be_replaced_and_removed(client):
+    _seed(_txn("1", "LIDL 1", payee="Lidl"))
+    _upload(client)
+
+    assert "Replace the logo" in client.get("/payees/logo?name=Lidl").text
+    removed = client.post("/payees/logo/remove", data={"name": "Lidl"})
+
+    assert "Logo removed for Lidl" in removed.headers["HX-Trigger"]
+    assert 'class="payee-logo ' not in client.get("/payees?part=table").text
+    assert "Add a logo" in client.get("/payees/logo?name=Lidl").text
+
+
+def test_rename_and_merge_carry_the_logo(client):
+    _seed(_txn("1", "A", payee="Lidl"), _txn("2", "B", payee="Lidl 2"))
+    _upload(client)
+
+    client.post("/payees/rename", data={"old": "Lidl", "new": "Lidl Polska"})
+    assert 'class="payee-logo ' in client.get("/payees?part=table").text
+
+    client.post(
+        "/payees/merge", data={"names": ["Lidl Polska", "Lidl 2"], "name": "Lidl 2"}
+    )
+    table = client.get("/payees?part=table").text
+    assert table.count('class="payee-logo ') == 1
+
+
+def test_transactions_list_and_payee_filter_show_the_logo(client):
+    _seed(_txn("1", "LIDL 1", payee="Lidl"))
+    _upload(client)
+
+    rows = client.get("/transactions").text
+    matches = client.get("/transactions/payee-search?q=lid").text
+
+    assert "payee-logo-in" in rows and "has-logo" in rows
+    assert 'class="payee-logo "' in matches
+
+
+def test_payees_page_is_the_list_and_naming_is_its_own_page(client):
+    _seed(_txn("1", "ZABKA Z1"), _txn("2", "IKEA", payee="IKEA"))
+
+    listing = client.get("/payees").text
+    naming = client.get("/payees/suggestions").text
+
+    assert "All payees" in listing and 'id="payee-table"' in listing
+    assert 'id="payee-queue-box"' not in listing
+    assert 'href="/payees/suggestions"' in listing and "(1 suggestion)" in listing
+    assert 'id="payee-queue-box"' in naming and 'id="payee-table"' not in naming
+    assert 'href="/payees"' in naming and 'id="payee-dialog"' in naming
+
+
+def test_an_action_re_renders_the_page_it_came_from(client):
+    _seed(_txn("1", "ZABKA Z1"), _txn("2", "IKEA", payee="IKEA"))
+    rename = {"old": "IKEA", "new": "Ikea"}
+
+    from_list = client.post(
+        "/payees/rename", data=rename, headers={"HX-Current-URL": "http://x/payees"}
+    ).text
+    from_naming = client.post(
+        "/payees/skip",
+        data={"key": "Place::zabka"},
+        headers={"HX-Current-URL": "http://x/payees/suggestions"},
+    ).text
+
+    assert 'id="payee-table"' in from_list and 'id="payee-queue-box"' not in from_list
+    assert (
+        'id="payee-queue-box"' in from_naming and 'id="payee-table"' not in from_naming
+    )
+
+
+def test_payee_list_can_be_filtered_by_having_a_logo(client):
+    _seed(_txn("1", "A", payee="Lidl"), _txn("2", "B", payee="Ikea"))
+    _upload(client, name="Lidl")
+
+    everyone = client.get("/payees?part=table").text
+    with_logo = client.get("/payees?part=table&logo=with").text
+    without = client.get("/payees?part=table&logo=without").text
+    junk = client.get("/payees?part=table&logo=banana").text
+
+    assert "Lidl" in everyone and "Ikea" in everyone
+    assert "Lidl" in with_logo and "Ikea" not in with_logo
+    assert "Ikea" in without and "Lidl" not in without
+    assert "Lidl" in junk and "Ikea" in junk  # an unknown value is no filter
+    page = client.get("/payees?logo=without").text
+    assert '<option value="without" selected>' in page
+    assert "&amp;logo=without" in without  # sort links keep the filter
+    none = client.get("/payees?part=table&logo=with&q=ikea").text
+    assert "No payee matches “ikea” with a logo." in none

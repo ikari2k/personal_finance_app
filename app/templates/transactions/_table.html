@@ -1,5 +1,6 @@
 {% from "_icons.html" import edit_icon, delete_icon, search_icon, transfer_icon %}
 {% from "_category_icons.html" import category_icon %}
+{% from "_payee_logo.html" import payee_logo %}
 
 {% macro cat_option_templates(categories) %}
   {% for type_name in ('income', 'expense') %}
@@ -121,7 +122,8 @@
           row's own bank text (`data-bank`) on top. Writes only ``payee``
           (POST /transactions/{id}/payee).
         #}
-        <span class="payee-combo" data-txn-id="{{ txn.id }}">
+        <span class="payee-combo{{ ' has-logo' if payee_logo_url(txn.payee) }}" data-txn-id="{{ txn.id }}">
+          {{ payee_logo(txn.payee, "payee-logo-in") }}
           <input type="text" class="desc-inline-input payee-combo-input"
                  value="{{ txn.payee }}" data-value="{{ txn.payee }}"
                  data-bank="{{ txn.description }}" placeholder="Payee"

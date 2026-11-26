@@ -3115,6 +3115,15 @@ a.nw-tab { display: inline-block; text-decoration: none; }
 }
 .payee-icon:hover { background: rgba(37, 99, 235, 0.12); }
 .payee-search { display: flex; align-items: center; gap: 0.5rem; margin: 0; }
+.payee-search label { margin: 0; }
+.payee-search select {
+  width: auto;
+  height: var(--control-h);
+  margin: 0 0.5rem 0 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  font-size: var(--text-sm);
+}
 .payee-search input { width: 15rem; max-width: 100%; height: var(--control-h); margin: 0; }
 .payee-table th, .payee-table td { white-space: nowrap; }
 .payee-table td.payee-name { font-weight: 600; white-space: normal; min-width: 11rem; }
@@ -3307,3 +3316,46 @@ a.nw-tab { display: inline-block; text-decoration: none; }
   color: var(--pico-color);
 }
 .payee-filter-empty { padding: 0.5rem 0.65rem; font-size: var(--text-sm); }
+
+/* Payee logos: a small square image, on white so transparent logos stay legible. */
+.payee-logo {
+  width: 1.4rem;
+  height: 1.4rem;
+  object-fit: contain;
+  flex: 0 0 auto;
+  border-radius: 4px;
+  background: #fff;
+  border: var(--pico-border-width) solid var(--pico-muted-border-color);
+  vertical-align: middle;
+}
+.payee-logo-lg { width: 4rem; height: 4rem; }
+/* Payee list: the logo (or placeholder) is the button that opens the dialog. */
+.payee-logo-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  margin: 0 0.4rem 0 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--pico-border-radius);
+  background: transparent;
+  --pico-color: var(--pico-muted-color);
+  color: var(--pico-color);
+  vertical-align: middle;
+  cursor: pointer;
+}
+.payee-logo-btn:hover { background: rgba(127, 127, 127, 0.14); }
+/* Transactions list: the logo sits inside the payee input's left edge. */
+.payee-combo.has-logo .payee-logo-in {
+  position: absolute;
+  left: 0.3rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 1.2rem;
+  height: 1.2rem;
+  pointer-events: none;
+}
+.payee-combo.has-logo .payee-combo-input { padding-left: 1.85rem; }
+.payee-filter-name { display: inline-flex; align-items: center; gap: 0.5rem; }

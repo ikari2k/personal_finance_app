@@ -1,0 +1,22 @@
+{% from "_payee_logo.html" import payee_logo %}
+<form hx-post="/payees/logo" hx-target="#payee-dialog-content" hx-swap="innerHTML"
+      hx-encoding="multipart/form-data">
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <input type="hidden" name="name" value="{{ name }}">
+  <p><strong>{{ name }}</strong></p>
+  {% if has_logo %}<p>{{ payee_logo(name, "payee-logo-lg") }}</p>{% endif %}
+  <label>{{ 'Replace the logo' if has_logo else 'Add a logo' }}
+    <input type="file" name="file" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml" required>
+  </label>
+  <p class="muted">PNG, JPEG, GIF, WebP or SVG, up to 512 KB. Saved on this computer only.</p>
+  <footer class="dialog-footer">
+    {% if has_logo %}
+      <button type="button" class="btn-outline"
+              hx-post="/payees/logo/remove" hx-vals='{{ {"name": name}|tojson }}'
+              hx-target="#payee-dialog-content" hx-swap="innerHTML">Remove</button>
+    {% endif %}
+    <button type="button" class="btn-outline"
+            onclick="document.getElementById('payee-dialog').close()">Cancel</button>
+    <button type="submit">Save</button>
+  </footer>
+</form>

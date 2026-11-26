@@ -20,6 +20,7 @@ EXPENSE_NATURE_PATH = CONFIG_DIR / "expense_nature.toml"
 PAYEE_ALIASES_PATH = CONFIG_DIR / "payee_aliases.toml"
 IMPORT_MAPPINGS_DIR = CONFIG_DIR / "import_mappings"
 IMPORT_HISTORY_PATH = DATA_DIR / "import_history.toml"
+PAYEE_LOGOS_DIR = DATA_DIR / "payee_logos"
 
 # Display-only: shown next to headline figures; amounts carry no currency code.
 CURRENCY = "PLN"
