@@ -35,11 +35,13 @@ from app.services.transactions import (
 )
 from app.storage.accounts import read_accounts
 from app.storage.categories import read_categories, write_categories
-from app.storage.ledger import read_ledger, write_ledger
+from app.storage.ledger import raw_row, read_ledger, write_ledger
 from app.templating import templates
 
 router = APIRouter(prefix="/transactions", tags=["transactions"])
 
+# Payee filter value meaning "rows with no payee" (not a name anyone would type).
+NO_PAYEE = "__none__"
 STICKY_FILTER_COOKIE_MAX_AGE = 60 * 60 * 24 * 365  # 1 year
 
 
@@ -113,7 +115,8 @@ def _filter_ledger(
     ``search`` is a case-insensitive substring match against
     ``description`` or ``payee`` — free text, not an equality filter like
     the others.
-    ``payee`` is an exact match on the clean payee name, unlike ``search``.
+    ``payee`` is an exact match on the clean payee name, unlike ``search``;
+    ``NO_PAYEE`` keeps the non-transfer rows that have none.
     ``date_from``/``date_to`` are inclusive ISO ``YYYY-MM-DD`` bounds,
     either or both may be unset independently.
     """
@@ -124,7 +127,12 @@ def _filter_ledger(
             for t in ledger
             if needle in t.description.lower() or needle in t.payee.lower()
         ]
-    if payee:
+    if payee == NO_PAYEE:
+        # Transfers can't have a payee, so they are not "missing" one.
+        ledger = [
+            t for t in ledger if not t.payee and t.type is not TransactionType.TRANSFER
+        ]
+    elif payee:
         ledger = [t for t in ledger if t.payee == payee]
     if account_id:
         ledger = [t for t in ledger if t.account_id == account_id]
@@ -145,7 +153,9 @@ def _filter_ledger(
 
 def _payee_options(ledger: list[Transaction], selected: str) -> list[str]:
     """Payee names for the filter, A to Z, plus the selected one if no row has it."""
-    names = {t.payee for t in ledger if t.payee} | ({selected} if selected else set())
+    names = {t.payee for t in ledger if t.payee}
+    if selected and selected != NO_PAYEE:
+        names.add(selected)
     return sorted(names, key=str.lower)
 
 
@@ -459,6 +469,7 @@ def _render_form(
     values: dict[str, str],
     error: str | None = None,
     transaction_id: str | None = None,
+    raw_record: dict[str, str] | None = None,
 ) -> HTMLResponse:
     """Render the income/expense entry/edit form fragment shown inside its dialog.
 
@@ -466,7 +477,8 @@ def _render_form(
     income and expense never share categories (see ``app.models.category``).
     ``transaction_id`` set means this is an edit (posts back to
     ``/transactions/{id}`` instead of ``/transactions``); ``None`` means a
-    new transaction.
+    new transaction. ``raw_record`` (edit only) is the row as saved in the ledger,
+    shown behind the form's "Show saved record" switch.
     """
     tree = read_categories().get(txn_type.value, {})
     return templates.TemplateResponse(
@@ -484,6 +496,7 @@ def _render_form(
             "dialog_id": f"{txn_type.value}-dialog",
             "dialog_content_id": f"{txn_type.value}-dialog-content",
             "transaction_id": transaction_id,
+            "raw_record": raw_record,
         },
     )
 
@@ -535,7 +548,11 @@ def edit_transaction_form(request: Request, transaction_id: str) -> HTMLResponse
         "notes": transaction.notes or "",
     }
     return _render_form(
-        request, txn_type=transaction.type, values=values, transaction_id=transaction_id
+        request,
+        txn_type=transaction.type,
+        values=values,
+        transaction_id=transaction_id,
+        raw_record=raw_row(transaction),
     )
 
 

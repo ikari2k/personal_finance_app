@@ -107,6 +107,11 @@
         <p class="muted payee-foot">
           + {{ more_groups }} more groups{% if more_once %}, {{ more_once }} of them seen only once (invoice numbers, memo text){% endif %}.
           They move up as you name these.
+          <button type="button" class="secondary"
+                  hx-get="/payees?part=queue&field={{ field|urlencode }}&tab={{ tab }}&limit={{ queue_limit + queue_step }}"
+                  hx-target="#payee-queue-box" hx-swap="innerHTML">
+            Show {{ [more_groups, queue_step]|min }} more
+          </button>
         </p>
       {% endif %}
     {% elif tab == 'single' and multiple_count %}
@@ -120,7 +125,7 @@
 {% if no_fields_count %}
   <p class="muted payee-foot">
     {{ count_label(no_fields_count, 'transaction') }} {{ 'has' if no_fields_count == 1 else 'have' }}
-    no payee field saved, so {{ 'it' if no_fields_count == 1 else 'they' }} cannot be named yet.
-    Use “Fill payee fields” on the Import page with an older export to add them.
+    no mapped payee field saved, so {{ 'it' if no_fields_count == 1 else 'they' }} can only be named by
+    Description. Use “Fill payee fields” on the Import page with an older export to add them.
   </p>
 {% endif %}

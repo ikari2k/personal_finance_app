@@ -57,6 +57,11 @@ def _to_row(transaction: Transaction) -> dict[str, str]:
     }
 
 
+def raw_row(transaction: Transaction) -> dict[str, str]:
+    """Return ``transaction`` as the CSV row the ledger stores, column by column."""
+    return _to_row(transaction)
+
+
 def _parse_payee_fields(raw: str | None) -> dict[str, str]:
     """Read the JSON ``payee_fields`` cell; blank or unreadable means no fields."""
     if not raw:

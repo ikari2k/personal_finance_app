@@ -400,13 +400,15 @@ def build_transactions(
         rule = find_matching_rule(row.description, row.amount, txn_type, rules)
         category, subcategory = (rule.category, rule.subcategory) if rule else ("", "")
         # Payee precedence: a category rule's curated name, then a payee rule
-        # from the payee view (matched on the row's fields: bank text,
-        # counterparty account, the mapping's labelled columns), then the
+        # from the payee view (matched on the row's fields: the
+        # mapping's labelled columns and the description), then the
         # bank's own name for the other party.
         payee_fields = row.payee_fields
         payee = (
             (rule.payee if rule and rule.payee else "")
-            or match_payee(payee_rules or [], field_values_of(payee_fields))
+            or match_payee(
+                payee_rules or [], field_values_of(payee_fields, row.description)
+            )
             or row.payee
         ).strip()
         transactions.append(

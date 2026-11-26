@@ -4,11 +4,12 @@ Pure functions over in-memory data — no file I/O. A *payee* is the clean name 
 who was paid or paid you (``Transaction.payee``); the bank's own text stays in
 ``description`` and is never touched here.
 
-Payees are recognised only by the *payee fields* the user configured on the
-import mapping (``Transaction.payee_fields``: a shop's web address, the other
-side's name, ...). The bank's own description is deliberately not used: a row
-with no payee field values cannot be grouped or named until the fill tool adds
-them. A ``PayeeRule`` says "if all of these fields have these values, the
+Payees are recognised by the *payee fields* the user configured on the import
+mapping (``Transaction.payee_fields``: a shop's web address, the other side's
+name, ...) and, as one more field called "Description", by the transaction's
+own description. That last one is how rows imported before payee fields were
+saved can be named; it is always offered, as the last field. A
+``PayeeRule`` says "if all of these fields have these values, the
 payee is X". When several rules match one row the one with more fields wins,
 then the newer one.
 
@@ -36,6 +37,7 @@ from decimal import Decimal
 from app.models.import_mapping import PayeeFieldColumn
 from app.models.payee import (
     BUILT_IN_FIELDS,
+    DESCRIPTION_FIELD,
     MAX_PAYEE_FIELDS,
     PayeeBook,
     PayeeRule,
@@ -146,19 +148,32 @@ def normalize_payee_fields(pairs: list[tuple[str, int]]) -> list[PayeeFieldColum
 # ---------------------------------------------------------------------------
 
 
-def field_values_of(payee_fields: dict[str, str]) -> dict[str, str]:
+def field_values_of(
+    payee_fields: dict[str, str], description: str = ""
+) -> dict[str, str]:
     """Return the non-blank payee field values a rule can match on, by label.
 
-    In the order the mapping configured them, which is their priority.
+    The mapped fields come in the order the mapping configured them, which is
+    their priority; the description follows as the ``Description`` field unless it
+    only repeats one of them.
     """
-    return {
+    values = {
         label: value.strip() for label, value in payee_fields.items() if value.strip()
     }
+    # A description that just repeats a mapped field adds nothing to group on.
+    repeats = {spelling_key(value) for value in values.values()}
+    if (
+        description.strip()
+        and DESCRIPTION_FIELD not in values
+        and spelling_key(description) not in repeats
+    ):
+        values[DESCRIPTION_FIELD] = description.strip()
+    return values
 
 
 def field_values(txn: Transaction) -> dict[str, str]:
-    """Return ``txn``'s non-blank payee field values by label."""
-    return field_values_of(txn.payee_fields)
+    """Return ``txn``'s non-blank payee field values by label, description included."""
+    return field_values_of(txn.payee_fields, txn.description)
 
 
 def _rule_matches(rule: PayeeRule, values: dict[str, str]) -> bool:
@@ -273,7 +288,7 @@ def split_key(key: str) -> tuple[str, str]:
 
 def field_text(txn: Transaction, label: str) -> str:
     """Return ``txn``'s value for payee field ``label``; ``""`` if it has none."""
-    return " ".join(txn.payee_fields.get(label, "").split())
+    return " ".join(field_values(txn).get(label, "").split())
 
 
 def _is_candidate(txn: Transaction) -> bool:
@@ -287,8 +302,11 @@ def _is_unnamed(txn: Transaction, label: str) -> bool:
 
 
 def has_any_payee_field(txn: Transaction) -> bool:
-    """Whether ``txn`` has a value in at least one payee field."""
-    return bool(field_values(txn))
+    """Whether ``txn`` has a value in at least one mapped payee field.
+
+    The description does not count: it is always there as a fallback field.
+    """
+    return bool(field_values_of(txn.payee_fields))
 
 
 def without_payee_fields(transactions: list[Transaction]) -> int:
@@ -373,9 +391,12 @@ def payee_field_labels(
     """
     seen = list(dict.fromkeys(configured))
     extra = Counter(
-        label for t in transactions for label in field_values(t) if label not in seen
+        label
+        for t in transactions
+        for label in field_values(t)
+        if label not in seen and label != DESCRIPTION_FIELD
     )
-    return seen + [label for label, _ in extra.most_common()]
+    return seen + [label for label, _ in extra.most_common()] + [DESCRIPTION_FIELD]
 
 
 def unnamed_groups(

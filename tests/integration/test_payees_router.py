@@ -424,7 +424,7 @@ def test_the_dialog_offers_only_the_configured_payee_fields_with_the_default_tic
     ).text
 
     assert 'name="fields" value="Web address"' in text
-    assert 'name="fields" value="Description"' not in text  # just the bank text
+    assert 'name="fields" value="Description"' in text  # always offered
     assert 'name="fields" value="Counterparty account"' not in text
     assert 'value="Web address"\n               checked' in text
     assert "on 2 of 2 rows" in text
@@ -921,15 +921,15 @@ def test_a_group_of_three_spellings_and_one_column_needs_no_workspace(client):
 
 def test_rows_with_no_payee_field_are_not_offered_and_are_counted(client):
     _seed(
-        _txn("1", "ZABKA Z1", payee_fields={}),
-        _txn("2", "ZABKA Z2", payee_fields={}),
+        _txn("1", "", payee_fields={}),
+        _txn("2", "", payee_fields={}),
         _txn("3", "LIDL"),  # has a field
     )
 
     page = client.get("/payees").text
 
     assert _keys(page) == ["Place::lidl"]
-    assert "2 transactions have no payee field saved" in " ".join(page.split())
+    assert "2 transactions have no mapped payee field saved" in " ".join(page.split())
     assert "Fill payee fields" in page
     preview = client.get("/payees/name-preview?key=Place::zabka&name=Z").text
     assert "Nothing left to name" in preview  # no group to name
@@ -940,7 +940,7 @@ def test_rows_without_a_payee_field_are_left_for_the_fill_tool(client):
     _seed(
         _txn("1", "CZAJCZYK S.C."),
         _txn("2", "CZAJCZYK S.C."),
-        _txn("3", "CZAJCZYK S.C.", payee_fields={}),
+        _txn("3", "", payee_fields={}),
     )
 
     named = client.post(
@@ -951,27 +951,30 @@ def test_rows_without_a_payee_field_are_left_for_the_fill_tool(client):
     assert _toast(named) == "Named 2 transactions as Piekarnia"
     page = " ".join(client.get("/payees").text.split())
     assert 'name="key" value="Place::czajczyk"' not in page  # nothing left to group
-    assert "1 transaction has no payee field saved" in page  # the fill tool's work
+    assert (
+        "1 transaction has no mapped payee field saved" in page
+    )  # the fill tool's work
 
 
 def test_the_page_says_how_many_rows_have_no_payee_field_yet(client):
     _seed(
         _txn("1", "CZAJCZYK S.C."),
-        _txn("2", "OLD ROW", payee_fields={}),
+        _txn("2", "", payee_fields={}),
         _txn("3", "NAMED", payee="X", payee_fields={}),  # named: not counted
     )
 
     page = " ".join(client.get("/payees").text.split())
 
-    assert "1 transaction has no payee field saved, so it cannot be named yet" in page
+    assert "1 transaction has no mapped payee field saved" in page
+    assert "can only be named by Description" in page
     assert 'class="payee-by"' not in page  # no per-card badge any more
 
 
 def test_a_card_says_how_many_of_its_rows_have_each_other_field(client):
     _seed(
-        _txn("1", "A", payee_fields={"Place": "ACME", "Web address": "acme.pl"}),
-        _txn("2", "B", payee_fields={"Place": "ACME", "Web address": "acme.pl"}),
-        _txn("3", "C", payee_fields={"Place": "ACME", "Title": "Order"}),
+        _txn("1", "", payee_fields={"Place": "ACME", "Web address": "acme.pl"}),
+        _txn("2", "", payee_fields={"Place": "ACME", "Web address": "acme.pl"}),
+        _txn("3", "", payee_fields={"Place": "ACME", "Title": "Order"}),
     )
 
     text = " ".join(client.get("/payees").text.split())
@@ -1109,5 +1112,17 @@ def test_a_rule_can_be_built_from_another_field_than_the_one_suggested_by(client
 def test_with_no_payee_fields_anywhere_the_page_explains_how_to_set_them_up(client):
     text = " ".join(client.get("/payees").text.split())
 
-    assert "No payee fields are set up yet" in text
-    assert "Suggest by" not in text
+    assert "Suggest by" in text
+    assert _tab_counts(text)["Description"] == "0"
+
+
+def test_show_more_lists_twenty_more_suggestions(client):
+    _seed(
+        *[_txn(str(i), f"SHOP{chr(65 + i // 26)}{chr(65 + i % 26)}") for i in range(40)]
+    )
+
+    first = client.get("/payees?part=queue").text
+    more = client.get("/payees?part=queue&limit=40").text
+
+    assert len(_keys(first)) == 20 and "Show 20 more" in first
+    assert len(_keys(more)) == 40 and "more</button>" not in more

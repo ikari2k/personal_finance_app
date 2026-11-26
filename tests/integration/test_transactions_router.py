@@ -1743,3 +1743,29 @@ def test_payee_filter_is_sticky_and_survives_non_ascii_names(client):
 
     assert "Shop 1" in remembered and "Shop 2" not in remembered
     assert "Shop 1" in cleared and "Shop 2" in cleared
+
+
+def test_no_payee_filter_shows_only_rows_without_a_payee(client):
+    _create_account(client)
+    _add_expense(client, description="Named one", payee="Lidl")
+    _add_expense(client, description="Blank one", date="2026-01-16")
+
+    text = client.get("/transactions?payee=__none__").text
+
+    assert "Blank one" in text
+    assert "Named one" not in text
+    assert "No payee" in text
+
+
+def test_edit_form_offers_the_saved_record_as_stored(client):
+    _create_account(client)
+    _add_expense(client, description="PayU 99", payee="Lidl")
+    txn = read_ledger()[0]
+
+    edit = client.get(f"/transactions/{txn.id}/edit").text
+    new = client.get("/transactions/new/expense").text
+
+    assert "Show saved record" in edit
+    assert '<th scope="row">payee_fields</th>' in edit
+    assert f"<td>{txn.id}</td>" in edit
+    assert "Show saved record" not in new

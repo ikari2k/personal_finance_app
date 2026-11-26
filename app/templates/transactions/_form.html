@@ -68,6 +68,21 @@
   <label>Notes
     <input type="text" name="notes" value="{{ values.notes }}">
   </label>
+  {% if raw_record %}
+    {# Pure display preference: client-side only, nothing is submitted. #}
+    <label>
+      <input type="checkbox" role="switch"
+             onchange="document.getElementById('raw-record-{{ values.type }}').hidden = !this.checked">
+      Show saved record
+    </label>
+    <table id="raw-record-{{ values.type }}" class="raw-record" hidden>
+      <tbody>
+        {% for column, value in raw_record.items() %}
+          <tr><th scope="row">{{ column }}</th><td>{{ value }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
   <footer class="dialog-footer">
     <button type="button" class="btn-outline"
             onclick="document.getElementById('{{ dialog_id }}').close()">Cancel</button>

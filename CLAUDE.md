@@ -74,7 +74,7 @@ tests/unit/     tmp_path-isolated; tests/integration/  TestClient, conftest redi
   spacing-insensitive via `services.payees.spelling_key`, never a pattern; more fields win, then
   the newer rule = later in the file) and `skipped` (group keys left unnamed) and `split` (group keys, `<field>::<cluster>`, divided into one group per spelling). Legacy `[[aliases]]`
   (`spelling, payee`) are still read, as rules on `Description`, and rewritten as rules on the next
-  save. Written only by `/payees`. Rule fields are the labels of the import mapping's `payee_fields` only. Import precedence: category-rule payee > payee
+  save. Written only by `/payees`. Rule fields are the labels of the import mapping's `payee_fields` plus `Description`. Import precedence: category-rule payee > payee
   rule > mapping payee column.
 - `config/budget_rule.toml` — `needs, wants, savings` whole-percent targets (default 50/30/20,
   must sum to 100 via `services.budget_rule.validate_targets`).
@@ -118,12 +118,14 @@ tests/unit/     tmp_path-isolated; tests/integration/  TestClient, conftest redi
   keeps its rows, and transfers and `description` are never touched. Every change (name, rename,
   merge, fill) is previewed in a dialog from the same computation the apply step runs. A rename
   or merge also re-points the rules so imports follow.
-  Payee categorization uses *only the payee fields configured on the import mapping* (the
-  description and counterparty account are never payee fields; the description keeps its other
-  jobs: duplicate detection, category rules, the fill tool's matching, so an old rule on
-  `Description` never matches). A row with no payee field value is not offered anywhere (counted
-  by `without_payee_fields`, shown as "N transactions have no payee field saved" until the fill
-  tool adds values).
+  Payee categorization uses the payee fields configured on the import mapping plus one built-in
+  field, **Description** (`DESCRIPTION_FIELD`, always the last tab): the transaction's own
+  `description`, so rows imported before payee fields were saved can be named. It is left out of
+  a row whose description only repeats one of its mapped values (`field_values_of`). The
+  counterparty account is never a payee field; the description keeps its other jobs (duplicate
+  detection, category rules, the fill tool's matching). Import matches `Description` rules too.
+  `without_payee_fields` counts rows with no *mapped* field ("no mapped payee field saved"; they
+  can still be named by Description).
   **Suggestions are built per payee field**: "Name these" has a tab per field (labels from the
   mappings first, then stray ones: `payee_field_labels`; cookie `payee_field`, stored URL-encoded
   because labels are free text like "Tytuł"), and `unnamed_groups(rows, book, label)` clusters only

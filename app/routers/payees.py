@@ -55,7 +55,8 @@ from app.templating import templates
 
 router = APIRouter(prefix="/payees", tags=["payees"])
 
-QUEUE_LIMIT = 8  # groups listed under "Name these"
+QUEUE_LIMIT = 20  # groups listed under "Name these"
+QUEUE_STEP = 20  # more groups each "Show more" adds
 GOAL_GROUPS = 25  # the meter's marker: coverage after naming this many groups
 PREVIEW_ROWS = 6  # sample transactions shown in a preview dialog
 COMBO_LIMIT = 25  # combinations listed in a group's workspace
@@ -212,6 +213,7 @@ def _content_context(
     open_labels: list[str] | None = None,
     tab: str = DEFAULT_TAB,
     field: str = "",
+    limit: int = QUEUE_LIMIT,
 ) -> dict:
     """Everything ``payees/_content.html`` renders, from the ledger and the book.
 
@@ -237,7 +239,8 @@ def _content_context(
     multiples = [g for g in groups if len(g.spellings) > 1]
     tab = tab if tab in TABS else DEFAULT_TAB
     shown = singles if tab == "single" else multiples
-    queue = shown[:QUEUE_LIMIT]
+    limit = max(QUEUE_LIMIT, min(limit, len(shown)))
+    queue = shown[:limit]
     goal_named = named + sum(g.count for g in groups[:GOAL_GROUPS])
     needle = q.strip().casefold()
     summaries = [
@@ -270,6 +273,8 @@ def _content_context(
         "multiple_count": len(multiples),
         "queue_cover": sum(g.count for g in queue),
         "more_groups": len(shown) - len(queue),
+        "queue_limit": limit,
+        "queue_step": QUEUE_STEP,
         "more_once": sum(1 for g in shown[len(queue) :] if g.count == 1),
         "skipped_count": len(book.skipped),
         "summaries": summaries,
@@ -326,17 +331,21 @@ def payees_page(
     part: str = "",
     tab: str | None = None,
     field: str | None = None,
+    limit: int = QUEUE_LIMIT,
 ) -> HTMLResponse:
     """Render the payee management page, or just a part of it.
 
     ``part=table`` is the list (search and sorting), ``part=queue`` the "Name
     these" box (switching field or tab). The sort, the tab and the field are
     remembered between visits (see ``resolve_sort`` and ``resolve_tab``).
+    ``limit`` is how many suggestions the box lists ("Show more" raises it).
     """
     sort, direction = resolve_sort(request, sort, direction)
     tab = resolve_tab(request, tab)
     wanted_field = field if field else remembered_field(request)
-    context = _content_context(q, sort, direction, tab=tab, field=wanted_field)
+    context = _content_context(
+        q, sort, direction, tab=tab, field=wanted_field, limit=limit
+    )
     if part == "table":
         response = templates.TemplateResponse(request, "payees/_table.html", context)
     elif part == "queue":

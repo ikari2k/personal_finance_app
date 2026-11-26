@@ -619,14 +619,16 @@ def test_build_transactions_payee_precedence_rule_then_payee_rule_then_bank():
     assert [t.payee for t in txns] == ["Cinema City", "Żabka", "Bank"]
 
 
-def test_a_payee_rule_never_matches_the_description_only_payee_fields():
-    # A rule on the bank text is not a payee rule: only payee fields count.
+def test_a_payee_rule_on_the_description_field_matches_the_description():
     payee_rules = [PayeeRule(fields={DESCRIPTION_FIELD: "ZABKA"}, payee="Żabka")]
-    rows = [ParsedRow(date(2026, 9, 11), "ZABKA", Decimal("-3"))]
+    rows = [
+        ParsedRow(date(2026, 9, 11), "zabka", Decimal("-3")),
+        ParsedRow(date(2026, 9, 12), "LIDL", Decimal("-3")),
+    ]
 
-    [txn] = build_transactions(rows, "chk", [], payee_rules)
+    named, other = build_transactions(rows, "chk", [], payee_rules)
 
-    assert txn.payee == ""
+    assert (named.payee, other.payee) == ("Żabka", "")
 
 
 def test_build_transactions_matches_payee_rules_on_the_captured_fields():

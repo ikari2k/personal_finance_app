@@ -265,9 +265,19 @@ def test_field_values_are_the_payee_fields_only_without_blanks():
         payee_fields={"Web address": "cinema-city.pl", "Recipient": "  "},
     )
 
-    # the description and counterparty account are not payee fields
-    assert field_values(txn) == {"Web address": "cinema-city.pl"}
+    # the description joins as its own field; the counterparty account never does
+    assert field_values(txn) == {"Web address": "cinema-city.pl", "Description": "PayU"}
+    assert field_values_of({"Web address": "cinema-city.pl"}) == {
+        "Web address": "cinema-city.pl"
+    }
     assert field_values_of({}) == {}
+
+
+def test_a_description_that_repeats_a_payee_field_is_not_a_field_of_its_own():
+    txn = _txn("1", "Cinema City", payee_fields={"Place": "CINEMA  city"})
+
+    assert field_values(txn) == {"Place": "CINEMA  city"}
+    assert field_values(_txn("2", "  ", payee_fields={})) == {}
 
 
 def test_a_rule_needs_every_field_and_ignores_case_and_spacing():
@@ -446,7 +456,19 @@ def test_the_default_rule_field_is_the_one_the_group_is_built_from():
 
 
 def test_field_options_are_empty_for_rows_with_no_payee_field():
-    assert field_options([_txn("1", "ZABKA Z1", payee_fields={})]) == []
+    assert field_options([_txn("1", "", payee_fields={})]) == []
+
+
+def test_an_old_row_with_only_a_description_is_grouped_by_description():
+    old = [
+        _txn("1", "ZABKA Z1", payee_fields={}),
+        _txn("2", "ZABKA Z2", payee_fields={}),
+    ]
+
+    [group] = unnamed_groups(old, PayeeBook(), "Description")
+
+    assert group.count == 2
+    assert group.key == "Description::zabka"
 
 
 def test_a_row_lacking_the_payee_field_is_not_part_of_the_group():
@@ -801,8 +823,9 @@ def test_payee_field_labels_list_the_configured_ones_first_then_stray_ones_by_us
 
     labels = payee_field_labels(ledger, ["Web address", "Place", "Web address"])
 
-    assert labels == ["Web address", "Place", "Old field", "Other"]
-    assert payee_field_labels([], []) == []
+    # the description is always offered, last
+    assert labels == ["Web address", "Place", "Old field", "Other", "Description"]
+    assert payee_field_labels([], []) == ["Description"]
 
 
 def test_labels_cannot_contain_the_key_separator():

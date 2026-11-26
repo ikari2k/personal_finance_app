@@ -3202,3 +3202,17 @@ a.nw-tab { display: inline-block; text-decoration: none; }
 
 .payee-tabs-label { font-size: 0.8rem; margin-right: 0.25rem; }
 .payee-field-tabs { margin-bottom: 0.1rem; }
+
+/* Edit dialog's "Show saved record": the ledger row exactly as stored. */
+.raw-record th,
+.raw-record td {
+  padding: 0.2rem 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  word-break: break-all;
+}
+.raw-record th {
+  width: 11rem;
+  font-weight: 500;
+  color: var(--pico-muted-color);
+}
