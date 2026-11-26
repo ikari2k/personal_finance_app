@@ -21,6 +21,7 @@ from app.services.payees import (
     combinations,
     coverage,
     default_labels,
+    dismissed_ids,
     field_options,
     field_text,
     field_values,
@@ -832,3 +833,20 @@ def test_labels_cannot_contain_the_key_separator():
     [field] = normalize_payee_fields([("A::B", 1)])
 
     assert field.label == "A:B"
+
+
+def test_dismissing_a_group_hides_its_rows_under_every_field():
+    shop = _txn(
+        "1", "ZABKA Z1", payee_fields={"Place": "ZABKA Z1", "Seller": "Zabka Sp"}
+    )
+    other = _txn("2", "IKEA", payee_fields={"Place": "IKEA", "Seller": "Ikea Sp"})
+    book = skip_group(PayeeBook(), "Place::" + group_key("ZABKA Z1"))
+
+    assert {g.label for g in unnamed_groups([shop, other], book, "Seller")} == {
+        "Seller"
+    }
+    sellers = unnamed_groups([shop, other], book, "Seller")
+    assert [t for g in sellers for t in g.spellings] == [("Ikea Sp", 1)]
+    assert dismissed_ids([shop, other], book) == {"1"}
+    # Nothing was named and no rule was made.
+    assert shop.payee == "" and book.rules == []

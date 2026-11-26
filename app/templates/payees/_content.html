@@ -27,7 +27,7 @@
     <div id="payee-queue-box">{% include "payees/_queue.html" %}</div>
     {% if skipped_count %}
       <p class="muted payee-foot">
-        {{ count_label(skipped_count, 'group') }} left unnamed.
+        {{ count_label(skipped_count, 'group') }} dismissed.
         <button type="button" class="payee-link" hx-post="/payees/unskip" hx-target="#payees-content" hx-swap="none">Show them again</button>
       </p>
     {% endif %}

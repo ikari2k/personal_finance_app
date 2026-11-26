@@ -3097,6 +3097,23 @@ a.nw-tab { display: inline-block; text-decoration: none; }
   font-weight: 600;
 }
 .payee-link:hover { background: none; text-decoration: underline; }
+/* Rename icon beside a payee's name: the Transactions list's edit blue. */
+.payee-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  margin: 0 0 0 0.4rem;
+  padding: 0;
+  border: 0;
+  border-radius: var(--pico-border-radius);
+  background: transparent;
+  color: #2563eb;
+  vertical-align: middle;
+  cursor: pointer;
+}
+.payee-icon:hover { background: rgba(37, 99, 235, 0.12); }
 .payee-search { display: flex; align-items: center; gap: 0.5rem; margin: 0; }
 .payee-search input { width: 15rem; max-width: 100%; height: var(--control-h); margin: 0; }
 .payee-table th, .payee-table td { white-space: nowrap; }
@@ -3216,3 +3233,77 @@ a.nw-tab { display: inline-block; text-decoration: none; }
   font-weight: 500;
   color: var(--pico-muted-color);
 }
+
+/* Payee filter on the Transactions toolbar: All / No payee switches plus a
+ * search box whose matches load on demand. */
+.payee-filter { display: inline-flex; align-items: center; gap: 0.35rem; }
+.payee-quick {
+  width: auto;
+  margin: 0;
+  padding: 0 0.65rem;
+  background: transparent;
+  border: var(--pico-border-width) solid var(--pico-muted-border-color);
+  /* Pico sets --pico-color to the inverse (white) on buttons; use the ink. */
+  --pico-color: var(--pico-contrast);
+  color: var(--pico-color);
+}
+.payee-quick:hover,
+.payee-quick:focus {
+  background: rgba(127, 127, 127, 0.12);
+  --pico-color: var(--pico-contrast);
+  color: var(--pico-color);
+}
+.payee-quick.active,
+.payee-quick.active:hover,
+.payee-quick.active:focus {
+  background: var(--pico-primary-background);
+  border-color: var(--pico-primary-background);
+  --pico-color: var(--pico-primary-inverse);
+  color: var(--pico-color);
+}
+.payee-filter-search { position: relative; }
+.view-options .payee-filter-input {
+  width: 12rem;
+  height: var(--control-h);
+  margin: 0;
+  font-size: var(--text-sm);
+}
+.payee-filter-input.active { border-color: var(--pico-primary-border); }
+.payee-filter-results {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 2px);
+  left: 0;
+  min-width: 100%;
+  width: max-content;
+  max-width: 22rem;
+  max-height: 18rem;
+  overflow-y: auto;
+  background: var(--pico-card-background-color, var(--pico-background-color));
+  border: var(--pico-border-width) solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+}
+.payee-filter-results:empty { display: none; }
+.view-options .payee-filter-option {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  width: 100%;
+  height: auto;
+  padding: 0.4rem 0.65rem;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  --pico-color: var(--pico-contrast);
+  color: var(--pico-color);
+  text-align: left;
+  font-weight: 400;
+}
+.view-options .payee-filter-option:hover,
+.view-options .payee-filter-option:focus {
+  background: rgba(127, 127, 127, 0.14);
+  --pico-color: var(--pico-contrast);
+  color: var(--pico-color);
+}
+.payee-filter-empty { padding: 0.5rem 0.65rem; font-size: var(--text-sm); }

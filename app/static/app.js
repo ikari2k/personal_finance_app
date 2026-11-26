@@ -621,3 +621,40 @@
     if (e.target.id === "payee-merge-name") e.target.dataset.touched = "1";
   });
 })();
+
+/*
+ * Payee filter on the Transactions toolbar (`.payee-filter`): its matches are
+ * fetched by htmx as you type. This only closes them (outside click, Escape),
+ * selects the text on focus so typing replaces the current payee, and lets
+ * Enter pick the first match. Delegated on `document` since htmx swaps the bar.
+ */
+(function () {
+  "use strict";
+
+  function closeAll(except) {
+    document.querySelectorAll(".payee-filter-results").forEach(function (el) {
+      if (!except || !except.contains(el)) el.innerHTML = "";
+    });
+  }
+
+  document.addEventListener("focusin", function (e) {
+    if (e.target.matches && e.target.matches(".payee-filter-input")) e.target.select();
+  });
+
+  document.addEventListener("click", function (e) {
+    closeAll(e.target.closest && e.target.closest(".payee-filter-search"));
+  });
+
+  document.addEventListener("keydown", function (e) {
+    if (!e.target.matches || !e.target.matches(".payee-filter-input")) return;
+    if (e.key === "Escape") {
+      closeAll();
+    } else if (e.key === "Enter") {
+      var first = e.target.parentElement.querySelector(".payee-filter-option");
+      if (first) {
+        e.preventDefault();
+        first.click();
+      }
+    }
+  });
+})();

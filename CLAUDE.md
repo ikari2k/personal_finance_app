@@ -72,7 +72,7 @@ tests/unit/     tmp_path-isolated; tests/integration/  TestClient, conftest redi
 - `config/payee_aliases.toml` — the payee book: `[[rules]]` (`payee` + a `[rules.fields]` table of
   label → exact value; a row matches when it has *every* field with that value, case- and
   spacing-insensitive via `services.payees.spelling_key`, never a pattern; more fields win, then
-  the newer rule = later in the file) and `skipped` (group keys left unnamed) and `split` (group keys, `<field>::<cluster>`, divided into one group per spelling). Legacy `[[aliases]]`
+  the newer rule = later in the file) and `skipped` (group keys the user *dismissed*: hides those rows from every field's suggestions via `services.payees.dismissed_ids`, never names or changes anything) and `split` (group keys, `<field>::<cluster>`, divided into one group per spelling). Legacy `[[aliases]]`
   (`spelling, payee`) are still read, as rules on `Description`, and rewritten as rules on the next
   save. Written only by `/payees`. Rule fields are the labels of the import mapping's `payee_fields` plus `Description`. Import precedence: category-rule payee > payee
   rule > mapping payee column.
@@ -269,6 +269,7 @@ tests/unit/     tmp_path-isolated; tests/integration/  TestClient, conftest redi
     at once (e.g. `transaction-form-{{ values.type }}`).
   - Semantic button colors via `.btn-income`/`.btn-expense`/`.btn-transfer`; override both Pico
     base *and* hover vars.
+- **Payee filter** on the Transactions toolbar is *not* a select (too many payees): All payees / No payee (`__none__`) switch buttons plus a search box whose matches (max 15, most used) load from `GET /transactions/payee-search`; the box's `hx-vals` carry the other filters so a pick keeps them.
 - **Transactions toolbar**: every control's `hx-vals`/URL must round-trip every other control's
   current value (account, category, subcategory, txn_type, search, date_from, date_to, by_month,
   by_type). Filters are sticky via cookies — explicit empty string overrides the cookie, an absent

@@ -399,25 +399,52 @@ def payee_field_labels(
     return seen + [label for label, _ in extra.most_common()] + [DESCRIPTION_FIELD]
 
 
+def dismissed_ids(transactions: list[Transaction], book: PayeeBook) -> set[str]:
+    """Return the ids of payee-less rows that sit in a dismissed group.
+
+    Dismissing a suggestion hides its rows from every field's suggestions, not
+    only the field it was dismissed under. Nothing else changes: no rule is made
+    and no row is named. One pass per field that has a dismissed group.
+    """
+    wanted: dict[str, tuple[set[str], set[str]]] = {}
+    for key in book.skipped:
+        label, cluster = split_key(key)
+        if not label:
+            continue
+        clusters, exact = wanted.setdefault(label, (set(), set()))
+        if cluster.startswith(EXACT_PREFIX):
+            exact.add(cluster[len(EXACT_PREFIX) :])
+        else:
+            clusters.add(cluster)
+    ids: set[str] = set()
+    for label, (clusters, exact) in wanted.items():
+        for txn in transactions:
+            if txn.id in ids or not _is_unnamed(txn, label):
+                continue
+            text = field_text(txn, label)
+            if group_key(text) in clusters or spelling_key(text) in exact:
+                ids.add(txn.id)
+    return ids
+
+
 def unnamed_groups(
     transactions: list[Transaction], book: PayeeBook, label: str
 ) -> list[UnnamedGroup]:
     """Cluster the payee-less rows that have a value for field ``label``.
 
     Biggest group first (transaction count, then amount). Skips transfers and
-    groups the user chose to leave unnamed (``book.skipped``). Each group also
-    reports how many of its rows have a value in each of the other payee fields.
+    rows in groups the user dismissed (``book.skipped``), under any field. Each
+    group also reports how many of its rows have a value in each of the other
+    payee fields.
     """
     split = set(book.split)
+    hidden = dismissed_ids(transactions, book)
     buckets: dict[str, list[Transaction]] = defaultdict(list)
     for txn in transactions:
-        if _is_unnamed(txn, label):
+        if txn.id not in hidden and _is_unnamed(txn, label):
             buckets[row_group_key(txn, label, split)].append(txn)
-    skipped = set(book.skipped)
     groups = []
     for key, members in buckets.items():
-        if key in skipped:
-            continue
         spellings = distinct_spellings([field_text(t, label) for t in members])
         spent, received = money_flow(members)
         others = Counter(

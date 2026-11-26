@@ -1,3 +1,4 @@
+{% from "_icons.html" import edit_icon, txn_link_icon %}
 {% macro sort_link(key, label) %}
   {% set next_dir = ('asc' if dir == 'desc' else 'desc') if sort == key else default_dir[key] %}
   {% set url = '/payees?sort=' ~ key ~ '&dir=' ~ next_dir ~ '&q=' ~ (q|urlencode) %}
@@ -31,9 +32,11 @@
                          data-count="{{ p.count }}" aria-label="Select {{ p.name }}"></td>
               <td class="payee-name">
                 {{ p.name }}
-                <button type="button" class="payee-link"
+                <button type="button" class="payee-icon" aria-label="Rename {{ p.name }}" title="Rename"
                         hx-get="/payees/rename" hx-vals='{{ {"name": p.name}|tojson }}'
-                        hx-target="#payee-dialog-content" hx-swap="innerHTML">Rename</button>
+                        hx-target="#payee-dialog-content" hx-swap="innerHTML">{{ edit_icon() }}</button>
+                {# Every other sticky filter is cleared so the list shows only this payee. #}
+                {{ txn_link_icon("/transactions?payee=" ~ (p.name|urlencode) ~ "&account_id=&category=&subcategory=&txn_type=&search=&date_from=&date_to=", "View " ~ p.name ~ "'s transactions") }}
               </td>
               <td class="num">{{ p.count }}</td>
               <td class="num">{{ p.spent|money if p.spent else '—' }}</td>

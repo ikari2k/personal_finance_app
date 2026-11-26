@@ -1729,7 +1729,10 @@ def test_payee_filter_is_an_exact_match(client):
 
     assert "PayU 99" in text
     assert "Other" not in text
-    assert 'option value="Cinema City Plaza"' in text
+    # The filter is a search box, not a list of every payee on the page.
+    assert 'option value="Cinema City Plaza"' not in text
+    assert 'class="payee-filter-input active"' in text
+    assert 'value="Cinema City"' in text
 
 
 def test_payee_filter_is_sticky_and_survives_non_ascii_names(client):
@@ -1769,3 +1772,48 @@ def test_edit_form_offers_the_saved_record_as_stored(client):
     assert '<th scope="row">payee_fields</th>' in edit
     assert f"<td>{txn.id}</td>" in edit
     assert "Show saved record" not in new
+
+
+def test_payee_search_lists_matches_most_used_first_and_keeps_filters(client):
+    _create_account(client)
+    _add_expense(client, description="A", payee="Cinema City")
+    _add_expense(client, description="B", payee="Cinema City", date="2026-01-16")
+    _add_expense(client, description="C", payee="Cinema Plaza", date="2026-01-17")
+    _add_expense(client, description="D", payee="Lidl", date="2026-01-18")
+
+    text = client.get("/transactions/payee-search?q=CINEMA&category=Food").text
+
+    assert text.index("Cinema City") < text.index("Cinema Plaza")
+    assert "Lidl" not in text
+    assert "&#34;category&#34;: &#34;Food&#34;" in text or '"category": "Food"' in text
+    assert "No payee matches" in client.get("/transactions/payee-search?q=zzz").text
+
+
+def test_payee_search_without_a_query_is_capped(client):
+    _create_account(client)
+    for i in range(20):
+        _add_expense(
+            client, description=f"S{i}", payee=f"Shop {i:02}", date="2026-01-15"
+        )
+
+    text = client.get("/transactions/payee-search").text
+
+    assert text.count('class="payee-filter-option"') == 15
+
+
+def test_payee_filter_has_all_and_no_payee_switches(client):
+    _create_account(client)
+    _add_expense(client, description="A", payee="Lidl")
+    _add_expense(client, description="B", payee="", date="2026-01-16")
+
+    none = client.get("/transactions?payee=__none__").text
+    everyone = client.get("/transactions?payee=").text
+
+    assert 'class="payee-quick active" aria-pressed="true"' in none
+    assert ">No payee</button>" in none
+    assert none.count('class="payee-quick active"') == 1
+    assert everyone.count('class="payee-quick active"') == 1
+    assert (
+        'class="payee-quick active" aria-pressed="true"'
+        not in none.split(">No payee</button>")[0].rsplit("All payees", 1)[0][-200:]
+    )

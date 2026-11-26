@@ -49,7 +49,7 @@
             <span class="payee-fold" aria-hidden="true"></span>
             <div class="payee-namebox">
               <input type="text" name="name" value="{{ g.suggestion }}" autocomplete="off"
-                     placeholder="{{ 'Leave unnamed, or type a name' if g.memo_like else 'Payee name' }}"
+                     placeholder="{{ 'Dismiss it, or type a name' if g.memo_like else 'Payee name' }}"
                      aria-label="Payee name for {{ count_label(g.spellings|length, 'bank spelling') }}">
               <span class="muted payee-stats">
                 {% if g.memo_like %}<span class="payee-memo">Looks like memo text</span>{% endif %}
@@ -78,7 +78,8 @@
               {% endif %}
               <button type="button" class="btn-outline"
                       hx-post="/payees/skip" hx-vals='{{ {"key": g.key}|tojson }}'
-                      hx-target="#payees-content" hx-swap="none">Leave unnamed</button>
+                      title="Hide this suggestion, under every field. Nothing is named or changed."
+                      hx-target="#payees-content" hx-swap="none">Dismiss</button>
               <button type="submit">Name {{ count_label(g.count, 'transaction') }}</button>
             </div>
           </form>
@@ -119,7 +120,7 @@
     {% elif tab == 'multiple' and single_count %}
       <p class="muted">No groups of several values left in {{ field }}. {{ single_count }} single value{{ '' if single_count == 1 else 's' }} wait on the other tab.</p>
     {% else %}
-      <p class="muted">Every transaction with a value in {{ field }} has a payee, or was left unnamed. Try another field, or import more.</p>
+      <p class="muted">Every transaction with a value in {{ field }} has a payee, or was dismissed. Try another field, or import more.</p>
     {% endif %}
 
 {% if no_fields_count %}

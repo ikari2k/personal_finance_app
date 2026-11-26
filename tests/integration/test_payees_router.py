@@ -155,7 +155,7 @@ def test_skipping_a_group_hides_it_and_can_be_undone(client):
 
     assert 'name="key" value="Place::zabka"' not in hidden
     assert 'name="key" value="Place::lidl"' in hidden
-    assert "1 group left unnamed" in hidden
+    assert "1 group dismissed" in hidden
     assert 'name="key" value="Place::zabka"' in restored
 
 
@@ -1126,3 +1126,17 @@ def test_show_more_lists_twenty_more_suggestions(client):
 
     assert len(_keys(first)) == 20 and "Show 20 more" in first
     assert len(_keys(more)) == 40 and "more</button>" not in more
+
+
+def test_payee_list_links_to_its_transactions(client):
+    _seed(_txn("1", "ZABKA", payee="Żabka & Co"))
+
+    html = client.get("/payees?part=table").text
+
+    assert 'href="/transactions?payee=%C5%BBabka%20%26%20Co&amp;' in html or (
+        "/transactions?payee=%C5%BBabka%20%26%20Co&" in html
+    )
+    shown = client.get(
+        "/transactions?payee=%C5%BBabka%20%26%20Co&account_id=&category=&search="
+    ).text
+    assert "ZABKA" in shown

@@ -261,6 +261,23 @@ def distinct_payees(transactions: list[Transaction]) -> list[str]:
     return sorted(counts, key=lambda name: (-counts[name], name.lower()))
 
 
+def payee_matches(
+    transactions: list[Transaction], query: str, limit: int = 15
+) -> list[tuple[str, int]]:
+    """Return up to ``limit`` payees whose name contains ``query``, with row counts.
+
+    Case-insensitive; most used first, ties alphabetical. A blank ``query``
+    matches every payee, so the same call serves the filter's opening list.
+    """
+    needle = query.strip().casefold()
+    counts: dict[str, int] = {}
+    for t in transactions:
+        if t.payee and needle in t.payee.casefold():
+            counts[t.payee] = counts.get(t.payee, 0) + 1
+    ranked = sorted(counts, key=lambda name: (-counts[name], name.lower()))
+    return [(name, counts[name]) for name in ranked[:limit]]
+
+
 def update_transfer_pair(
     transactions: list[Transaction],
     transfer_id: str,

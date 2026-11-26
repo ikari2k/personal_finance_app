@@ -1,0 +1,10 @@
+{# The payee filter's matches. `base` = the toolbar's other filters, kept on pick. #}
+{% for name, n in matches %}
+  <button type="button" class="payee-filter-option" role="option"
+          hx-get="/transactions" hx-target="#transactions-table-wrapper" hx-swap="outerHTML"
+          hx-push-url="true" hx-vals='{{ dict(base, payee=name)|tojson }}'>
+    <span>{{ name }}</span><span class="muted">{{ n }}</span>
+  </button>
+{% else %}
+  <div class="payee-filter-empty muted">No payee matches “{{ q }}”.</div>
+{% endfor %}

@@ -27,6 +27,7 @@ from app.services.transactions import (
     distinct_payees,
     ensure_category,
     new_transaction,
+    payee_matches,
     remove_transaction,
     update_transaction,
     update_transaction_category,
@@ -151,14 +152,6 @@ def _filter_ledger(
     return ledger
 
 
-def _payee_options(ledger: list[Transaction], selected: str) -> list[str]:
-    """Payee names for the filter, A to Z, plus the selected one if no row has it."""
-    names = {t.payee for t in ledger if t.payee}
-    if selected and selected != NO_PAYEE:
-        names.add(selected)
-    return sorted(names, key=str.lower)
-
-
 def render_table(
     request: Request,
     *,
@@ -220,7 +213,6 @@ def render_table(
             "txn_type": txn_type,
             "search": search,
             "payee": payee,
-            "payee_options": _payee_options(full_ledger, payee),
             "date_from": date_from,
             "date_to": date_to,
             "any_filter_active": bool(
@@ -383,7 +375,6 @@ def list_transactions(
         "txn_type": resolved_txn_type,
         "search": resolved_search,
         "payee": resolved_payee,
-        "payee_options": _payee_options(full_ledger, resolved_payee),
         "date_from": resolved_date_from,
         "date_to": resolved_date_to,
         "breadcrumbs": breadcrumbs.from_transaction_filters(
@@ -498,6 +489,21 @@ def _render_form(
             "transaction_id": transaction_id,
             "raw_record": raw_record,
         },
+    )
+
+
+@router.get("/payee-search", response_class=HTMLResponse)
+def payee_search(request: Request, q: str = "") -> HTMLResponse:
+    """Render the payee filter's matches for ``q`` (at most 15, most used first).
+
+    Every other query param is the toolbar's current filter state; it rides
+    along so picking a match re-requests the list with those filters kept.
+    """
+    base = {k: v for k, v in request.query_params.items() if k not in ("q", "payee")}
+    return templates.TemplateResponse(
+        request,
+        "transactions/_payee_results.html",
+        {"matches": payee_matches(read_ledger(), q), "base": base, "q": q},
     )
 
 
