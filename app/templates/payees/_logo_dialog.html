@@ -9,11 +9,21 @@
     <input type="file" name="file" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml" required>
   </label>
   <p class="muted">PNG, JPEG, GIF, WebP or SVG, up to 512 KB. Saved on this computer only.</p>
+  {% if no_logo %}
+    <p class="muted">Marked as having no logo, so it is left out of “Missing a logo”.
+      Saving one clears the mark.</p>
+  {% endif %}
   <footer class="dialog-footer">
     {% if has_logo %}
       <button type="button" class="btn-outline"
               hx-post="/payees/logo/remove" hx-vals='{{ {"name": name}|tojson }}'
               hx-target="#payee-dialog-content" hx-swap="innerHTML">Remove</button>
+    {% endif %}
+    {% if not has_logo %}
+      <button type="button" class="btn-outline"
+              title="{{ 'Put it back among the payees still missing a logo' if no_logo else 'It has none: stop listing it as missing' }}"
+              hx-post="/payees/logo/none" hx-vals='{{ {"name": name, "marked": "0" if no_logo else "1"}|tojson }}'
+              hx-target="#payee-dialog-content" hx-swap="innerHTML">{{ 'Needs a logo' if no_logo else 'Has no logo' }}</button>
     {% endif %}
     <button type="button" class="btn-outline"
             onclick="document.getElementById('payee-dialog').close()">Cancel</button>

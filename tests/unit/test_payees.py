@@ -850,3 +850,38 @@ def test_dismissing_a_group_hides_its_rows_under_every_field():
     assert dismissed_ids([shop, other], book) == {"1"}
     # Nothing was named and no rule was made.
     assert shop.payee == "" and book.rules == []
+
+
+def test_no_logo_marks_are_case_insensitive_and_follow_renames():
+    from app.services.payees import is_no_logo, retarget_no_logo, set_no_logo
+
+    book = set_no_logo(PayeeBook(), "Ikea", True)
+    assert is_no_logo(book, "IKEA") and not is_no_logo(book, "Lidl")
+    assert set_no_logo(book, "ikea", False).no_logo == []
+    assert set_no_logo(book, "IKEA", True).no_logo == ["IKEA"]  # never twice
+
+    moved = retarget_no_logo(book, ["Ikea"], "IKEA Poland", has_logo=False)
+    assert moved.no_logo == ["IKEA Poland"]
+    # a merge target that ends up with a logo is not marked
+    assert retarget_no_logo(book, ["Ikea"], "Lidl", has_logo=True).no_logo == []
+    # the book's other lists are untouched
+    keep = PayeeBook(skipped=["a"], split=["b"], no_logo=["Ikea"])
+    assert retarget_no_logo(keep, ["Ikea"], "X", False).skipped == ["a"]
+
+
+def test_top_payees_picks_busiest_and_biggest_spender():
+    from datetime import date
+    from decimal import Decimal
+
+    from app.services.payees import PayeeSummary, top_payees
+
+    def summary(name, count, spent):
+        return PayeeSummary(
+            name, count, Decimal(spent), Decimal("0"), "", date(2026, 1, 1), []
+        )
+
+    lidl, zabka = summary("Lidl", 9, "50"), summary("Żabka", 2, "900")
+
+    assert top_payees([lidl, zabka]) == (lidl, zabka)
+    assert top_payees([]) == (None, None)
+    assert top_payees([summary("A", 1, "0")])[1] is None

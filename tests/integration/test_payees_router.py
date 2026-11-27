@@ -239,7 +239,7 @@ def test_search_filters_by_name_or_bank_spelling_and_sorts(client):
     )
 
     by_spelling = client.get("/payees?part=table&q=weglarska").text
-    by_total = client.get("/payees?part=table&sort=spent&dir=desc").text
+    by_total = client.get("/payees?part=table&q=&sort=spent&dir=desc").text
     by_name = client.get("/payees?part=table&sort=name&dir=asc").text
 
     assert "Lidl" in by_spelling and "Żabka" not in by_spelling
@@ -1281,4 +1281,72 @@ def test_payee_list_can_be_filtered_by_having_a_logo(client):
     assert '<option value="without" selected>' in page
     assert "&amp;logo=without" in without  # sort links keep the filter
     none = client.get("/payees?part=table&logo=with&q=ikea").text
-    assert "No payee matches “ikea” with a logo." in none
+    assert "No payee matches “ikea” (with a logo)." in none
+
+
+def test_a_payee_marked_as_having_no_logo_leaves_the_missing_list(client):
+    _seed(_txn("1", "A", payee="Lidl"), _txn("2", "B", payee="Ikea"))
+
+    marked = client.post("/payees/logo/none", data={"name": "Ikea"})
+
+    assert "Ikea has no logo" in marked.headers["HX-Trigger"]
+    missing = client.get("/payees?part=table&logo=without").text
+    none = client.get("/payees?part=table&logo=none").text
+    assert "Lidl" in missing and "Ikea" not in missing
+    assert "Ikea" in none and "Lidl" not in none
+    assert "Needs a logo" in client.get("/payees/logo?name=Ikea").text
+    client.post("/payees/logo/none", data={"name": "Ikea", "marked": "0"})
+    assert "Ikea" in client.get("/payees?part=table&logo=without").text
+
+
+def test_the_no_logo_mark_follows_rename_and_is_cleared_by_a_logo(client):
+    _seed(_txn("1", "A", payee="Lidl"), _txn("2", "B", payee="Ikea"))
+    client.post("/payees/logo/none", data={"name": "Ikea"})
+
+    client.post("/payees/rename", data={"old": "Ikea", "new": "IKEA Poland"})
+    assert "IKEA Poland" in client.get("/payees?part=table&logo=none").text
+
+    _upload(client, name="IKEA Poland")
+    assert "IKEA Poland" not in client.get("/payees?part=table&logo=none").text
+    assert "IKEA Poland" in client.get("/payees?part=table&logo=with").text
+
+
+def test_a_payee_with_a_logo_cannot_be_marked_as_having_none(client):
+    _seed(_txn("1", "A", payee="Lidl"))
+    _upload(client)
+
+    refused = client.post("/payees/logo/none", data={"name": "Lidl"})
+
+    assert "remove that first" in refused.text
+    assert "Lidl" not in client.get("/payees?part=table&logo=none").text
+
+
+def test_filters_survive_a_rename(client):
+    _seed(
+        _txn("1", "ZABKA Z1", payee="Żabka", amount="-5"),
+        _txn("2", "LIDL 2043", payee="Lidl", amount="-50"),
+    )
+    client.get("/payees?part=table&q=lidl")
+
+    response = client.post(
+        "/payees/rename",
+        data={"old": "Lidl", "new": "Lidl Polska"},
+        headers={"HX-Current-URL": "http://testserver/payees"},
+    )
+
+    assert "Lidl Polska" in response.text
+    assert "Żabka" not in response.text
+
+
+def test_list_shows_payee_statistics(client):
+    _seed(
+        _txn("1", "ZABKA Z1", payee="Żabka", amount="-500"),
+        _txn("2", "LIDL 1", payee="Lidl", amount="-5"),
+        _txn("3", "LIDL 2", payee="Lidl", amount="-5"),
+        _txn("4", "OTHER", payee="", amount="-1"),
+    )
+
+    html = client.get("/payees").text
+
+    assert "Without a payee" in html and "25.0%" in html
+    assert "Most transactions" in html and "Most money spent" in html

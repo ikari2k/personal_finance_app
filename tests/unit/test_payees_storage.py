@@ -19,6 +19,8 @@ def test_write_then_read_round_trips_rules_with_several_fields_and_skipped(tmp_p
             ),
         ],
         skipped=["faktura numer"],
+        split=["Place::zabka"],
+        no_logo=["Ikea"],  # every list must survive a write, not only the rules
     )
 
     write_payee_book(book, path)

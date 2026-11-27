@@ -708,6 +708,22 @@ def payee_summaries(transactions: list[Transaction]) -> list[PayeeSummary]:
     return summaries
 
 
+def top_payees(
+    summaries: list[PayeeSummary],
+) -> tuple[PayeeSummary | None, PayeeSummary | None]:
+    """Return the payee with the most transactions and the one with the most spent.
+
+    Ties go to the earlier name (A to Z); ``None`` for both when there are no
+    payees, and ``None`` for the spender when nobody has spent anything.
+    """
+    ordered = sorted(summaries, key=lambda s: s.name.casefold())
+    if not ordered:
+        return None, None
+    busiest = max(ordered, key=lambda s: s.count)
+    biggest = max(ordered, key=lambda s: s.spent)
+    return busiest, (biggest if biggest.spent > 0 else None)
+
+
 def coverage(transactions: list[Transaction]) -> tuple[int, int]:
     """Return ``(named, total)`` over every transaction that can have a payee."""
     candidates = [t for t in transactions if _is_candidate(t)]
@@ -749,6 +765,33 @@ def retarget_rules(book: PayeeBook, names: list[str], new: str) -> PayeeBook:
         for r in book.rules
     ]
     return book.model_copy(update={"rules": rules})
+
+
+def is_no_logo(book: PayeeBook, name: str) -> bool:
+    """Whether payee ``name`` is marked as having no logo (case-insensitive)."""
+    return name.casefold() in {n.casefold() for n in book.no_logo}
+
+
+def set_no_logo(book: PayeeBook, name: str, marked: bool) -> PayeeBook:
+    """Return ``book`` with ``name`` marked, or no longer marked, as having no logo."""
+    kept = [n for n in book.no_logo if n.casefold() != name.casefold()]
+    return book.model_copy(update={"no_logo": [*kept, name] if marked else kept})
+
+
+def retarget_no_logo(
+    book: PayeeBook, names: list[str], new: str, has_logo: bool
+) -> PayeeBook:
+    """Return ``book`` after ``names`` were renamed or merged into ``new``.
+
+    The mark follows the payee like its logo does: ``new`` is marked if it or any
+    of ``names`` was, unless it ends up with a logo. The old names lose theirs.
+    """
+    marked = is_no_logo(book, new) or any(is_no_logo(book, n) for n in names)
+    old = {n.casefold() for n in names}
+    kept = [n for n in book.no_logo if n.casefold() not in old]
+    return set_no_logo(
+        book.model_copy(update={"no_logo": kept}), new, marked and not has_logo
+    )
 
 
 def split_group(book: PayeeBook, key: str) -> PayeeBook:

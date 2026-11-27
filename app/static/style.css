@@ -3359,3 +3359,21 @@ a.nw-tab { display: inline-block; text-decoration: none; }
 }
 .payee-combo.has-logo .payee-combo-input { padding-left: 1.85rem; }
 .payee-filter-name { display: inline-flex; align-items: center; gap: 0.5rem; }
+
+.payee-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 2rem;
+  margin: 1rem 0 0;
+}
+.payee-stats dt {
+  font-size: 0.8rem;
+  color: var(--pico-muted-color);
+}
+.payee-stats dd {
+  margin: 0;
+  font-weight: 600;
+}
+.payee-stats dd .muted {
+  font-weight: 400;
+}

@@ -35,16 +35,20 @@ from app.services.payees import (
     field_options,
     field_text,
     group_members,
+    is_no_logo,
     merge_payees,
     money_flow,
     payee_field_labels,
     payee_summaries,
     plan_naming,
+    retarget_no_logo,
     retarget_rules,
+    set_no_logo,
     skip_group,
     split_group,
     split_key,
     suggest_name,
+    top_payees,
     unnamed_groups,
     unsplit_group,
     without_payee_fields,
@@ -67,7 +71,7 @@ QUEUE_LIMIT = 20  # groups listed under "Name these"
 QUEUE_STEP = 20  # more groups each "Show more" adds
 GOAL_GROUPS = 25  # the meter's marker: coverage after naming this many groups
 PREVIEW_ROWS = 6  # sample transactions shown in a preview dialog
-LOGO_FILTERS = ("with", "without")  # list filter on having a logo
+LOGO_FILTERS = ("with", "without", "none")  # list filter on logo status
 COMBO_LIMIT = 25  # combinations listed in a group's workspace
 
 
@@ -90,6 +94,8 @@ FIELD_COOKIE = "payee_field"
 DEFAULT_SORT = "name"  # when nothing was ever chosen
 SORT_COOKIE = "payee_sort"
 DIR_COOKIE = "payee_dir"
+QUERY_COOKIE = "payee_q"  # URL-encoded: the search text is free text
+LOGO_COOKIE = "payee_logo"
 SORT_COOKIE_MAX_AGE = 60 * 60 * 24 * 365  # 1 year
 _DEFAULT_DIR = {
     "name": "asc",
@@ -137,8 +143,14 @@ def _remember_sort(
     direction: str,
     tab: str = DEFAULT_TAB,
     field: str = "",
+    q: str | None = None,
+    logo: str | None = None,
 ) -> HTMLResponse:
-    """Store the list's sort and the queue's tab and field for the next visit."""
+    """Store the list's sort, search and logo filter, and the queue's tab and field."""
+    if q is not None:
+        response.set_cookie(QUERY_COOKIE, quote(q), max_age=SORT_COOKIE_MAX_AGE)
+    if logo is not None:
+        response.set_cookie(LOGO_COOKIE, logo, max_age=SORT_COOKIE_MAX_AGE)
     response.set_cookie(SORT_COOKIE, sort, max_age=SORT_COOKIE_MAX_AGE)
     response.set_cookie(DIR_COOKIE, direction, max_age=SORT_COOKIE_MAX_AGE)
     response.set_cookie(TAB_COOKIE, tab, max_age=SORT_COOKIE_MAX_AGE)
@@ -146,6 +158,21 @@ def _remember_sort(
         # Labels are free text ("Tytuł"), but a cookie value must be plain ASCII.
         response.set_cookie(FIELD_COOKIE, quote(field), max_age=SORT_COOKIE_MAX_AGE)
     return response
+
+
+def resolve_filters(
+    request: Request, q: str | None, logo: str | None
+) -> tuple[str, str]:
+    """Pick the list's ``(search, logo filter)``: the URL, else the remembered ones.
+
+    An explicit empty value in the URL clears the filter; an absent one falls
+    back to the cookie, so re-renders after a rename or merge keep it.
+    """
+    if q is None:
+        q = unquote(request.cookies.get(QUERY_COOKIE, ""))
+    if logo is None:
+        logo = request.cookies.get(LOGO_COOKIE, "")
+    return q, (logo if logo in LOGO_FILTERS else "")
 
 
 def remembered_field(request: Request) -> str:
@@ -214,6 +241,13 @@ def _group_detail_context(
     }
 
 
+def _logo_status(name: str, no_logo_names: set[str]) -> str:
+    """Return a payee's logo status: ``"with"``, ``"none"`` (marked), ``"without"``."""
+    if logo_url(name):
+        return "with"
+    return "none" if name in no_logo_names else "without"
+
+
 def _content_context(
     q: str = "",
     sort: str = DEFAULT_SORT,
@@ -227,7 +261,8 @@ def _content_context(
 ) -> dict:
     """Everything ``payees/_content.html`` renders, from the ledger and the book.
 
-    ``logo`` narrows the list to payees ``"with"`` or ``"without"`` a logo.
+    ``logo`` narrows the list to payees ``"with"`` a logo, still ``"without"`` one
+    (to add), or marked as having ``"none"`` at all.
 
     ``field`` picks which payee field "Name these" builds its suggestions from
     (the first one when it is blank or unknown); ``tab`` which of them it lists:
@@ -254,21 +289,30 @@ def _content_context(
     limit = max(QUEUE_LIMIT, min(limit, len(shown)))
     queue = shown[:limit]
     goal_named = named + sum(g.count for g in groups[:GOAL_GROUPS])
+    all_summaries = payee_summaries(ledger)
+    busiest, top_spender = top_payees(all_summaries)
     needle = q.strip().casefold()
     summaries = [
         s
-        for s in payee_summaries(ledger)
+        for s in all_summaries
         if not needle
         or needle in s.name.casefold()
         or any(needle in spelling.casefold() for spelling, _ in s.spellings)
     ]
     logo = logo if logo in LOGO_FILTERS else ""
+    no_logo_names = {s.name for s in summaries if is_no_logo(book, s.name)}
     if logo:
-        summaries = [s for s in summaries if bool(logo_url(s.name)) == (logo == "with")]
+        summaries = [
+            s for s in summaries if _logo_status(s.name, no_logo_names) == logo
+        ]
     summaries.sort(key=_SORTS[sort], reverse=(direction == "desc"))
     return {
         "named": named,
         "total": total,
+        "unnamed": total - named,
+        "unnamed_pct": ((total - named) / total * 100) if total else 0.0,
+        "busiest": busiest,
+        "top_spender": top_spender,
         "pct": (named / total * 100) if total else 0.0,
         "goal_pct": (goal_named / total * 100) if total else 0.0,
         "queue": queue,
@@ -295,6 +339,7 @@ def _content_context(
         "summaries": summaries,
         "q": q,
         "logo": logo,
+        "no_logo_names": no_logo_names,
         "sort": sort,
         "dir": direction,
         "default_dir": _DEFAULT_DIR,
@@ -332,8 +377,11 @@ def _render_content(
     from their cookies).
     """
     sort, direction = resolve_sort(request, None, None)
+    q, logo = resolve_filters(request, None, None)
     context = _content_context(
+        q,
         sort=sort,
+        logo=logo,
         direction=direction,
         open_key=open_key,
         open_labels=open_labels,
@@ -351,14 +399,14 @@ def _render_content(
 @router.get("", response_class=HTMLResponse)
 def payees_page(
     request: Request,
-    q: str = "",
+    q: str | None = None,
     sort: str | None = None,
     direction: str | None = Query(None, alias="dir"),
     part: str = "",
     tab: str | None = None,
     field: str | None = None,
     limit: int = QUEUE_LIMIT,
-    logo: str = "",
+    logo: str | None = None,
 ) -> HTMLResponse:
     """Render the payee management page, or just a part of it.
 
@@ -368,6 +416,7 @@ def payees_page(
     ``limit`` is how many suggestions the box lists ("Show more" raises it).
     """
     sort, direction = resolve_sort(request, sort, direction)
+    q, logo = resolve_filters(request, q, logo)
     tab = resolve_tab(request, tab)
     wanted_field = field if field else remembered_field(request)
     context = _content_context(
@@ -381,7 +430,9 @@ def payees_page(
         response = templates.TemplateResponse(
             request, "payees/list.html", {**context, "oob": False, "view": "list"}
         )
-    return _remember_sort(response, sort, direction, tab, context["field"])
+    return _remember_sort(
+        response, sort, direction, tab, context["field"], q=q, logo=logo
+    )
 
 
 @router.get("/suggestions", response_class=HTMLResponse)
@@ -623,8 +674,9 @@ def rename_route(
         return _rename_dialog(request, old, new, error="That is already its name.")
     updated, count = merge_payees(read_ledger(), [old], payee)
     write_ledger(updated)
-    write_payee_book(retarget_rules(read_payee_book(), [old], payee))
     carry_logos([old], payee)
+    book = retarget_rules(read_payee_book(), [old], payee)
+    write_payee_book(retarget_no_logo(book, [old], payee, bool(logo_url(payee))))
     return _render_content(
         request,
         oob=True,
@@ -675,8 +727,8 @@ def merge_route(
     updated, count = merge_payees(read_ledger(), names, payee)
     write_ledger(updated)
     book = retarget_rules(read_payee_book(), names, payee)
-    write_payee_book(book)
     carry_logos(names, payee)
+    write_payee_book(retarget_no_logo(book, names, payee, bool(logo_url(payee))))
     return _render_content(
         request,
         oob=True,
@@ -693,7 +745,12 @@ def _logo_dialog(
     return templates.TemplateResponse(
         request,
         "payees/_logo_dialog.html",
-        {"name": name, "has_logo": bool(logo_url(name)), "error": error},
+        {
+            "name": name,
+            "has_logo": bool(logo_url(name)),
+            "no_logo": is_no_logo(read_payee_book(), name),
+            "error": error,
+        },
     )
 
 
@@ -736,6 +793,9 @@ def logo_upload(
         save_logo(name, file.file.read(MAX_LOGO_BYTES + 1))
     except ValueError as exc:
         return _logo_dialog(request, name, error=str(exc))
+    book = read_payee_book()
+    if is_no_logo(book, name):  # it has one after all
+        write_payee_book(set_no_logo(book, name, False))
     return _render_content(
         request, oob=True, headers=toast(f"Logo saved for {name}", close_dialog=True)
     )
@@ -748,3 +808,20 @@ def logo_remove(request: Request, name: str = Form(...)) -> HTMLResponse:
     return _render_content(
         request, oob=True, headers=toast(f"Logo removed for {name}", close_dialog=True)
     )
+
+
+@router.post("/logo/none", response_class=HTMLResponse)
+def logo_mark_none(
+    request: Request, name: str = Form(...), marked: str = Form("1")
+) -> HTMLResponse:
+    """Mark payee ``name`` as having no logo (or ``marked=0`` to undo it).
+
+    Only for display on the list: it lets "missing a logo" mean "still to add".
+    A payee that has a logo cannot be marked.
+    """
+    on = marked == "1"
+    if on and logo_url(name):
+        return _logo_dialog(request, name, error="It has a logo; remove that first.")
+    write_payee_book(set_no_logo(read_payee_book(), name, on))
+    message = f"{name} has no logo" if on else f"{name} needs a logo again"
+    return _render_content(request, oob=True, headers=toast(message, close_dialog=True))

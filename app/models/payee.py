@@ -31,9 +31,11 @@ class PayeeBook(BaseModel):
     holds group keys (see ``app.services.payees.group_key``) the user chose to
     leave unnamed, so they stop appearing in the "Name these" queue. ``split``
     holds group keys the user divided: each spelling in them is its own
-    proposition instead of one group.
+    proposition instead of one group. ``no_logo`` holds payee names marked as
+    having no logo at all, so the list can tell "still to add" from "never".
     """
 
     rules: list[PayeeRule] = []
     skipped: list[str] = []
     split: list[str] = []
+    no_logo: list[str] = []

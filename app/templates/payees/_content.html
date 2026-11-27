@@ -17,6 +17,20 @@
         <span class="payee-meter-goal-label" style="left: {{ goal_pct }}%">{{ "%.0f"|format(goal_pct) }}%</span>
       {% endif %}
     </div>
+    {% if view == 'list' %}
+    <dl class="payee-stats">
+      <div><dt>Without a payee</dt>
+        <dd>{{ unnamed }} <span class="muted">({{ "%.1f"|format(unnamed_pct) }}%)</span></dd></div>
+      {% if busiest %}
+      <div><dt>Most transactions</dt>
+        <dd>{{ busiest.name }} <span class="muted">({{ busiest.count }})</span></dd></div>
+      {% endif %}
+      {% if top_spender %}
+      <div><dt>Most money spent</dt>
+        <dd>{{ top_spender.name }} <span class="muted">({{ top_spender.spent|money }})</span></dd></div>
+      {% endif %}
+    </dl>
+    {% endif %}
     {% if view == 'name' %}
     <ol class="payee-order" aria-label="Order names are applied in">
       <li><strong>Payee fields</strong>The columns you chose on import, saved on every transaction.</li>
@@ -50,7 +64,8 @@
                 hx-target="#payee-table" hx-swap="innerHTML" hx-include="#payee-q, #payee-sort, #payee-dir">
           <option value="" {{ 'selected' if not logo }}>All</option>
           <option value="with" {{ 'selected' if logo == 'with' }}>With logo</option>
-          <option value="without" {{ 'selected' if logo == 'without' }}>Without logo</option>
+          <option value="without" {{ 'selected' if logo == 'without' }}>Missing a logo</option>
+          <option value="none" {{ 'selected' if logo == 'none' }}>Marked: no logo</option>
         </select>
         <label for="payee-q" class="muted">Search</label>
         <input type="search" id="payee-q" name="q" value="{{ q }}" placeholder="Name or bank spelling"
