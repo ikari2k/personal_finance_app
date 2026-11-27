@@ -1,2 +1,2 @@
 {# A payee's logo as a small image, or nothing when it has none. #}
-{% macro payee_logo(name, cls="") %}{% set url = payee_logo_url(name) %}{% if url %}<img class="payee-logo {{ cls }}" src="{{ url }}" alt="" loading="lazy">{% endif %}{% endmacro %}
+{% macro payee_logo(name, cls="") %}{% set url = payee_image_url(name) %}{% if url %}<img class="payee-logo{{ ' payee-logo-person' if url == payee_person_logo_url }} {{ cls }}" src="{{ url }}" alt="" loading="lazy">{% endif %}{% endmacro %}

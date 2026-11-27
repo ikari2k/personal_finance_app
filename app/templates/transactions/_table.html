@@ -122,7 +122,7 @@
           row's own bank text (`data-bank`) on top. Writes only ``payee``
           (POST /transactions/{id}/payee).
         #}
-        <span class="payee-combo{{ ' has-logo' if payee_logo_url(txn.payee) }}" data-txn-id="{{ txn.id }}">
+        <span class="payee-combo{{ ' has-logo' if payee_image_url(txn.payee) }}" data-txn-id="{{ txn.id }}">
           {{ payee_logo(txn.payee, "payee-logo-in") }}
           <input type="text" class="desc-inline-input payee-combo-input"
                  value="{{ txn.payee }}" data-value="{{ txn.payee }}"

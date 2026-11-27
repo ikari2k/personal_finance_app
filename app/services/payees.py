@@ -794,6 +794,68 @@ def retarget_no_logo(
     )
 
 
+KIND_CHOICES = ("", "company", "person", "other")
+# Kind -> the PayeeBook list holding its names; the order is the merge priority.
+_KIND_FIELDS = {"person": "people", "company": "companies", "other": "others"}
+
+
+def is_person(book: PayeeBook, name: str) -> bool:
+    """Whether payee ``name`` is marked as a person (case-insensitive)."""
+    return name.casefold() in {n.casefold() for n in book.people}
+
+
+def set_person(book: PayeeBook, name: str, marked: bool) -> PayeeBook:
+    """Return ``book`` with ``name`` marked, or no longer marked, as a person."""
+    kept = [n for n in book.people if n.casefold() != name.casefold()]
+    return book.model_copy(update={"people": [*kept, name] if marked else kept})
+
+
+def payee_kind(book: PayeeBook, name: str) -> str:
+    """Return the type of payee ``name``: a ``KIND_CHOICES`` value, ``""`` if none."""
+    same = name.casefold()
+    for kind, field in _KIND_FIELDS.items():
+        if same in {n.casefold() for n in getattr(book, field)}:
+            return kind
+    return ""
+
+
+def set_kind(book: PayeeBook, name: str, kind: str) -> PayeeBook:
+    """Return ``book`` with ``name`` given type ``kind`` (``""`` = no type).
+
+    Raises ``ValueError`` for a ``kind`` that is not in ``KIND_CHOICES``.
+    """
+    if kind not in KIND_CHOICES:
+        raise ValueError("Type must be none, company, person or other.")
+    same = name.casefold()
+    lists = {
+        field: [n for n in getattr(book, field) if n.casefold() != same]
+        for field in _KIND_FIELDS.values()
+    }
+    if kind:
+        lists[_KIND_FIELDS[kind]].append(name)
+    return book.model_copy(update=lists)
+
+
+def retarget_kind(book: PayeeBook, names: list[str], new: str) -> PayeeBook:
+    """Return ``book`` after ``names`` were renamed or merged into ``new``.
+
+    The type follows the payee: ``new`` keeps its own, else it takes one from
+    ``names`` (person before company before other). The old names lose theirs.
+    """
+    kind = payee_kind(book, new)
+    if not kind:
+        found = {payee_kind(book, n) for n in names}
+        kind = next((k for k in _KIND_FIELDS if k in found), "")
+    old = {n.casefold() for n in names} - {new.casefold()}
+    stripped = book.model_copy(
+        update={
+            field: [n for n in getattr(book, field) if n.casefold() not in old]
+            for field in _KIND_FIELDS.values()
+        }
+    )
+    return set_kind(stripped, new, kind)
+
+
 def split_group(book: PayeeBook, key: str) -> PayeeBook:
     """Return ``book`` with cluster ``key`` divided into one group per spelling."""
     key = base_group_key(key)

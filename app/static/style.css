@@ -3377,3 +3377,29 @@ a.nw-tab { display: inline-block; text-decoration: none; }
 .payee-stats dd .muted {
   font-weight: 400;
 }
+
+.payee-person { opacity: 0.45; }
+.payee-person:hover,
+.payee-person.is-on { opacity: 1; }
+.payee-person.is-on { color: var(--pico-primary); }
+
+.payee-logo-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+.payee-logo-state { display: inline-flex; align-items: center; gap: 0.5rem; }
+.payee-logo-row button { margin: 0; }
+.payee-logo-btn { cursor: default; }
+.payee-logo-btn:hover { background: transparent; }
+.payee-logo-row[hidden] { display: none; }
+
+/* The default person picture is black line art: it follows the theme instead of
+   sitting on the white tile real logos get. */
+.payee-logo-person { background: transparent; border-color: transparent; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .payee-logo-person { filter: invert(1) brightness(0.85); }
+}
+:root[data-theme="dark"] .payee-logo-person { filter: invert(1) brightness(0.85); }

@@ -1,16 +1,36 @@
+{% from "_payee_logo.html" import payee_logo %}
 <form hx-post="/payees/rename" hx-target="#payee-dialog-content" hx-swap="innerHTML">
   {% if error %}<p class="error">{{ error }}</p>{% endif %}
   <input type="hidden" name="old" value="{{ old }}">
   <label>New name for “{{ old }}”
     <input type="text" name="new" value="{{ new }}" autocomplete="off" required>
   </label>
+  <label>Type
+    <select name="kind" aria-label="Type"
+            onchange="var r = this.form.querySelector('.payee-logo-row'); if (r) r.hidden = this.value === 'person'">
+      <option value="none" {{ 'selected' if not kind }}>None</option>
+      <option value="company" {{ 'selected' if kind == 'company' }}>Company</option>
+      <option value="person" {{ 'selected' if kind == 'person' }}>Person</option>
+      <option value="other" {{ 'selected' if kind == 'other' }}>Other</option>
+    </select>
+  </label>
   <p class="muted">
     Renames {{ count }} transaction{{ '' if count == 1 else 's' }} and the bank spellings saved for it.
     If another payee already has this name, the two become one.
   </p>
+  {# Logos are not for people (the Type box hides this row); the upload form opens in this same dialog. #}
+    <div class="payee-logo-row"{% if person %} hidden{% endif %}>
+      <span class="payee-logo-state">
+        {% if has_logo %}{{ payee_logo(old) }}{% endif %}
+        <span class="muted">{{ 'Logo set' if has_logo else ('Marked as having no logo' if no_logo else 'No logo yet') }}</span>
+      </span>
+      <button type="button" class="btn-outline"
+              hx-get="/payees/logo" hx-vals='{{ {"name": old}|tojson }}'
+              hx-target="#payee-dialog-content" hx-swap="innerHTML">{{ 'Change logo' if has_logo else 'Add a logo' }}</button>
+    </div>
   <footer class="dialog-footer">
     <button type="button" class="btn-outline"
             onclick="document.getElementById('payee-dialog').close()">Cancel</button>
-    <button type="submit">Rename</button>
+    <button type="submit">Save</button>
   </footer>
 </form>

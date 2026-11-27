@@ -1350,3 +1350,74 @@ def test_list_shows_payee_statistics(client):
 
     assert "Without a payee" in html and "25.0%" in html
     assert "Most transactions" in html and "Most money spent" in html
+
+
+def _set_kind(client, name, kind):
+    data = {"old": name, "new": name, "kind": kind or "none"}
+    return client.post("/payees/rename", data=data)
+
+
+def test_mark_person_filter_and_rename(client):
+    _seed(
+        _txn("1", "JAN K", payee="Jan", amount="-20"),
+        _txn("2", "LIDL 1", payee="Lidl", amount="-5"),
+    )
+    marked = _set_kind(client, "Jan", "person")
+    assert marked.status_code == 200
+    assert _toast(marked) == "Saved Jan"
+    _set_kind(client, "Lidl", "company")
+
+    people = client.get("/payees?part=table&kind=person").text
+    companies = client.get("/payees?part=table&kind=company").text
+    assert "Jan" in people and "Lidl" not in people
+    assert "Lidl" in companies and "Jan" not in companies
+    assert "No payee matches" in client.get("/payees?part=table&kind=none").text
+
+    client.get("/payees?part=table&kind=")
+    client.post(
+        "/payees/rename",
+        data={"old": "Jan", "new": "Jan Kowalski"},
+        headers={"HX-Current-URL": "http://testserver/payees"},
+    )
+    again = client.get("/payees?part=table&kind=person").text
+    assert "Jan Kowalski" in again
+
+    _set_kind(client, "Jan Kowalski", "")
+    assert "Jan Kowalski" not in client.get("/payees?part=table&kind=person").text
+    assert "Jan Kowalski" in client.get("/payees?part=table&kind=none").text
+
+
+def test_logo_lives_in_the_edit_dialog_and_only_for_companies(client):
+    _seed(_txn("1", "LIDL 1", payee="Lidl", amount="-5"))
+
+    company = client.get("/payees/rename?name=Lidl").text
+    assert "Add a logo" in company and 'hx-get="/payees/logo"' in company
+    assert 'hx-get="/payees/logo"' not in client.get("/payees").text
+
+    _set_kind(client, "Lidl", "person")
+    person = client.get("/payees/rename?name=Lidl").text
+    assert re.search(r'class="payee-logo-row"\s+hidden', person)
+    refused = _upload(client)
+    assert "A person has no logo" in refused.text
+    assert "Replace the logo" not in client.get("/payees/logo?name=Lidl").text
+
+
+def test_a_person_without_a_logo_shows_the_default_picture(client):
+    _seed(
+        _txn("1", "JAN K", payee="Jan", amount="-20"),
+        _txn("2", "LIDL 1", payee="Lidl", amount="-5"),
+    )
+    assert "person.png" not in client.get("/payees").text
+
+    _set_kind(client, "Jan", "person")
+    html = client.get("/payees").text
+
+    assert html.count("/static/img/person.png") == 1
+    assert client.get("/static/img/person.png").status_code == 200
+
+
+def test_default_person_picture_is_marked_for_theming(client):
+    _seed(_txn("1", "JAN K", payee="Jan", amount="-20"))
+    _set_kind(client, "Jan", "person")
+
+    assert "payee-logo payee-logo-person" in client.get("/payees").text

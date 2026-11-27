@@ -23,6 +23,7 @@ from app.routers.htmx_events import toast
 from app.services.payee_logos import MAX_LOGO_BYTES
 from app.services.payees import (
     CARD_SPELLINGS,
+    KIND_CHOICES,
     PayeeSummary,
     add_rules,
     apply_naming,
@@ -36,13 +37,17 @@ from app.services.payees import (
     field_text,
     group_members,
     is_no_logo,
+    is_person,
     merge_payees,
     money_flow,
     payee_field_labels,
+    payee_kind,
     payee_summaries,
     plan_naming,
+    retarget_kind,
     retarget_no_logo,
     retarget_rules,
+    set_kind,
     set_no_logo,
     skip_group,
     split_group,
@@ -96,6 +101,8 @@ SORT_COOKIE = "payee_sort"
 DIR_COOKIE = "payee_dir"
 QUERY_COOKIE = "payee_q"  # URL-encoded: the search text is free text
 LOGO_COOKIE = "payee_logo"
+KIND_COOKIE = "payee_kind"
+KINDS = ("person", "company", "other", "none")  # list filter on the payee's type
 SORT_COOKIE_MAX_AGE = 60 * 60 * 24 * 365  # 1 year
 _DEFAULT_DIR = {
     "name": "asc",
@@ -145,12 +152,15 @@ def _remember_sort(
     field: str = "",
     q: str | None = None,
     logo: str | None = None,
+    kind: str | None = None,
 ) -> HTMLResponse:
     """Store the list's sort, search and logo filter, and the queue's tab and field."""
     if q is not None:
         response.set_cookie(QUERY_COOKIE, quote(q), max_age=SORT_COOKIE_MAX_AGE)
     if logo is not None:
         response.set_cookie(LOGO_COOKIE, logo, max_age=SORT_COOKIE_MAX_AGE)
+    if kind is not None:
+        response.set_cookie(KIND_COOKIE, kind, max_age=SORT_COOKIE_MAX_AGE)
     response.set_cookie(SORT_COOKIE, sort, max_age=SORT_COOKIE_MAX_AGE)
     response.set_cookie(DIR_COOKIE, direction, max_age=SORT_COOKIE_MAX_AGE)
     response.set_cookie(TAB_COOKIE, tab, max_age=SORT_COOKIE_MAX_AGE)
@@ -161,9 +171,9 @@ def _remember_sort(
 
 
 def resolve_filters(
-    request: Request, q: str | None, logo: str | None
-) -> tuple[str, str]:
-    """Pick the list's ``(search, logo filter)``: the URL, else the remembered ones.
+    request: Request, q: str | None, logo: str | None, kind: str | None
+) -> tuple[str, str, str]:
+    """Pick the list's ``(search, logo, kind)`` filters: the URL, else the cookies.
 
     An explicit empty value in the URL clears the filter; an absent one falls
     back to the cookie, so re-renders after a rename or merge keep it.
@@ -172,7 +182,9 @@ def resolve_filters(
         q = unquote(request.cookies.get(QUERY_COOKIE, ""))
     if logo is None:
         logo = request.cookies.get(LOGO_COOKIE, "")
-    return q, (logo if logo in LOGO_FILTERS else "")
+    if kind is None:
+        kind = request.cookies.get(KIND_COOKIE, "")
+    return q, (logo if logo in LOGO_FILTERS else ""), (kind if kind in KINDS else "")
 
 
 def remembered_field(request: Request) -> str:
@@ -258,6 +270,7 @@ def _content_context(
     field: str = "",
     limit: int = QUEUE_LIMIT,
     logo: str = "",
+    kind: str = "",
 ) -> dict:
     """Everything ``payees/_content.html`` renders, from the ledger and the book.
 
@@ -305,6 +318,12 @@ def _content_context(
         summaries = [
             s for s in summaries if _logo_status(s.name, no_logo_names) == logo
         ]
+    kind = kind if kind in KINDS else ""
+    kinds = {s.name: payee_kind(book, s.name) for s in all_summaries}
+    people_names = {name for name, k in kinds.items() if k == "person"}
+    if kind:
+        wanted = "" if kind == "none" else kind
+        summaries = [s for s in summaries if kinds[s.name] == wanted]
     summaries.sort(key=_SORTS[sort], reverse=(direction == "desc"))
     return {
         "named": named,
@@ -340,6 +359,8 @@ def _content_context(
         "q": q,
         "logo": logo,
         "no_logo_names": no_logo_names,
+        "kind": kind,
+        "people_names": people_names,
         "sort": sort,
         "dir": direction,
         "default_dir": _DEFAULT_DIR,
@@ -377,11 +398,12 @@ def _render_content(
     from their cookies).
     """
     sort, direction = resolve_sort(request, None, None)
-    q, logo = resolve_filters(request, None, None)
+    q, logo, kind = resolve_filters(request, None, None, None)
     context = _content_context(
         q,
         sort=sort,
         logo=logo,
+        kind=kind,
         direction=direction,
         open_key=open_key,
         open_labels=open_labels,
@@ -407,6 +429,7 @@ def payees_page(
     field: str | None = None,
     limit: int = QUEUE_LIMIT,
     logo: str | None = None,
+    kind: str | None = None,
 ) -> HTMLResponse:
     """Render the payee management page, or just a part of it.
 
@@ -416,11 +439,18 @@ def payees_page(
     ``limit`` is how many suggestions the box lists ("Show more" raises it).
     """
     sort, direction = resolve_sort(request, sort, direction)
-    q, logo = resolve_filters(request, q, logo)
+    q, logo, kind = resolve_filters(request, q, logo, kind)
     tab = resolve_tab(request, tab)
     wanted_field = field if field else remembered_field(request)
     context = _content_context(
-        q, sort, direction, tab=tab, field=wanted_field, limit=limit, logo=logo
+        q,
+        sort,
+        direction,
+        tab=tab,
+        field=wanted_field,
+        limit=limit,
+        logo=logo,
+        kind=kind,
     )
     if part == "table":
         response = templates.TemplateResponse(request, "payees/_table.html", context)
@@ -431,7 +461,7 @@ def payees_page(
             request, "payees/list.html", {**context, "oob": False, "view": "list"}
         )
     return _remember_sort(
-        response, sort, direction, tab, context["field"], q=q, logo=logo
+        response, sort, direction, tab, context["field"], q=q, logo=logo, kind=kind
     )
 
 
@@ -648,10 +678,20 @@ def _rename_dialog(
 ) -> HTMLResponse:
     """Render the rename form for payee ``old`` with ``new`` typed in."""
     count = sum(1 for t in read_ledger() if t.payee == old)
+    book = read_payee_book()
     return templates.TemplateResponse(
         request,
         "payees/_rename_dialog.html",
-        {"old": old, "new": new, "count": count, "error": error},
+        {
+            "old": old,
+            "new": new,
+            "count": count,
+            "error": error,
+            "kind": payee_kind(book, old),
+            "person": is_person(book, old),
+            "has_logo": bool(logo_url(old)),
+            "no_logo": is_no_logo(book, old),
+        },
     )
 
 
@@ -663,25 +703,46 @@ def rename_form(request: Request, name: str) -> HTMLResponse:
 
 @router.post("/rename", response_class=HTMLResponse)
 def rename_route(
-    request: Request, old: str = Form(...), new: str = Form("")
+    request: Request,
+    old: str = Form(...),
+    new: str = Form(""),
+    kind: str | None = Form(None),
 ) -> HTMLResponse:
-    """Rename a payee on every transaction, and in the remembered spellings."""
+    """Rename a payee on every transaction, and set its type (person/company/none).
+
+    ``kind`` absent keeps the type. An unchanged name is fine when a type is sent
+    (it is then a type-only edit); without one it is reported as a no-op.
+    """
     try:
         payee = clean_payee_name(new)
     except ValueError as exc:
         return _rename_dialog(request, old, new, error=str(exc))
-    if payee == old:
+    if (
+        kind == "none"
+    ):  # an empty form value reads as "absent", so "none" is spelled out
+        kind = ""
+    if kind is not None and kind not in KIND_CHOICES:
+        return _rename_dialog(request, old, new, error="Pick a valid type.")
+    if kind is None and payee == old:
         return _rename_dialog(request, old, new, error="That is already its name.")
-    updated, count = merge_payees(read_ledger(), [old], payee)
-    write_ledger(updated)
-    carry_logos([old], payee)
-    book = retarget_rules(read_payee_book(), [old], payee)
-    write_payee_book(retarget_no_logo(book, [old], payee, bool(logo_url(payee))))
-    return _render_content(
-        request,
-        oob=True,
-        headers=toast(f"Renamed {_transactions(count)} to {payee}", close_dialog=True),
+    count = 0
+    book = read_payee_book()
+    if payee != old:
+        updated, count = merge_payees(read_ledger(), [old], payee)
+        write_ledger(updated)
+        carry_logos([old], payee)
+        book = retarget_rules(book, [old], payee)
+        book = retarget_no_logo(book, [old], payee, bool(logo_url(payee)))
+        book = retarget_kind(book, [old], payee)
+    if kind is not None:
+        book = set_kind(book, payee, kind)
+    write_payee_book(book)
+    message = (
+        f"Renamed {_transactions(count)} to {payee}"
+        if payee != old
+        else f"Saved {payee}"
     )
+    return _render_content(request, oob=True, headers=toast(message, close_dialog=True))
 
 
 def _merge_dialog(
@@ -728,7 +789,8 @@ def merge_route(
     write_ledger(updated)
     book = retarget_rules(read_payee_book(), names, payee)
     carry_logos(names, payee)
-    write_payee_book(retarget_no_logo(book, names, payee, bool(logo_url(payee))))
+    book = retarget_no_logo(book, names, payee, bool(logo_url(payee)))
+    write_payee_book(retarget_kind(book, names, payee))
     return _render_content(
         request,
         oob=True,
@@ -742,6 +804,8 @@ def _logo_dialog(
     request: Request, name: str, *, error: str | None = None
 ) -> HTMLResponse:
     """Render the add/replace/remove logo dialog for payee ``name``."""
+    if is_person(read_payee_book(), name):
+        error = "A person has no logo; unmark them as a person first."
     return templates.TemplateResponse(
         request,
         "payees/_logo_dialog.html",
@@ -787,6 +851,8 @@ def logo_upload(
     request: Request, name: str = Form(...), file: UploadFile = File(...)
 ) -> HTMLResponse:
     """Save an uploaded image as payee ``name``'s logo."""
+    if is_person(read_payee_book(), name):
+        return _logo_dialog(request, name)
     if not any(t.payee == name for t in read_ledger()):
         return _logo_dialog(request, name, error="No transaction has that payee.")
     try:

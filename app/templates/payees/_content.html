@@ -61,18 +61,28 @@
         <label for="payee-logo-filter" class="muted">Logo</label>
         <select id="payee-logo-filter" name="logo" aria-label="Filter by logo"
                 hx-get="/payees?part=table" hx-trigger="change"
-                hx-target="#payee-table" hx-swap="innerHTML" hx-include="#payee-q, #payee-sort, #payee-dir">
+                hx-target="#payee-table" hx-swap="innerHTML" hx-include="#payee-q, #payee-sort, #payee-dir, #payee-kind-filter">
           <option value="" {{ 'selected' if not logo }}>All</option>
           <option value="with" {{ 'selected' if logo == 'with' }}>With logo</option>
           <option value="without" {{ 'selected' if logo == 'without' }}>Missing a logo</option>
           <option value="none" {{ 'selected' if logo == 'none' }}>Marked: no logo</option>
+        </select>
+        <label for="payee-kind-filter" class="muted">Type</label>
+        <select id="payee-kind-filter" name="kind" aria-label="Filter by type"
+                hx-get="/payees?part=table" hx-trigger="change"
+                hx-target="#payee-table" hx-swap="innerHTML" hx-include="#payee-q, #payee-sort, #payee-dir, #payee-logo-filter">
+          <option value="" {{ 'selected' if not kind }}>All</option>
+          <option value="person" {{ 'selected' if kind == 'person' }}>People</option>
+          <option value="company" {{ 'selected' if kind == 'company' }}>Companies</option>
+          <option value="other" {{ 'selected' if kind == 'other' }}>Other</option>
+          <option value="none" {{ 'selected' if kind == 'none' }}>No type</option>
         </select>
         <label for="payee-q" class="muted">Search</label>
         <input type="search" id="payee-q" name="q" value="{{ q }}" placeholder="Name or bank spelling"
                autocomplete="off"
                hx-get="/payees?part=table" hx-trigger="input changed delay:250ms, search"
                hx-target="#payee-table" hx-swap="innerHTML"
-               hx-include="#payee-sort, #payee-dir, #payee-logo-filter">
+               hx-include="#payee-sort, #payee-dir, #payee-logo-filter, #payee-kind-filter">
       </div>
     </div>
     <div id="payee-table">{% include "payees/_table.html" %}</div>

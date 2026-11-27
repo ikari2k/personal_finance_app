@@ -33,9 +33,16 @@ class PayeeBook(BaseModel):
     holds group keys the user divided: each spelling in them is its own
     proposition instead of one group. ``no_logo`` holds payee names marked as
     having no logo at all, so the list can tell "still to add" from "never".
+    ``people`` holds payee names marked as a person (display-only: an icon and
+    a list filter, never a rule or a ledger change); ``companies`` likewise for
+    payees marked as a company and ``others`` for any other type. A payee in
+    none of the lists has no type.
     """
 
     rules: list[PayeeRule] = []
     skipped: list[str] = []
     split: list[str] = []
     no_logo: list[str] = []
+    people: list[str] = []
+    companies: list[str] = []
+    others: list[str] = []

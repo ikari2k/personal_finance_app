@@ -89,3 +89,16 @@ def test_split_groups_round_trip_and_default_to_none(tmp_path):
     assert read_payee_book(path).split == ["zabka", "lidl"]
     (tmp_path / "old.toml").write_text('skipped = ["a"]\n')
     assert read_payee_book(tmp_path / "old.toml").split == []
+
+
+def test_people_round_trip(tmp_path):
+    from app.models.payee import PayeeBook
+    from app.storage.payees import read_payee_book, write_payee_book
+
+    path = tmp_path / "payee_aliases.toml"
+    book = PayeeBook(people=["Jan Kowalski"], companies=["Lidl"], others=["Club"])
+    write_payee_book(book, path)
+
+    book = read_payee_book(path)
+    assert book.people == ["Jan Kowalski"] and book.companies == ["Lidl"]
+    assert book.others == ["Club"]

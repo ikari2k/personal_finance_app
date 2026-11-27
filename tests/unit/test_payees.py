@@ -885,3 +885,42 @@ def test_top_payees_picks_busiest_and_biggest_spender():
     assert top_payees([lidl, zabka]) == (lidl, zabka)
     assert top_payees([]) == (None, None)
     assert top_payees([summary("A", 1, "0")])[1] is None
+
+
+def test_kind_follows_rename_and_merge():
+    import pytest
+
+    from app.models.payee import PayeeBook
+    from app.services.payees import payee_kind, retarget_kind, set_kind
+
+    book = set_kind(PayeeBook(), "Jan Kowalski", "person")
+    assert payee_kind(book, "jan kowalski") == "person"
+
+    moved = retarget_kind(book, ["Jan Kowalski"], "Jan K.")
+    assert payee_kind(moved, "Jan K.") == "person"
+    assert payee_kind(moved, "Jan Kowalski") == ""
+
+    mixed = set_kind(moved, "Anna", "company")
+    merged = retarget_kind(mixed, ["Jan K.", "Anna"], "Anna Nowak")
+    assert payee_kind(merged, "Anna Nowak") == "person"
+    assert merged.people == ["Anna Nowak"] and merged.companies == []
+
+    assert set_kind(merged, "Anna Nowak", "company").people == []
+    assert payee_kind(set_kind(merged, "Anna Nowak", ""), "Anna Nowak") == ""
+    with pytest.raises(ValueError):
+        set_kind(merged, "x", "robot")
+
+
+def test_other_type_and_merge_priority():
+    from app.models.payee import PayeeBook
+    from app.services.payees import payee_kind, retarget_kind, set_kind
+
+    book = set_kind(PayeeBook(), "Club", "other")
+    assert payee_kind(book, "club") == "other" and book.others == ["Club"]
+
+    book = set_kind(book, "Lidl", "company")
+    merged = retarget_kind(book, ["Club", "Lidl"], "Shops")
+    assert payee_kind(merged, "Shops") == "company" and merged.others == []
+
+    keeps = retarget_kind(set_kind(book, "Shops", "other"), ["Lidl"], "Shops")
+    assert payee_kind(keeps, "Shops") == "other"

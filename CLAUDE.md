@@ -72,7 +72,7 @@ tests/unit/     tmp_path-isolated; tests/integration/  TestClient, conftest redi
 - `config/payee_aliases.toml` — the payee book: `[[rules]]` (`payee` + a `[rules.fields]` table of
   label → exact value; a row matches when it has *every* field with that value, case- and
   spacing-insensitive via `services.payees.spelling_key`, never a pattern; more fields win, then
-  the newer rule = later in the file) and `skipped` (group keys the user *dismissed*: hides those rows from every field's suggestions via `services.payees.dismissed_ids`, never names or changes anything) and `no_logo` (payee names marked as having no logo, display-only: the list's "Missing a logo" filter leaves them out; follows rename/merge via `retarget_no_logo`, cleared by uploading a logo) and `split` (group keys, `<field>::<cluster>`, divided into one group per spelling). Legacy `[[aliases]]`
+  the newer rule = later in the file) and `skipped` (group keys the user *dismissed*: hides those rows from every field's suggestions via `services.payees.dismissed_ids`, never names or changes anything) and `no_logo` (payee names marked as having no logo, display-only: the list's "Missing a logo" filter leaves them out; follows rename/merge via `retarget_no_logo`, cleared by uploading a logo) and `split` (group keys, `<field>::<cluster>`, divided into one group per spelling) and `people`/`companies`/`others` (a payee's *type*, display-only: set with the Type box in the Edit dialog — none/company/person/other, `services.payees.set_kind`; drives the list's "Type" filter; follows rename/merge via `retarget_kind`, on a merge the payee keeps its own type, else person > company > other; the form spells "none" out because an empty form value reads as absent). A person with no logo shows the vendored `static/img/person.png` instead (`payee_image_url` Jinja global, used by `payee_logo`; the people set is re-read only when the book's mtime changes). Logos are for companies: the list shows a read-only logo/placeholder for non-people, and add/replace/remove/"has no logo" live behind the Edit (rename) dialog, which hides them for a person (the logo routes refuse people). Legacy `[[aliases]]`
   (`spelling, payee`) are still read, as rules on `Description`, and rewritten as rules on the next
   save. Written only by `/payees`. Rule fields are the labels of the import mapping's `payee_fields` plus `Description`. Import precedence: category-rule payee > payee
   rule > mapping payee column.
@@ -159,7 +159,7 @@ tests/unit/     tmp_path-isolated; tests/integration/  TestClient, conftest redi
   `/import/mappings/{bank}/enrich` fills `payee_fields` on *existing* rows from an older CSV
   (matched on account, date, amount, bank text; only missing labels, never overwrites; ambiguous
   rows skipped).
-  The list's sort is sticky like the Transactions filters (`payee_sort`/`payee_dir` cookies; a URL
+  The list's search, logo and type filters are sticky the same way (`payee_q`/`payee_logo`/`payee_kind` cookies; an explicit empty value clears) so re-renders after rename/merge keep them. The list's sort is sticky like the Transactions filters (`payee_sort`/`payee_dir` cookies; a URL
   value wins, default name A–Z) and every swap re-renders in the remembered order.
 - **Lock every write** to ledger/config files via `app.storage.lock.file_lock` (PID lockfile,
   stale locks auto-cleared). `LockError` is handled app-wide in `app/main.py` (toast +

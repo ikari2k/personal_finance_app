@@ -53,6 +53,9 @@ def read_payee_book(path: Path | None = None) -> PayeeBook:
         skipped=list(data.get("skipped", [])),
         split=list(data.get("split", [])),
         no_logo=list(data.get("no_logo", [])),
+        people=list(data.get("people", [])),
+        companies=list(data.get("companies", [])),
+        others=list(data.get("others", [])),
     )
 
 
@@ -70,6 +73,9 @@ def write_payee_book(book: PayeeBook, path: Path | None = None) -> None:
             "skipped": list(book.skipped),
             "split": list(book.split),
             "no_logo": list(book.no_logo),
+            "people": list(book.people),
+            "companies": list(book.companies),
+            "others": list(book.others),
             "rules": [
                 {"payee": rule.payee, "fields": dict(rule.fields)}
                 for rule in book.rules
